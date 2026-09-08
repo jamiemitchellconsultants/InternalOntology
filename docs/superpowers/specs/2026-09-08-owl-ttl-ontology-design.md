@@ -106,6 +106,41 @@ This is a placeholder, unpublished IRI used as a name, not a fetchable address �
 practice, and what lets an adopter later point real reasoner/SHACL tooling at the file without a
 namespace collision against another adopter's ontology.
 
+### Agent install runbook
+
+The anticipated common case is a human pointing an AI agent at this repository with a short prompt
+("add the ontology kit to this repo", "set up domain ontology tracking from ontology-kit") and
+expecting the agent to carry the whole install-and-seed flow through with minimal back-and-forth.
+`skills/ontology-setup` already covers the judgement-heavy seeding step, but it is a Claude Code
+skill — invoked through Claude Code's own skill mechanism, not something a generic agent reading
+this repository would discover or know how to invoke.
+
+**New file: `docs/ai-agent-install.md`** — a self-contained, agent-agnostic runbook, written as
+direct imperative steps rather than prose, covering the full path end to end:
+
+1. Confirm the target is a git repository.
+2. Run the installer (`bin/install-ontology.mjs`), choosing options sensibly by default
+   (`--with-drift-review` only if the target has a model endpoint available; otherwise core-only).
+3. Run `node scripts/build-ontology.mjs` once to seed `ontology.ttl` from whatever `ontology.md`
+   is now on disk (the shipped example, migrated).
+4. Draft the target repository's real ontology directly in `ontology.ttl`, cataloguing what the
+   codebase already calls things — deferring to
+   `skills/ontology-setup/references/seeding-an-ontology.md` for the method, since that judgement
+   is unchanged by this feature and shouldn't be duplicated.
+5. Run `node scripts/build-ontology.mjs` again to regenerate `ontology.md` from the real content.
+6. Run `node scripts/check-ontology-terms.mjs`; fix genuine violations, allowlist genuine
+   non-domain terms with a reason.
+7. Commit `ontology.ttl`, the regenerated `ontology.md`, and the kit's installed files together.
+
+It names the specific points where the agent should stop and ask rather than guess: the installer
+refusing because of an existing unmarked "## Ontology protocol" section, and domain content that
+is genuinely ambiguous from the repository alone (in which case the agent asks rather than
+inventing a domain model). Everything else proceeds without a prompt back to the user.
+
+`README.md` gets a link to this file, placed where a reader (human or agent) reaches it before the
+manual install walkthrough — since an agent following a short prompt is the expected common path,
+not the exception.
+
 ### Repository layout additions
 
 ```
@@ -135,6 +170,8 @@ never a second seed file that could drift from the first.
   `{{ONTOLOGY_PATH}}` and include both files in the same commit.
 - **`skills/ontology-setup`** — its drafting step now produces `.ttl` content (directly, or by
   drafting the `.md` and running the one-time migration once), not `.md` directly.
+- **`README.md`** — new link to `docs/ai-agent-install.md`, placed ahead of the manual
+  "Install into a repository" walkthrough.
 
 ### Error handling
 
