@@ -1,8 +1,12 @@
 # Repository agent instructions
 
 These instructions apply to the entire repository and are the canonical project instructions for
-coding agents. Agent-specific control files must point here rather than duplicating these rules —
-a stale copy is worse than no copy, because an agent cannot tell which one is current.
+coding agents. Every rule here is binding regardless of which AI tool is reading it.
+
+`CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.cursor/rules/`, `.windsurf/rules/`
+and `.clinerules/` are thin pointers back to this file. They restate no rules, deliberately: a
+stale copy is worse than no copy, because an agent cannot tell which one is current. **Edit this
+file, not those.**
 
 ## Project Narrative
 
