@@ -1,0 +1,10 @@
+{
+  "ontologyPath": "{{ONTOLOGY_PATH}}",
+  "sections": {
+    "required": ["Entities", "Enums", "Relationships", "Business Rules & Invariants"],
+    "optional": ["External Systems", "Subsystems", "Aggregate Roots", "Value Objects", "Domain Events", "Use Cases"]
+  },
+  "allowlist": [],
+  "bannedAliases": [],
+  "ignorePaths": []
+}
