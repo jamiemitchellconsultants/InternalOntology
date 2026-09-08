@@ -15,6 +15,7 @@ by rewriting the original.
 | # | Date | Title | Kind | Decision summary |
 |---|---|---|---|---|
 | [1](#entry-bring-the-ontology-kit-source-onto-main) | 2026-09-08 | Bring the Ontology Kit source onto main | product | Rather than force-pushing over either branch's history, created a new branch from `main` and copied the kit's tree onto it file by file, checking each path for a collision first. |
+| [2](#entry-add-codeowners-naming-the-repository-owner) | 2026-09-08 | Add CODEOWNERS naming the repository owner | product | Added a single catch-all CODEOWNERS entry (`* @jamiemitchellconsultants`) rather than per-path ownership, since there is currently one maintainer. |
 
 ---
 
@@ -44,5 +45,34 @@ reconciling by hand.
 the existing Project Narrative scaffold. `feat/ontology-kit` (the orphaned branch) is left in
 place, unmerged, for reference. No shared history exists between it and `main`; future work should
 branch from `main` going forward.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-add-codeowners-naming-the-repository-owner"></a>
+
+## Entry 2 — 2026-09-08 — Add CODEOWNERS naming the repository owner
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+`main` had no branch protection and no CODEOWNERS, so any push could land directly with no review.
+The repository is moving to a required-review model for `main`.
+
+## Decision
+
+Added a single catch-all CODEOWNERS entry (`* @jamiemitchellconsultants`) rather than per-path
+ownership, since there is currently one maintainer. Branch protection (required PR review, required
+code-owner review, admin override allowed) is applied separately via the GitHub API/UI, not in this
+PR, since it's a repository setting rather than repository content.
+
+## Consequences
+
+Once branch protection is enabled, pull requests into `main` will require review before merging,
+except that repository admins can override the requirement. Future maintainers or path-specific
+owners can be added to CODEOWNERS by extending this file with more specific patterns above the
+catch-all line.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
