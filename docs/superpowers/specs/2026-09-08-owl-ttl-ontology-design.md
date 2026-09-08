@@ -56,10 +56,18 @@ Behaviour depends on what exists on disk:
 - **`.ttl` exists** → **render**: regenerate `.md` from the `.ttl` and overwrite it.
 - **`--check`**: render in memory and diff against the file on disk instead of writing; exits
   non-zero and prints a unified diff if they differ. This is what CI runs.
+- **`--force`**: explicit, documented alias for the render step — unconditionally regenerates
+  `.md` from `.ttl` and overwrites it, even though the default (`.ttl`-exists) path already does
+  exactly that with no caching or skip logic. It exists for intent, not behaviour: a script or an
+  adopter typing "rebuild the doc now" (after hand-resolving a merge conflict in `.ttl`, for
+  instance) gets an explicit, unambiguous command instead of relying on the implicit default —
+  the same convention the installer already establishes with its own `--force`. Combining it with
+  `--check` is rejected as contradictory (one forces a write, the other forbids one).
 
-Rendering is idempotent: running `build-ontology.mjs` twice in a row with no intervening `.ttl`
-edit produces no further diff. The generated `.md` opens with a fixed banner (mirroring
-`Narrative.md`'s own) stating it is generated from `ontology.ttl` and must not be hand-edited.
+Rendering is idempotent: running `build-ontology.mjs` (with or without `--force`) twice in a row
+with no intervening `.ttl` edit produces no further diff. The generated `.md` opens with a fixed
+banner (mirroring `Narrative.md`'s own) stating it is generated from `ontology.ttl` and must not
+be hand-edited.
 
 The `.ttl` path is derived from `ontologyPath` in `ontology.config.json` by replacing the file
 extension (`docs/ontology.md` → `docs/ontology.ttl`) — no new required config key for it.
@@ -144,8 +152,9 @@ never a second seed file that could drift from the first.
   fixture doesn't have.
 - `owl-ontology.mjs` renderer: TTL → `.md`, including a round-trip test —
   `render(migrate(exampleMd)) === exampleMd` — on the kit's own shipped example ontology content.
-- `build-ontology.test.mjs`: fresh migrate, idempotent re-render, `--check` exit codes and diff
-  output, section-filtering honours `ontology.config.json`.
+- `build-ontology.test.mjs`: fresh migrate, idempotent re-render, `--force` re-render, `--check`
+  exit codes and diff output, `--force --check` rejected, section-filtering honours
+  `ontology.config.json`.
 - Extend `install-ontology.test.mjs` for the new `namespaceUri` substitution.
 
 ## Risks
