@@ -35,11 +35,39 @@ test("a minimal config is filled in with empty defaults", () => {
   const config = validateConfig(minimal, { ontologyExists: () => true });
   assert.deepEqual(config, {
     ontologyPath: "docs/ontology.md",
+    namespaceUri: "https://ontology.example/ontology#",
     sections: { required: [], optional: [] },
     allowlist: [],
     bannedAliases: [],
     ignorePaths: [],
   });
+});
+
+test("namespaceUri defaults to a generic placeholder when omitted", () => {
+  const config = validateConfig(minimal, { ontologyExists: () => true });
+  assert.equal(config.namespaceUri, "https://ontology.example/ontology#");
+});
+
+test("a supplied namespaceUri is trimmed and kept", () => {
+  const config = validateConfig(
+    { ...minimal, namespaceUri: "  https://ontology.example/widgets#  " },
+    { ontologyExists: () => true },
+  );
+  assert.equal(config.namespaceUri, "https://ontology.example/widgets#");
+});
+
+test("an empty-string namespaceUri is rejected, not silently defaulted", () => {
+  assert.throws(
+    () => validateConfig({ ...minimal, namespaceUri: "   " }, { ontologyExists: () => true }),
+    /namespaceUri must be a non-empty string/,
+  );
+});
+
+test("a non-string namespaceUri is rejected", () => {
+  assert.throws(
+    () => validateConfig({ ...minimal, namespaceUri: 42 }, { ontologyExists: () => true }),
+    /namespaceUri must be a non-empty string/,
+  );
 });
 
 test("ontologyPath is required", () => {

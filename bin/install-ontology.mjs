@@ -30,6 +30,13 @@ const ENUM_TEST_TEMPLATES = {
   python: { template: "enum-tests/python-pytest.py", dest: "tests/test_ontology_enums.py.example" },
 };
 
+// Turns a project name into the lowercase-hyphenated form usable as a URL fragment, for the
+// default namespaceUri. Not the same shape as owl-ontology.mjs's slugify (which produces
+// underscore-separated identifiers for Turtle local names) — this one is for a URL segment.
+function slugifyForNamespace(name) {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "ontology";
+}
+
 /**
  * @typedef {{ template: string, dest: string, substitute: boolean, ownedBy: "kit" | "adopter" }} PlanEntry
  */
@@ -52,6 +59,8 @@ export function buildPlan(options) {
   /** @type {PlanEntry[]} */
   const plan = [
     { template: "scripts/ontology-config.mjs", dest: "scripts/ontology-config.mjs", substitute: false, ownedBy: "kit" },
+    { template: "scripts/owl-ontology.mjs", dest: "scripts/owl-ontology.mjs", substitute: false, ownedBy: "kit" },
+    { template: "scripts/build-ontology.mjs", dest: "scripts/build-ontology.mjs", substitute: false, ownedBy: "kit" },
     { template: "scripts/check-ontology-terms.mjs", dest: "scripts/check-ontology-terms.mjs", substitute: false, ownedBy: "kit" },
     { template: "ontology.config.json", dest: "ontology.config.json", substitute: true, ownedBy: "adopter" },
     { template: "docs/ontology.md", dest: ontologyPath, substitute: true, ownedBy: "adopter" },
@@ -229,8 +238,10 @@ export function install(options) {
   const values = {
     PROJECT_NAME: options.projectName ?? basename(target),
     ONTOLOGY_PATH: ontologyPath,
+    ONTOLOGY_TTL_PATH: ontologyPath.replace(/\.md$/, ".ttl"),
     DEFAULT_BRANCH: options.defaultBranch ?? detectDefaultBranch(target),
   };
+  values.NAMESPACE_URI = `https://ontology.example/${slugifyForNamespace(values.PROJECT_NAME)}#`;
 
   const plan = buildPlan({ ...options, ontologyPath });
   const written = [];
@@ -375,7 +386,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
             `(dropping the .example suffix) so your build or test runner picks it up.`,
         );
       }
-      console.log("Next: fill in the ontology, then run `node scripts/check-ontology-terms.mjs`.");
+      console.log("Next: run `node scripts/build-ontology.mjs` to create ontology.ttl, then fill it in.");
       console.log("The skills/ontology-setup skill can seed the ontology from this repository's own docs and code.");
     }
   } catch (error) {

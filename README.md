@@ -7,6 +7,13 @@ drifts from it. Optionally, an advisory model-assisted reviewer and enum lock te
 See [docs/how-it-works.md](docs/how-it-works.md) for what the mechanism is and what it does and
 does not catch.
 
+## Installing via an AI agent
+
+If you were pointed at this repository with a short prompt — "add the ontology kit to this repo" —
+follow [docs/ai-agent-install.md](docs/ai-agent-install.md) instead of the manual steps below. It
+covers the same install-and-seed path end to end, written for minimal back-and-forth with the
+person who gave you the prompt.
+
 ## Install into a repository
 
 ```bash
@@ -31,6 +38,8 @@ A core install writes:
 
 ```
 scripts/ontology-config.mjs
+scripts/owl-ontology.mjs
+scripts/build-ontology.mjs
 scripts/check-ontology-terms.mjs
 ontology.config.json
 docs/ontology.md
@@ -52,6 +61,19 @@ repository and cataloguing what it already calls things. The `ontology-setup` sk
 Without the skill, the manual path is: edit `docs/ontology.md`, delete the sections and example
 rows that do not apply, update `sections` in `ontology.config.json` to match, then run
 `node scripts/check-ontology-terms.mjs` and work through what it reports.
+
+## Then, consider Narrative
+
+This repository — ontology-kit itself — also uses [Project
+Narrative](https://github.com/jamiemitchellconsultants/Narrative): a deterministic, review-first
+decision history, complementary to the vocabulary discipline this kit installs. It is a separate
+tool, not part of this kit, and installing the ontology mechanism never sets it up on its own.
+
+If you'd like it too, this repository's own files are the worked example to copy:
+`.project-narrative.json`, `narrative/preamble.md`, `narrative/entries/`,
+`.github/workflows/maintain-narrative.yml`, `.github/workflows/validate-narrative.yml`, and the
+`## Narrative Context` / `## Narrative Decision` / `## Narrative Consequences` pull-request
+template headings described in this repository's own `AGENTS.md`.
 
 ## Upgrading an installed repository
 

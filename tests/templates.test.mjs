@@ -5,7 +5,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const TEMPLATES = fileURLToPath(new URL("../templates/", import.meta.url));
-const KNOWN_PLACEHOLDERS = new Set(["PROJECT_NAME", "ONTOLOGY_PATH", "DEFAULT_BRANCH"]);
+const KNOWN_PLACEHOLDERS = new Set(["PROJECT_NAME", "ONTOLOGY_PATH", "ONTOLOGY_TTL_PATH", "NAMESPACE_URI", "DEFAULT_BRANCH"]);
 
 function everyTemplateFile(dir = TEMPLATES, prefix = "") {
   return readdirSync(dir).flatMap((name) => {
