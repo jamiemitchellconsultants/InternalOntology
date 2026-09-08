@@ -1,0 +1,10 @@
+{
+  "ontologyPath": "docs/ontology.md",
+  "sections": {
+    "required": ["Entities", "Enums", "Relationships", "Business Rules & Invariants"],
+    "optional": ["External Systems", "Subsystems", "Value Objects", "Use Cases"]
+  },
+  "allowlist": [],
+  "bannedAliases": [],
+  "ignorePaths": ["templates/**", "docs/superpowers/**"]
+}
