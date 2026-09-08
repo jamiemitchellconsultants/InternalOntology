@@ -34,6 +34,10 @@ Show the plan, then run it for real without `--dry-run`. Add `--with-drift-revie
 Existing files are skipped rather than overwritten. If the target already has a `docs/ontology.md`,
 that is a signal to read it and extend it, not to replace it.
 
+Then run `node scripts/build-ontology.mjs` once, to create `ontology.ttl` from whatever
+`docs/ontology.md` is now on disk. From this point on, `ontology.ttl` is what you edit —
+`docs/ontology.md` is generated from it and must never be hand-edited.
+
 ## Step 2 — Decide which sections apply
 
 The installed ontology template offers every section the kit knows about. Most repositories need
@@ -56,9 +60,13 @@ Delete the sections you drop from the ontology file *and* from `sections` in
 
 This is the substantial part. Read `references/seeding-an-ontology.md` before starting.
 
-Draft the ontology from what the repository already contains, present it for review, and iterate.
-Do not invent concepts to fill the template's example rows — delete rows you cannot justify from
-the repository's own material.
+Draft the ontology directly in `ontology.ttl`, following the same section-by-section shape
+`references/seeding-an-ontology.md` describes — it is written in terms of ontology *concepts*, not
+Markdown syntax, so its guidance applies unchanged now that the file you edit is Turtle rather than
+Markdown. Do not invent concepts to fill placeholder rows — remove what you cannot justify from the
+repository's own material. After each round of edits, run `node scripts/build-ontology.mjs` to
+regenerate `docs/ontology.md` and review it — that generated file remains the easiest surface to
+read the whole ontology on, even though it is no longer what you edit.
 
 ## Step 4 — Run the checker and triage
 

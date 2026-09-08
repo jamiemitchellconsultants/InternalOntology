@@ -9,9 +9,49 @@ test("a core install writes the scripts, config, ontology and lint workflow", ()
     ".github/workflows/ontology-lint.yml",
     "docs/ontology.md",
     "ontology.config.json",
+    "scripts/build-ontology.mjs",
     "scripts/check-ontology-terms.mjs",
     "scripts/ontology-config.mjs",
+    "scripts/owl-ontology.mjs",
   ]);
+});
+
+test("ontology.config.json gets a namespaceUri derived from the project name", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets Co" });
+    const config = JSON.parse(readFileSync(join(repo.dir, "ontology.config.json"), "utf8"));
+    assert.equal(config.namespaceUri, "https://ontology.example/widgets-co#");
+  });
+});
+
+test("the newly installed owl-ontology.mjs and build-ontology.mjs are byte-identical to the kit's templates", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets" });
+    for (const rel of ["scripts/owl-ontology.mjs", "scripts/build-ontology.mjs"]) {
+      const templatePath = fileURLToPath(new URL(`../templates/${rel}`, import.meta.url));
+      assert.equal(readFileSync(join(repo.dir, rel), "utf8"), readFileSync(templatePath, "utf8"));
+    }
+  });
+});
+
+test("the lint workflow runs build-ontology.mjs --check before the term check", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets" });
+    const workflow = readFileSync(join(repo.dir, ".github/workflows/ontology-lint.yml"), "utf8");
+    const checkIndex = workflow.indexOf("build-ontology.mjs --check");
+    const termIndex = workflow.indexOf("check-ontology-terms.mjs");
+    assert.ok(checkIndex > -1, "missing build-ontology.mjs --check step");
+    assert.ok(checkIndex < termIndex, "build-ontology.mjs --check must run before the term check");
+  });
+});
+
+test("the spliced protocol section points at ontology.ttl as the editable source", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets" });
+    const agents = readFileSync(join(repo.dir, "AGENTS.md"), "utf8");
+    assert.match(agents, /docs\/ontology\.ttl/);
+    assert.match(agents, /node scripts\/build-ontology\.mjs/);
+  });
 });
 
 test("every plan entry names an existing template", () => {

@@ -1,5 +1,6 @@
 {
   "ontologyPath": "{{ONTOLOGY_PATH}}",
+  "namespaceUri": "{{NAMESPACE_URI}}",
   "sections": {
     "required": ["Entities", "Enums", "Relationships", "Business Rules & Invariants"],
     "optional": ["External Systems", "Subsystems", "Aggregate Roots", "Value Objects", "Domain Events", "Use Cases"]

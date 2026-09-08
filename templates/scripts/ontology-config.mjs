@@ -16,11 +16,14 @@ export const CONFIG_FILENAME = "ontology.config.json";
 const KNOWN_KEYS = new Set([
   "$schema",
   "ontologyPath",
+  "namespaceUri",
   "sections",
   "allowlist",
   "bannedAliases",
   "ignorePaths",
 ]);
+
+const DEFAULT_NAMESPACE_URI = "https://ontology.example/ontology#";
 
 const WINDOWS_DRIVE_RE = /^[A-Za-z]:[\\/]/;
 
@@ -29,7 +32,7 @@ const KNOWN_SECTION_KEYS = new Set(["required", "optional"]);
 /**
  * @typedef {{ term: string, reason: string }} AllowlistEntry
  * @typedef {{ phrase: string, nameInstead: string[] }} BannedAlias
- * @typedef {{ ontologyPath: string, sections: { required: string[], optional: string[] },
+ * @typedef {{ ontologyPath: string, namespaceUri: string, sections: { required: string[], optional: string[] },
  *             allowlist: AllowlistEntry[], bannedAliases: BannedAlias[], ignorePaths: string[] }} OntologyConfig
  */
 
@@ -158,8 +161,17 @@ export function validateConfig(raw, deps = {}) {
     };
   });
 
+  let namespaceUri = DEFAULT_NAMESPACE_URI;
+  if (input.namespaceUri !== undefined) {
+    if (typeof input.namespaceUri !== "string" || !input.namespaceUri.trim()) {
+      throw new Error(`${CONFIG_FILENAME}: namespaceUri must be a non-empty string`);
+    }
+    namespaceUri = input.namespaceUri.trim();
+  }
+
   return {
     ontologyPath,
+    namespaceUri,
     sections: {
       required: requireStringArray(sections.required, "sections.required"),
       optional: requireStringArray(sections.optional, "sections.optional"),
