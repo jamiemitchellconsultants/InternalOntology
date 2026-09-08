@@ -14,7 +14,35 @@ by rewriting the original.
 
 | # | Date | Title | Kind | Decision summary |
 |---|---|---|---|---|
-
+| [1](#entry-bring-the-ontology-kit-source-onto-main) | 2026-09-08 | Bring the Ontology Kit source onto main | product | Rather than force-pushing over either branch's history, created a new branch from `main` and copied the kit's tree onto it file by file, checking each path for a collision first. |
 
 ---
 
+<a id="entry-bring-the-ontology-kit-source-onto-main"></a>
+
+## Entry 1 — 2026-09-08 — Bring the Ontology Kit source onto main
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+`main` had governance and agent-instruction scaffolding installed (Project Narrative) but no
+product code yet; the actual Ontology Kit implementation existed only on a branch whose history no
+longer connected to `main`, so a normal PR/merge wasn't possible (GitHub refuses a PR between
+branches with no common history).
+
+## Decision
+
+Rather than force-pushing over either branch's history, created a new branch from `main` and
+copied the kit's tree onto it file by file, checking each path for a collision first. Only one
+file (`README.md`) existed on both sides, and it was already identical, so nothing needed
+reconciling by hand.
+
+## Consequences
+
+`main` now contains the full kit: installer, linter, templates, skill, and test suite, alongside
+the existing Project Narrative scaffold. `feat/ontology-kit` (the orphaned branch) is left in
+place, unmerged, for reference. No shared history exists between it and `main`; future work should
+branch from `main` going forward.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
