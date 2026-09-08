@@ -1,0 +1,25 @@
+{
+  "ontologyPath": "docs/ontology.md",
+  "sections": {
+    "required": ["Entities", "Enums", "Relationships", "Business Rules & Invariants"],
+    "optional": ["External Systems", "Subsystems", "Value Objects", "Use Cases"]
+  },
+  "allowlist": [
+    { "term": "Bill", "reason": "Illustrative placeholder in docs/how-it-works.md's worked example of term drift ('Bill where the ontology says Invoice') — not a concept of this repository's own domain." },
+    { "term": "Invoice", "reason": "Illustrative placeholder alongside Bill in the same how-it-works.md example — not a concept of this repository's own domain." },
+    { "term": "Approved", "reason": "Illustrative enum-drift example value in skills/ontology-setup/references/llm-drift-review.md ('Approved -> SentToVendor') — not a concept of this repository's own domain." },
+    { "term": "SentToVendor", "reason": "Illustrative enum-drift example value alongside Approved in the same llm-drift-review.md example — not a concept of this repository's own domain." },
+    { "term": "DateOnly", "reason": "Worked example of a framework/BCL type in allowlist-discipline.md's own guidance on what belongs in an adopter's allowlist — not a concept of this repository's own domain." },
+    { "term": "Guid", "reason": "Worked example of a framework/BCL type in allowlist-discipline.md's own guidance — not a concept of this repository's own domain." },
+    { "term": "DateTimeOffset", "reason": "Worked example of a framework/BCL type in allowlist-discipline.md's own guidance — not a concept of this repository's own domain." },
+    { "term": "IClock", "reason": "Worked example of an interface name in allowlist-discipline.md's own guidance on what belongs in an adopter's allowlist — not a concept of this repository's own domain." },
+    { "term": "IEmailSender", "reason": "Worked example of an interface name in allowlist-discipline.md's own guidance — not a concept of this repository's own domain." },
+    { "term": "TenantId", "reason": "Worked example of a config key in allowlist-discipline.md's own guidance on what belongs in an adopter's allowlist — not a concept of this repository's own domain." },
+    { "term": "Smtp", "reason": "Worked example of a provider identifier in allowlist-discipline.md's own guidance — not a concept of this repository's own domain." },
+    { "term": "Accepted", "reason": "Worked example of a governance status value in allowlist-discipline.md's own guidance on process vocabulary that belongs in an adopter's allowlist — not a concept of this repository's own domain." },
+    { "term": "Proposed", "reason": "Worked example of a governance status value alongside Accepted in the same allowlist-discipline.md guidance — not a concept of this repository's own domain." },
+    { "term": "Rejected", "reason": "Worked example of a governance status value alongside Accepted in the same allowlist-discipline.md guidance — not a concept of this repository's own domain." }
+  ],
+  "bannedAliases": [],
+  "ignorePaths": ["templates/**", "docs/superpowers/**"]
+}
