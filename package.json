@@ -1,0 +1,11 @@
+{
+  "name": "ontology-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Installs a self-contained domain-ontology discipline into any git repository.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test"
+  }
+}

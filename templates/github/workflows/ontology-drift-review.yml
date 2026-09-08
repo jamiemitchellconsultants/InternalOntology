@@ -1,0 +1,124 @@
+# Ontology drift review. Installed by the ontology kit with --with-drift-review.
+#
+# Two independent jobs, so an endpoint outage can never mask the deterministic status, or the
+# reverse.
+#
+# deterministic-preparation: carries no job-level `if:`, so every pull request that triggers this
+# workflow runs it. It validates the review-preparation logic only and invokes no model. This job
+# is blocking. Note the `paths:` filter above, though: a pull request that touches none of those
+# paths does not trigger this workflow at all, so this job simply never runs for it. Do not make it
+# a *required* status check in branch protection unless you have accounted for that — a required
+# check that never runs blocks a code-only pull request from merging, indefinitely.
+#
+# semantic-review: same-repository pull requests only. Reviews added Markdown prose against a
+# projection of the ontology and posts or updates one advisory comment. A finding never fails the
+# build; only an infrastructure or configuration failure turns this job red, which is intentionally
+# visually distinct from "reviewed, found nothing."
+#
+# Required repository configuration:
+#   vars.ONTOLOGY_LLM_BASE_URL  — an OpenAI-compatible base URL, e.g. https://host/v1
+#   vars.ONTOLOGY_MODEL         — the model name to request
+#   secrets.ONTOLOGY_LLM_API_KEY — bearer token for that endpoint
+#
+# If your endpoint is not reachable from a hosted runner, either use a self-hosted runner or add
+# your own network step immediately before "Review drift and upsert PR comment".
+
+name: Ontology drift review
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - "scripts/review-ontology-drift.mjs"
+      - "scripts/review-ontology-drift.test.mjs"
+      - ".github/workflows/ontology-drift-review.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ontology-drift-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  deterministic-preparation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Test deterministic ontology-review preparation
+        run: node --test scripts/review-ontology-drift.test.mjs
+
+  semantic-review:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect changed markdown files
+        id: changed
+        # Written to a NUL-separated file rather than a $GITHUB_OUTPUT string: a changed-file list
+        # is attacker-influenced (anyone who can open a pull request chooses the filenames), and
+        # interpolating it with ${{ }} straight into a run: step's shell text — as this used to —
+        # lets a filename containing `$(...)` execute on the runner, and a filename containing a
+        # space silently split into two bogus, nonexistent paths. Only the (trusted, kit-authored)
+        # temp-file path crosses the $GITHUB_OUTPUT/env boundary; the untrusted content itself is
+        # never re-parsed as shell.
+        env:
+          CHANGED_FILES_PATH: ${{ runner.temp }}/ontology-changed-files.txt
+        run: |
+          git diff -z --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.md' > "$CHANGED_FILES_PATH"
+          if [ -s "$CHANGED_FILES_PATH" ]; then
+            echo "has_files=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_files=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "changed markdown files:"
+          tr '\0' '\n' < "$CHANGED_FILES_PATH"
+
+      - uses: actions/setup-node@v4
+        if: steps.changed.outputs.has_files == 'true'
+        with:
+          node-version: 20
+
+      - name: Require the endpoint configuration
+        if: steps.changed.outputs.has_files == 'true'
+        env:
+          ONTOLOGY_LLM_BASE_URL: ${{ vars.ONTOLOGY_LLM_BASE_URL }}
+          ONTOLOGY_MODEL: ${{ vars.ONTOLOGY_MODEL }}
+        run: |
+          missing=0
+          for name in ONTOLOGY_LLM_BASE_URL ONTOLOGY_MODEL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::repository variable $name is not set — see docs/ontology-drift-review.md"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      # If your endpoint is not reachable from a hosted runner, add your network step here.
+
+      - name: Review drift and upsert PR comment
+        if: steps.changed.outputs.has_files == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: origin/${{ github.base_ref }}
+          ONTOLOGY_LLM_BASE_URL: ${{ vars.ONTOLOGY_LLM_BASE_URL }}
+          ONTOLOGY_MODEL: ${{ vars.ONTOLOGY_MODEL }}
+          ONTOLOGY_LLM_API_KEY: ${{ secrets.ONTOLOGY_LLM_API_KEY }}
+          CHANGED_FILES_PATH: ${{ runner.temp }}/ontology-changed-files.txt
+        # mapfile -d '' reads the NUL-separated list without word-splitting, so a filename
+        # containing a space (or any other shell-special character) survives as one argv entry;
+        # "${files[@]}" then passes each one to node individually rather than concatenating them
+        # back into a re-parsed shell string.
+        run: |
+          mapfile -d '' -t files < "$CHANGED_FILES_PATH"
+          node scripts/review-ontology-drift.mjs "${files[@]}"
