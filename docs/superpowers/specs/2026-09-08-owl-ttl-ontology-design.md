@@ -131,15 +131,47 @@ direct imperative steps rather than prose, covering the full path end to end:
 6. Run `node scripts/check-ontology-terms.mjs`; fix genuine violations, allowlist genuine
    non-domain terms with a reason.
 7. Commit `ontology.ttl`, the regenerated `ontology.md`, and the kit's installed files together.
+8. Recommend Project Narrative (see Narrative suggestion below) and, only on explicit agreement,
+   scaffold it from this repository's own files as the pattern.
 
 It names the specific points where the agent should stop and ask rather than guess: the installer
-refusing because of an existing unmarked "## Ontology protocol" section, and domain content that
-is genuinely ambiguous from the repository alone (in which case the agent asks rather than
-inventing a domain model). Everything else proceeds without a prompt back to the user.
+refusing because of an existing unmarked "## Ontology protocol" section, domain content that is
+genuinely ambiguous from the repository alone, and whether to adopt Narrative at all. Everything
+else proceeds without a prompt back to the user.
 
 `README.md` gets a link to this file, placed where a reader (human or agent) reaches it before the
 manual install walkthrough — since an agent following a short prompt is the expected common path,
 not the exception.
+
+### Narrative suggestion
+
+Project Narrative is a separate tool (not part of this kit — a reusable GitHub Action,
+`jamiemitchellconsultants/Narrative`, plus a `.project-narrative.json`, `narrative/entries/`
+fragments, and three required pull-request headings) that this repository already uses on itself
+for a deterministic, review-first decision history. Domain vocabulary discipline and decision
+history are complementary, adjacent disciplines, so both the human walkthrough and the agent
+runbook make a firm recommendation to adopt it too — firm meaning a clear, reasoned suggestion, not
+a silent default: nothing is written without an explicit yes, the same posture the installer
+already takes toward every file it might write.
+
+Both `README.md` and `docs/ai-agent-install.md` get a short section, placed right after ontology
+kit installation completes, that:
+
+- States the recommendation and the one-line reason (decision history alongside vocabulary
+  discipline — the two together are what this repository's own AGENTS.md documents).
+- Links to the Narrative project.
+- Lists the concrete files to add on agreement, naming this repository's own copies as the worked
+  example to follow: `.project-narrative.json`, `narrative/preamble.md`, an initially-empty
+  `narrative/entries/`, `.github/workflows/maintain-narrative.yml`,
+  `.github/workflows/validate-narrative.yml`, and the `## Narrative Context` / `## Narrative
+  Decision` / `## Narrative Consequences` pull-request template headings plus the
+  `narrative-required` label convention described in this repository's own `AGENTS.md`.
+
+This is guidance only — no new templates, installer flag, or code ships with this feature. The
+worked example already exists and is maintained (this repository's own files); duplicating it into
+a second, kit-owned template set that could drift from the original is exactly the kind of
+avoidable second copy the rest of this spec exists to eliminate for the ontology mechanism, and
+there is no reason to accept it here for a tool this kit doesn't own.
 
 ### Repository layout additions
 
@@ -171,7 +203,8 @@ never a second seed file that could drift from the first.
 - **`skills/ontology-setup`** — its drafting step now produces `.ttl` content (directly, or by
   drafting the `.md` and running the one-time migration once), not `.md` directly.
 - **`README.md`** — new link to `docs/ai-agent-install.md`, placed ahead of the manual
-  "Install into a repository" walkthrough.
+  "Install into a repository" walkthrough, and a new "Then, consider Narrative" section (see
+  Narrative suggestion below) placed after "Then seed it".
 
 ### Error handling
 
