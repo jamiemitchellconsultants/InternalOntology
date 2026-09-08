@@ -1,0 +1,9 @@
+# Ontology Kit — Narrative
+
+This document records what was asked, what was decided, why, and what followed.
+
+It is a decision history, not a changelog. Entries are captured from merged pull requests that
+opted in with the `narrative-required` label and supplied explicit Context, Decision and
+Consequences; nothing here is inferred from a diff. An entry describes the reasoning as it stood
+at the time, including reasoning later found wanting — a reversal is recorded as a new entry, not
+by rewriting the original.
