@@ -40,6 +40,10 @@ Internal components that are ours to build. Named so that specs can describe the
 | `Installer` | `bin/install-ontology.mjs` | Copies the kit's templates into a `TargetRepository` and splices `OntologyProtocol` into its `AgentInstructionFile`. Mechanical only — it writes no domain content. | Reads `templates/`; writes a `PlanEntry` list, `Ontology`, `OntologyConfig`. |
 | `TermChecker` | `scripts/check-ontology-terms.mjs`, installed byte-identical into every adopting repository | Derives the canonical vocabulary from `Ontology` and scans tracked Markdown for an unknown backticked term or a paraphrase of a named `External System`. Runs in CI on every pull request. | Reads `Ontology` and `OntologyConfig`; produces `Violation`s. |
 | `DriftReviewer` | `scripts/review-ontology-drift.mjs`, installed only with `--with-drift-review` | Advisory, model-assisted second pass that catches unbackticked paraphrase the `TermChecker` cannot see (e.g. "approved" drifting to "sent" in running prose). Never blocks a merge. | Not installed in this repository. |
+| `SemanticReviewTrigger` | kit-owned PR workflow, installed with `--with-semantic-review` | Runs without secrets or path filtering so a trusted follow-up review can produce a result for each PR revision. | Its completion triggers `SemanticReviewWorker`; it passes no executable PR artefact. |
+| `SemanticReviewWorker` | kit-owned trusted follow-up workflow and script | Assesses the full contents of changed eligible Markdown against the proposed `Ontology`, using maintainer-owned model settings and an environment secret; records incomplete coverage rather than silently dropping files. | Executes from the default branch; treats PR files and model output as data. |
+| `SemanticStatusPublisher` | kit-owned status and PR-comment logic | Publishes the latest `SemanticReviewRun` outcome as a fixed commit status and preserves each run's visible PR record. | Reads `SemanticFinding`s and `FindingDismissal`s; writes GitHub statuses and comments. |
+| `SemanticDismissalHandler` | kit-owned issue-comment workflow and script | Verifies a maintainer's reasoned dismissal of one current `SemanticFinding` and recomputes the current status. | Reads PR comments and repository permissions; does not invoke the model. |
 | `OntologySetupSkill` | `skills/ontology-setup` | The agent skill that installs the mechanism, then supplies the judgement the mechanism cannot: which sections apply, and the real seeded content of an adopting repository's `Ontology`. | Drives `Installer`, then edits `Ontology` and `OntologyConfig` directly. |
 
 ---
@@ -50,7 +54,7 @@ Internal components that are ours to build. Named so that specs can describe the
 |------|------------|-------------|
 | `TargetRepository` | `path` | The git repository (must already contain `.git`) the `Installer` writes into. Identity persists across repeated installs and upgrades of the same repository. |
 | `Ontology` | `ontologyPath`, one Markdown table per section | The canonical vocabulary document a `TargetRepository` maintains (`docs/ontology.md` by default). Identity persists as sections and rows are added, renamed, or removed over the repository's life; this file, in this repository, is one instance of it. |
-| `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific values through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. |
+| `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths`, optional `semanticReview` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific values through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. The proposed `semanticReview` settings are read from the trusted default branch, not an unmerged PR. |
 | `AgentInstructionFile` | one of `AGENTS.md`, `CLAUDE.md` | Whichever file a `TargetRepository` already treats as authoritative for agent instructions (`AGENTS.md` preferred, `CLAUDE.md` otherwise, `AGENTS.md` created if neither exists). Carries the spliced `OntologyProtocol`. |
 | `SemanticReviewRun` | pull request, revision, eligible files, reviewed files, outcome | One attempt to assess changed Markdown against the ontology. Its outcome controls the current semantic check; a later run supersedes it even when that later run cannot review. Introduced for the proposed semantic-matching feature. |
 
@@ -111,6 +115,12 @@ enum lock test catches.
 | `TermChecker` | produces | `Violation` | 1 → many |
 | `SemanticReviewRun` | reports | `SemanticFinding` | 1 → many |
 | `SemanticFinding` | may have | `FindingDismissal` | 1 → 0 or 1 |
+| `SemanticReviewTrigger` | starts | `SemanticReviewWorker` | many → 1 |
+| `SemanticReviewWorker` | produces | `SemanticReviewRun` | 1 → many |
+| `SemanticReviewWorker` | reads | `OntologyConfig` | many → 1 |
+| `SemanticReviewWorker` | reads | `Ontology` | many → 1 |
+| `SemanticStatusPublisher` | publishes | `SemanticReviewRun` | 1 → many |
+| `SemanticDismissalHandler` | records | `FindingDismissal` | 1 → many |
 
 ---
 
