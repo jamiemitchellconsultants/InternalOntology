@@ -38,6 +38,23 @@ Apply the label when a pull request makes a meaningful product, architecture, go
 operational, correction, or experimental decision. Leave it off for mechanical changes that do not
 alter project intent.
 
+## Feature lifecycle
+
+Features in this repository follow the persona workflow: product owner, analyst, architect,
+developer (plan, then build), and user. Each role is a phase with its own artefact under
+`docs/features/<slug>/`, GitHub sub-issue, and reviewed pull request. Start, check, or resume a
+feature with the `feature` skill. Each role has its own `feature-<role>` skill.
+
+- **The order of the phases is enforced.** Each persona skill checks the gate before doing any work,
+  and the `feature-gate` check fails a phase pull request whose earlier phases are not done.
+- **The only bypass is the `gate-override` label** on the pull request, with the reason given in its
+  Narrative sections. An admin override for merging is separate and does not open a gate.
+- **Every handoff is a checkpoint.** The skill stops and suggests a break. Do not start the next
+  phase in the same session without one.
+- **Park side issues** with the `feature-park` skill rather than working on them.
+- **Artefacts are generated.** Apply review feedback and pushback by re-running the role's skill,
+  never by changing files directly.
+
 ## What this repository is
 
 The Ontology Kit installs a domain-vocabulary discipline into any git repository: a canonical
