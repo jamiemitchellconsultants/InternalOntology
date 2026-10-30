@@ -21,6 +21,7 @@ const KNOWN_KEYS = new Set([
   "allowlist",
   "bannedAliases",
   "ignorePaths",
+  "semanticReview",
 ]);
 
 const DEFAULT_NAMESPACE_URI = "https://ontology.example/ontology#";
@@ -33,7 +34,8 @@ const KNOWN_SECTION_KEYS = new Set(["required", "optional"]);
  * @typedef {{ term: string, reason: string }} AllowlistEntry
  * @typedef {{ phrase: string, nameInstead: string[] }} BannedAlias
  * @typedef {{ ontologyPath: string, namespaceUri: string, sections: { required: string[], optional: string[] },
- *             allowlist: AllowlistEntry[], bannedAliases: BannedAlias[], ignorePaths: string[] }} OntologyConfig
+ *             allowlist: AllowlistEntry[], bannedAliases: BannedAlias[], ignorePaths: string[],
+ *             semanticReview: { enabled: boolean, model: string, baseUrl: string } }} OntologyConfig
  */
 
 /**
@@ -77,6 +79,44 @@ function requireEntryArray(value, label) {
     throw new Error(`${CONFIG_FILENAME}: ${label} must be an array`);
   }
   return value;
+}
+
+function validateSemanticReview(value) {
+  if (value === undefined) return { enabled: false, model: "", baseUrl: "" };
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${CONFIG_FILENAME}: semanticReview must be an object`);
+  }
+  for (const key of Object.keys(value)) {
+    if (!["enabled", "model", "baseUrl"].includes(key)) {
+      throw new Error(`${CONFIG_FILENAME}: unknown key "semanticReview.${key}"`);
+    }
+  }
+  if (typeof value.enabled !== "boolean") {
+    throw new Error(`${CONFIG_FILENAME}: semanticReview.enabled must be a boolean`);
+  }
+  const model = value.model === undefined ? "" : value.model;
+  const baseUrl = value.baseUrl === undefined ? "" : value.baseUrl;
+  if (typeof model !== "string" || (value.enabled && !model.trim())) {
+    throw new Error(`${CONFIG_FILENAME}: semanticReview.model must be a non-empty string when enabled`);
+  }
+  if (typeof baseUrl !== "string" || (value.enabled && !baseUrl.trim())) {
+    throw new Error(`${CONFIG_FILENAME}: semanticReview.baseUrl must be a non-empty URL when enabled`);
+  }
+  if (baseUrl.trim()) {
+    let parsed;
+    try {
+      parsed = new URL(baseUrl.trim());
+    } catch {
+      throw new Error(`${CONFIG_FILENAME}: semanticReview.baseUrl must be a valid HTTP(S) URL`);
+    }
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error(`${CONFIG_FILENAME}: semanticReview.baseUrl must use HTTP(S)`);
+    }
+    if (parsed.username || parsed.password) {
+      throw new Error(`${CONFIG_FILENAME}: semanticReview.baseUrl must not contain a credential`);
+    }
+  }
+  return { enabled: value.enabled, model: model.trim(), baseUrl: baseUrl.trim().replace(/\/+$/, "") };
 }
 
 /**
@@ -179,6 +219,7 @@ export function validateConfig(raw, deps = {}) {
     allowlist,
     bannedAliases,
     ignorePaths: requireStringArray(input.ignorePaths, "ignorePaths"),
+    semanticReview: validateSemanticReview(input.semanticReview),
   };
 }
 

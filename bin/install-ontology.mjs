@@ -9,6 +9,7 @@
 //   node bin/install-ontology.mjs --target <repo> [--dry-run] [--force] [--reset-content]
 //                                 [--ontology-path <path>] [--default-branch <name>]
 //                                 [--with-drift-review]
+//                                 [--with-semantic-review]
 //                                 [--with-enum-tests csharp|typescript|python]
 //   node bin/install-ontology.mjs --help
 
@@ -50,7 +51,8 @@ function slugifyForNamespace(name) {
  * are content the adopter edits and owns (`ontology.config.json`, the ontology document, the enum
  * test) and must survive a plain `--force` upgrade. See `install`'s overwrite rule below.
  *
- * @param {{ ontologyPath?: string, withDriftReview?: boolean, withEnumTests?: string }} options
+ * @param {{ ontologyPath?: string, withDriftReview?: boolean, withSemanticReview?: boolean,
+ *           withEnumTests?: string }} options
  * @returns {PlanEntry[]}
  */
 export function buildPlan(options) {
@@ -74,6 +76,21 @@ export function buildPlan(options) {
       { template: "github/workflows/ontology-drift-review.yml", dest: ".github/workflows/ontology-drift-review.yml", substitute: false, ownedBy: "kit" },
       { template: "docs/ontology-drift-review.md", dest: "docs/ontology-drift-review.md", substitute: true, ownedBy: "kit" },
     );
+  }
+
+  if (options.withSemanticReview) {
+    for (const name of ["github", "model", "ledger", "dismissal", "worker"]) {
+      for (const suffix of [".mjs", ".test.mjs"]) {
+        const path = `scripts/semantic-review-${name}${suffix}`;
+        plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
+      }
+    }
+    for (const name of ["request", "review", "dismiss"]) {
+      plan.push({ template: `github/workflows/ontology-semantic-${name}.yml`,
+        dest: `.github/workflows/ontology-semantic-${name}.yml`, substitute: false, ownedBy: "kit" });
+    }
+    plan.push({ template: "docs/ontology-semantic-review.md", dest: "docs/ontology-semantic-review.md",
+      substitute: false, ownedBy: "kit" });
   }
 
   if (options.withEnumTests) {
@@ -206,6 +223,7 @@ export function substituteJsonString(text, values) {
 /**
  * @param {{ target: string, projectName?: string, ontologyPath?: string, defaultBranch?: string,
  *           force?: boolean, resetContent?: boolean, dryRun?: boolean, withDriftReview?: boolean,
+ *           withSemanticReview?: boolean,
  *           withEnumTests?: string }} options
  * @returns {{ written: string[], skipped: { dest: string, ownedBy: "kit" | "adopter" }[],
  *             agentFile: string, enumTestExample: string | null }}
@@ -294,6 +312,7 @@ const VALUE_OPTIONS = {
 };
 const FLAG_OPTIONS = {
   "--with-drift-review": "withDriftReview",
+  "--with-semantic-review": "withSemanticReview",
   "--force": "force",
   "--reset-content": "resetContent",
   "--dry-run": "dryRun",
@@ -302,6 +321,7 @@ const FLAG_OPTIONS = {
 const USAGE =
   "usage: node bin/install-ontology.mjs --target <repo> [--project-name <name>]\n" +
   "         [--ontology-path <path>] [--default-branch <name>] [--with-drift-review]\n" +
+  "         [--with-semantic-review]\n" +
   "         [--with-enum-tests csharp|typescript|python] [--force] [--reset-content] [--dry-run]\n" +
   "\n" +
   "Installs the ontology kit's scripts, CI workflow, starter config and ontology document into\n" +
@@ -314,6 +334,7 @@ const USAGE =
   "  --default-branch <name>  Branch the lint workflow triggers on. Defaults to the target's current\n" +
   "                           branch (detected via git), falling back to \"main\".\n" +
   "  --with-drift-review      Also install the advisory semantic reviewer, its tests, workflow and runbook.\n" +
+  "  --with-semantic-review   Install the opt-in blocking semantic reviewer and its setup runbook.\n" +
   "  --with-enum-tests <lang> Also install a worked-example enum lock test: csharp, typescript, or python.\n" +
   "  --force                  Overwrite existing kit-owned files (the scripts and CI workflows).\n" +
   "                           Never overwrites adopter-owned files (ontology.config.json, the ontology\n" +
@@ -331,7 +352,8 @@ export function parseCliArgs(argv) {
   if (argv.includes("--help") || argv.includes("-h")) {
     return { help: true };
   }
-  const options = { withDriftReview: false, force: false, resetContent: false, dryRun: false };
+  const options = { withDriftReview: false, withSemanticReview: false, force: false,
+    resetContent: false, dryRun: false };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg in VALUE_OPTIONS) {
@@ -348,7 +370,7 @@ export function parseCliArgs(argv) {
     throw new Error(
       "--target is required — usage: node bin/install-ontology.mjs --target <repo> " +
         "[--project-name <name>] [--ontology-path <path>] [--default-branch <name>] " +
-        "[--with-drift-review] [--with-enum-tests csharp|typescript|python] " +
+        "[--with-drift-review] [--with-semantic-review] [--with-enum-tests csharp|typescript|python] " +
         "[--force] [--reset-content] [--dry-run]",
     );
   }

@@ -86,6 +86,42 @@ test("the semantic review job is restricted to same-repository pull requests", (
   assert.match(yaml, /head\.repo\.full_name == github\.repository/);
 });
 
+test("the semantic trigger carries no secret, checkout, path filter, or artifact", () => {
+  const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-semantic-request.yml"), "utf8");
+  assert.match(yaml, /pull_request:/);
+  for (const forbidden of ["secrets.", "actions/checkout", "paths:", "upload-artifact", "pull_request_target"]) {
+    assert.equal(yaml.includes(forbidden), false, `trigger includes ${forbidden}`);
+  }
+});
+
+test("trusted follow-up has secretless identification and finalizer around a protected worker", () => {
+  const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-semantic-review.yml"), "utf8");
+  assert.match(yaml, /workflow_run:/);
+  assert.match(yaml, /^  identify:/m);
+  assert.match(yaml, /^  review:/m);
+  assert.match(yaml, /^  finalize:/m);
+  assert.match(yaml, /deployment: false/);
+  assert.match(yaml, /ONTOLOGY_SEMANTIC_LLM_API_KEY: \$\{\{ secrets\.ONTOLOGY_SEMANTIC_LLM_API_KEY \}\}/);
+  assert.match(yaml, /ontology-semantic-\$\{\{ matrix\.number \}\}/);
+  assert.equal((yaml.match(/pull-requests: write/g) ?? []).length, 2);
+  const identify = yaml.split("  identify:")[1].split("  review:")[0];
+  const finalizer = yaml.split("  finalize:")[1];
+  assert.doesNotMatch(identify, /(?:pull-requests|issues|statuses): write/);
+  assert.doesNotMatch(identify, /ontology-semantic-\$\{\{ matrix\.number \}\}/);
+  assert.equal(identify.includes("ONTOLOGY_SEMANTIC_LLM_API_KEY"), false);
+  assert.equal(finalizer.includes("ONTOLOGY_SEMANTIC_LLM_API_KEY"), false);
+  assert.match(yaml, /persist-credentials: false/g);
+  assert.doesNotMatch(yaml, /github\.event\.pull_request\.head\.sha.*run:/);
+  assert.doesNotMatch(yaml, /ref:.*pull_request/);
+});
+
+test("dismissal workflow has no model secret and shares per-PR concurrency", () => {
+  const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-semantic-dismiss.yml"), "utf8");
+  assert.match(yaml, /issue_comment:/);
+  assert.match(yaml, /ontology-semantic-\$\{\{ github\.event\.issue\.number \}\}/);
+  assert.equal(yaml.includes("ONTOLOGY_SEMANTIC_LLM_API_KEY"), false);
+});
+
 test("every enum test template exists and says it must be adapted", () => {
   for (const name of ["csharp-xunit.cs", "typescript-vitest.ts", "python-pytest.py"]) {
     const text = readFileSync(join(TEMPLATES, "enum-tests", name), "utf8");
@@ -98,9 +134,17 @@ test("the README documents every installer option", () => {
   const readme = readFileSync(fileURLToPath(new URL("../README.md", import.meta.url)), "utf8");
   for (const option of [
     "--target", "--dry-run", "--force", "--ontology-path",
-    "--with-drift-review", "--with-enum-tests",
+    "--with-drift-review", "--with-semantic-review", "--with-enum-tests",
   ]) {
     assert.ok(readme.includes(option), `README does not document ${option}`);
+  }
+});
+
+test("semantic runbook names the protected environment, status, dismissal and fork path", () => {
+  const text = readFileSync(join(TEMPLATES, "docs/ontology-semantic-review.md"), "utf8");
+  for (const phrase of ["ontology-semantic-review", "ONTOLOGY_SEMANTIC_LLM_API_KEY",
+    "ontology/semantic-match", "/ontology-dismiss", "fork", "default branch", "--with-semantic-review"]) {
+    assert.ok(text.includes(phrase), `runbook omits ${phrase}`);
   }
 });
 

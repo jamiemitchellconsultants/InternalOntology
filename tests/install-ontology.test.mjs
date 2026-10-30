@@ -77,6 +77,26 @@ test("--with-drift-review adds the reviewer, its test, its workflow and its runb
   }
 });
 
+test("semantic review opt-in installs scripts, tests, workflows and runbook", () => {
+  const destinations = buildPlan({ withSemanticReview: true }).map((entry) => entry.dest);
+  for (const path of [
+    "scripts/semantic-review-github.mjs", "scripts/semantic-review-model.mjs",
+    "scripts/semantic-review-ledger.mjs", "scripts/semantic-review-worker.mjs",
+    "scripts/semantic-review-dismissal.mjs", "scripts/semantic-review-github.test.mjs",
+    "scripts/semantic-review-model.test.mjs", "scripts/semantic-review-ledger.test.mjs",
+    "scripts/semantic-review-worker.test.mjs", "scripts/semantic-review-dismissal.test.mjs",
+    ".github/workflows/ontology-semantic-request.yml", ".github/workflows/ontology-semantic-review.yml",
+    ".github/workflows/ontology-semantic-dismiss.yml", "docs/ontology-semantic-review.md",
+  ]) assert.ok(destinations.includes(path), `missing ${path}`);
+  assert.equal(buildPlan({}).some((entry) => entry.dest.includes("semantic-review")), false);
+});
+
+test("the old advisory install remains a separate option", () => {
+  const destinations = buildPlan({ withDriftReview: true }).map((entry) => entry.dest);
+  assert.ok(destinations.includes("scripts/review-ontology-drift.mjs"));
+  assert.equal(destinations.includes("scripts/semantic-review-worker.mjs"), false);
+});
+
 test("--with-enum-tests picks the template for the named language", () => {
   const entry = buildPlan({ withEnumTests: "csharp" }).find((item) => item.dest.includes("OntologyEnum"));
   assert.ok(entry);
@@ -489,6 +509,7 @@ test("parseCliArgs reads every supported option", () => {
       "--ontology-path", "documentation/domain.md",
       "--default-branch", "trunk",
       "--with-drift-review",
+      "--with-semantic-review",
       "--with-enum-tests", "python",
       "--force",
       "--reset-content",
@@ -500,6 +521,7 @@ test("parseCliArgs reads every supported option", () => {
       ontologyPath: "documentation/domain.md",
       defaultBranch: "trunk",
       withDriftReview: true,
+      withSemanticReview: true,
       withEnumTests: "python",
       force: true,
       resetContent: true,

@@ -1,0 +1,92 @@
+name: Ontology semantic review
+
+on:
+  workflow_run:
+    workflows: [Ontology semantic request]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  identify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      all: ${{ steps.identify.outputs.all }}
+      review: ${{ steps.identify.outputs.review }}
+      all_count: ${{ steps.identify.outputs.all_count }}
+      review_count: ${{ steps.identify.outputs.review_count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - id: identify
+        name: Resolve current PRs and plan review
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ONTOLOGY_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}:${{ github.event.workflow_run.run_attempt }}
+        run: node scripts/semantic-review-worker.mjs identify
+
+  review:
+    needs: identify
+    if: needs.identify.result == 'success' && needs.identify.outputs.review_count != '0'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.identify.outputs.review) }}
+    concurrency:
+      group: ontology-semantic-${{ matrix.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    environment:
+      name: ontology-semantic-review
+      deployment: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Review changed Markdown in full
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ONTOLOGY_PR_NUMBER: ${{ matrix.number }}
+          ONTOLOGY_EXPECTED_HEAD: ${{ matrix.headSha }}
+          ONTOLOGY_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}:${{ github.event.workflow_run.run_attempt }}
+          ONTOLOGY_SEMANTIC_LLM_API_KEY: ${{ secrets.ONTOLOGY_SEMANTIC_LLM_API_KEY }}
+        run: node scripts/semantic-review-worker.mjs review
+
+  finalize:
+    needs: [identify, review]
+    if: always() && needs.identify.result == 'success' && needs.identify.outputs.all_count != '0'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.identify.outputs.all) }}
+    concurrency:
+      group: ontology-semantic-${{ matrix.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Reconcile published result or report unavailable
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ONTOLOGY_PR_NUMBER: ${{ matrix.number }}
+          ONTOLOGY_EXPECTED_HEAD: ${{ matrix.headSha }}
+          ONTOLOGY_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}:${{ github.event.workflow_run.run_attempt }}
+        run: node scripts/semantic-review-worker.mjs finalize
