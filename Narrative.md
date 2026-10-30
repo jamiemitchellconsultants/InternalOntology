@@ -20,6 +20,7 @@ by rewriting the original.
 | [4](#entry-implement-owl-ttl-machine-readable-ontology) | 2026-09-08 | Implement OWL/TTL machine-readable ontology | product | Implemented the plan as written, with two corrections discovered during implementation where the plan contradicted itself: (1) `modelToTriples` emits `kit:invariant` triples inline with their concept's class triples rather than in a… |
 | [5](#entry-chore-dogfood-the-ontology-kit-on-its-own-repository) | 2026-09-08 | chore: dogfood the ontology kit on its own repository | product | Installed the kit into its own repository rather than leaving it undogfooded, and seeded the ontology from the kit's real code and docs rather than filling in the template's placeholder rows. |
 | [6](#entry-feat-install-feature-lifecycle-kit) | 2026-10-30 | feat: install feature lifecycle kit | product | Adopt the lifecycle files from the local `claude-plugins` source byte for byte. Keep repository-specific guidance in `AGENTS.md`. The CLI and CI workflow share the same gate rules. |
+| [7](#entry-docs-feature-accept-semantic-ontology-matching-vision) | 2026-10-30 | docs(feature): accept semantic ontology matching vision | product | Accept the vision in `docs/features/semantic-ontology-matching/01-vision.md`: findings block merge; model or configuration failure is reported as not reviewed and does not block; repository maintainers own model configuration and… |
 
 ---
 
@@ -176,3 +177,25 @@ Adopt the lifecycle files from the local `claude-plugins` source byte for byte. 
 The skills and workflow will be available after merge. GitHub lifecycle labels and a required `feature-gate` branch-protection check still need setup before the workflow is fully operational. Review also found source-kit gaps to resolve before full rollout: lite plan PRs are not classified by the CI gate; the persona instructions refer to an undefined `AI-Fingerprint` policy in this repository; and lite deployed-acceptance results lack a reviewed post-merge path. This PR is draft while those integration points are assessed.
 
 AI-Fingerprint: sha256:54b04a159d0c
+
+---
+
+<a id="entry-docs-feature-accept-semantic-ontology-matching-vision"></a>
+
+## Entry 7 — 2026-10-30 — docs(feature): accept semantic ontology matching vision
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The kit's current semantic reviewer is optional, advisory, and examines only added lines. The feature discussion established a different product need: trusted collaborators' PRs should be checked for semantic mismatches across each changed Markdown file, with a path for agents to resolve findings and maintainers to dismiss false positives.
+
+## Decision
+
+Accept the vision in `docs/features/semantic-ontology-matching/01-vision.md`: findings block merge; model or configuration failure is reported as not reviewed and does not block; repository maintainers own model configuration and credentials; the PR author's agent may commit corrections under the author's identity, while other agents propose them; a maintainer may dismiss a specific false positive with a recorded reason. The pilot has no numerical value target and may be disabled if maintainers see no subjective value.
+
+## Consequences
+
+The analyst and architect phases must define the exact review, resolution, and secure execution behavior. This PR records product intent; it does not yet change the existing reviewer or its advisory documentation. Fork PRs remain outside this feature and have a separate manual-investigation issue (#21).
+
+AI-Fingerprint: sha256:5526c065773d
