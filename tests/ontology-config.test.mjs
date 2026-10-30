@@ -40,7 +40,41 @@ test("a minimal config is filled in with empty defaults", () => {
     allowlist: [],
     bannedAliases: [],
     ignorePaths: [],
+    semanticReview: { enabled: false, model: "", baseUrl: "" },
   });
+});
+
+test("semantic review is disabled when the section is absent", () => {
+  const value = validateConfig(minimal, { ontologyExists: () => true });
+  assert.deepEqual(value.semanticReview, { enabled: false, model: "", baseUrl: "" });
+});
+
+test("enabled semantic review accepts a maintainer endpoint and model", () => {
+  const value = validateConfig({ ...minimal, semanticReview: {
+    enabled: true, model: "review-model", baseUrl: "https://model.example/v1",
+  } }, { ontologyExists: () => true });
+  assert.deepEqual(value.semanticReview, {
+    enabled: true, model: "review-model", baseUrl: "https://model.example/v1",
+  });
+});
+
+test("enabled semantic review rejects missing settings and an embedded credential", () => {
+  const check = (semanticReview, pattern) => assert.throws(
+    () => validateConfig({ ...minimal, semanticReview }, { ontologyExists: () => true }), pattern,
+  );
+  check({ enabled: true, model: "", baseUrl: "https://model.example/v1" }, /semanticReview.model/);
+  check({ enabled: true, model: "m", baseUrl: "" }, /semanticReview.baseUrl/);
+  check({ enabled: true, model: "m", baseUrl: "https://user:pass@model.example/v1" }, /credential/);
+  check({ enabled: true, model: "m", baseUrl: "not a URL" }, /semanticReview.baseUrl/);
+});
+
+test("semantic review rejects unknown or null fields", () => {
+  for (const semanticReview of [null, { enabled: null }, { enabled: false, endpoint: "x" }]) {
+    assert.throws(
+      () => validateConfig({ ...minimal, semanticReview }, { ontologyExists: () => true }),
+      /semanticReview/,
+    );
+  }
 });
 
 test("namespaceUri defaults to a generic placeholder when omitted", () => {
