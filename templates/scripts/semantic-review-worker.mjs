@@ -36,7 +36,12 @@ export async function runSemanticReview({ client, pull, config, modelFetch = fet
     run.unreviewed.push({ path: "<PR association>", reason: "workflow run matches multiple current pull requests" });
     return finish();
   }
-  if (!await api.isEligiblePull(client, pull)) {
+  let eligible;
+  try { eligible = await api.isEligiblePull(client, pull); } catch {
+    run.unreviewed.push({ path: "<permission>", reason: "author permission could not be checked" });
+    return finish();
+  }
+  if (!eligible) {
     run.outcome = "out-of-scope";
     return finish();
   }
@@ -83,13 +88,16 @@ export async function runSemanticReview({ client, pull, config, modelFetch = fet
   return finish();
 }
 
-export async function finalizeSemanticReview({ client, pull, triggerRunId }) {
+export async function finalizeSemanticReview({ client, pull, triggerRunId, config, deps = {} }) {
   const latest = await readLatestRun(client, pull);
   if (latest && newerRun(latest.triggerRunId, triggerRunId)) return latest;
   if (latest?.triggerRunId === triggerRunId) {
     const dismissals = latest.findings.length ? await readDismissals(client, pull, latest) : [];
     await reconcileStatus(client, pull, latest, dismissals);
     return latest;
+  }
+  if (config !== undefined) {
+    return runSemanticReview({ client, pull, config, secret: "", deps: { ...deps, triggerRunId } });
   }
   const run = newRun(pull, triggerRunId);
   run.unreviewed.push({ path: "<model job>", reason: "trusted model job did not publish a result" });
@@ -101,6 +109,28 @@ function expectedPull(client, number, expectedHead) {
   return client.get(`/pulls/${number}`).then((pull) => pull.head?.sha === expectedHead ? pull : null);
 }
 
+export async function planSemanticReviews({ client, pulls, loadTrustedConfig = loadConfig, deps = {} }) {
+  const checkEligibility = deps.isEligiblePull ?? isEligiblePull;
+  const collectInput = deps.collectReviewInput ?? collectReviewInput;
+  const all = [];
+  const review = [];
+  for (const pull of pulls) {
+    const entry = { number: pull.number, headSha: pull.head.sha };
+    all.push(entry);
+    if (pull.semanticAssociationAmbiguous) continue;
+    let eligible;
+    try { eligible = await checkEligibility(client, pull); } catch { continue; }
+    if (!eligible) continue;
+    let config;
+    try { config = loadTrustedConfig(); } catch { continue; }
+    if (!config?.semanticReview?.enabled) continue;
+    let input;
+    try { input = await collectInput(client, pull, config); } catch { continue; }
+    if (input.files.length > 0) review.push(entry);
+  }
+  return { all, review };
+}
+
 async function main() {
   const mode = process.argv[2];
   const client = createGitHubClient({ token: process.env.GITHUB_TOKEN, repository: process.env.GITHUB_REPOSITORY });
@@ -108,57 +138,25 @@ async function main() {
   const triggerRunId = process.env.ONTOLOGY_TRIGGER_RUN_ID ?? "";
   if (mode === "identify") {
     const pulls = await resolvePulls(client, event.workflow_run);
-    const all = [];
-    const review = [];
-    for (const pull of pulls) {
-      const latest = await readLatestRun(client, pull);
-      if (latest && newerRun(latest.triggerRunId, triggerRunId)) continue;
-      const entry = { number: pull.number, headSha: pull.head.sha };
-      all.push(entry);
-      const base = newRun(pull, triggerRunId);
-      await publishPending(client, pull, base);
-      let eligible;
-      try { eligible = await isEligiblePull(client, pull); } catch {
-        base.unreviewed.push({ path: "<permission>", reason: "author permission could not be checked" });
-        await publishRun(client, pull, base);
-        continue;
-      }
-      let config = null;
-      if (eligible) {
-        try { config = loadConfig(); } catch { /* Publish not reviewed for invalid trusted config. */ }
-      }
-      const common = { client, pull, config, secret: "", deps: { skipPending: true, triggerRunId,
-        isEligiblePull: async () => eligible } };
-      if (pull.semanticAssociationAmbiguous || !eligible || !config?.semanticReview?.enabled) {
-        await runSemanticReview(common);
-        continue;
-      }
-      let input;
-      try { input = await collectReviewInput(client, pull, config); } catch {
-        await runSemanticReview({ ...common, deps: { ...common.deps,
-          collectReviewInput: async () => { throw new Error("input unavailable"); } } });
-        continue;
-      }
-      if (input.files.length === 0) {
-        await runSemanticReview({ ...common, deps: { ...common.deps, collectReviewInput: async () => input } });
-      } else {
-        review.push(entry);
-      }
-    }
+    const { all, review } = await planSemanticReviews({ client, pulls });
     appendFileSync(process.env.GITHUB_OUTPUT, `all=${JSON.stringify({ include: all })}\n` +
       `review=${JSON.stringify({ include: review })}\nall_count=${all.length}\nreview_count=${review.length}\n`);
   } else if (mode === "review" || mode === "finalize") {
     const number = Number(process.env.ONTOLOGY_PR_NUMBER);
     const pull = await expectedPull(client, number, process.env.ONTOLOGY_EXPECTED_HEAD);
     if (!pull) return; // A newer PR revision has its own run.
-    if (mode === "finalize") await finalizeSemanticReview({ client, pull, triggerRunId });
+    if (mode === "finalize") {
+      let config = null;
+      try { config = loadConfig(); } catch { /* Report unavailable for invalid trusted config. */ }
+      await finalizeSemanticReview({ client, pull, triggerRunId, config });
+    }
     else {
       const latest = await readLatestRun(client, pull);
       if (latest && newerRun(latest.triggerRunId, triggerRunId)) return;
       let config = null;
       try { config = loadConfig(); } catch { /* A visible unavailable run will be published. */ }
       await runSemanticReview({ client, pull, config, secret: process.env.ONTOLOGY_SEMANTIC_LLM_API_KEY,
-        deps: { skipPending: true, triggerRunId } });
+        deps: { triggerRunId } });
     }
   } else if (mode === "dismiss") {
     await handleDismissal({ client, event });

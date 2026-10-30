@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 
 export const STATUS_CONTEXT = "ontology/semantic-match";
 const BOT_LOGIN = "github-actions[bot]";
-const MARKER = /<!-- ontology-semantic-run v1 id=([0-9a-f-]{36}) part=(\d+)\/(\d+) data=([A-Za-z0-9+/=]*) -->/;
+const MARKER = /(?:^|\n)<!-- ontology-semantic-run v1 id=([0-9a-f-]{36}) part=(\d+)\/(\d+) data=([A-Za-z0-9+/=]*) -->$/;
 const PART_CHARS = 20_000;
 
 export function statusFor(run, dismissals = []) {
@@ -43,19 +43,20 @@ export async function publishPending(client, pull, run) {
 }
 
 function renderRun(run, dismissals) {
+  const display = (value) => String(value).replaceAll("<!--", "&lt;!--");
   const lines = [
     `## Semantic ontology review — ${run.outcome}`,
     `PR #${run.prNumber} · revision \`${run.headSha}\` · workflow run ${run.triggerRunId}`,
     `Eligible: ${run.eligible.length}; reviewed: ${run.reviewed.length}; not reviewed: ${run.unreviewed.length}.`,
   ];
-  for (const item of run.unreviewed) lines.push(`- Not reviewed: \`${item.path}\` — ${item.reason}`);
+  for (const item of run.unreviewed) lines.push(`- Not reviewed: \`${display(item.path)}\` — ${display(item.reason)}`);
   const dismissed = new Set(dismissals.filter((item) => item.headSha === run.headSha).map((item) => item.findingId));
   for (const item of run.findings) {
-    lines.push(`- ${dismissed.has(item.id) ? "Dismissed" : "Finding"} \`${item.id}\` in \`${item.path}\``);
-    lines.push(`  - Passage: ${JSON.stringify(item.quote)}`);
-    lines.push(`  - Ontology evidence: \`${item.evidenceKey}\``);
-    lines.push(`  - Reason: ${item.reason}`);
-    lines.push(`  - Suggested correction: ${item.suggestion}`);
+    lines.push(`- ${dismissed.has(item.id) ? "Dismissed" : "Finding"} \`${display(item.id)}\` in \`${display(item.path)}\``);
+    lines.push(`  - Passage: ${display(JSON.stringify(item.quote))}`);
+    lines.push(`  - Ontology evidence: \`${display(item.evidenceKey)}\``);
+    lines.push(`  - Reason: ${display(item.reason)}`);
+    lines.push(`  - Suggested correction: ${display(item.suggestion)}`);
   }
   if (run.outcome === "unavailable" || run.outcome === "disabled" || run.outcome === "out-of-scope") {
     lines.push("Semantic matching did not run; this result permits merge.");

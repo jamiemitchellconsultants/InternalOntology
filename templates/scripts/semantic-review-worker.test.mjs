@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runSemanticReview, finalizeSemanticReview } from "./semantic-review-worker.mjs";
+import { planSemanticReviews, runSemanticReview, finalizeSemanticReview } from "./semantic-review-worker.mjs";
 import { publishRun } from "./semantic-review-ledger.mjs";
 
 const pull = { number: 7, head: { sha: "a".repeat(40), repo: { id: 1 } },
@@ -26,6 +26,47 @@ test("disabled review emits a visible result without invoking the model", async 
   assert.equal(result.outcome, "disabled");
   assert.equal(calls, 0);
   assert.equal(support.published.length, 1);
+});
+
+test("older identification cannot publish after a newer finding while planning overlapping attempts", async () => {
+  const enabled = { ...config, semanticReview: { enabled: true, model: "m", baseUrl: "https://model.example/v1" } };
+  const comments = [];
+  const posts = [];
+  const client = {
+    get: async () => pull,
+    getAll: async () => comments,
+    post: async (path, body) => {
+      posts.push({ path, body });
+      if (path.includes("/comments")) {
+        const comment = { body: body.body, user: { login: "github-actions[bot]" }, html_url: "https://example.test/run" };
+        comments.push(comment);
+        return comment;
+      }
+      return {};
+    },
+  };
+  let release;
+  const waiting = new Promise((resolve) => { release = resolve; });
+  let entered;
+  const started = new Promise((resolve) => { entered = resolve; });
+  const planning = planSemanticReviews({ client, pulls: [pull], loadTrustedConfig: () => enabled,
+    deps: { isEligiblePull: async () => true, collectReviewInput: async () => {
+      entered();
+      await waiting;
+      return input;
+    } } });
+  await started;
+  const newer = { schema: 1, prNumber: 7, headSha: pull.head.sha, mergeSha: pull.merge_commit_sha,
+    triggerRunId: "82:1", outcome: "reviewed", eligible: ["docs/a.md"], reviewed: ["docs/a.md"], unreviewed: [],
+    findings: [{ id: "f".repeat(64), path: "docs/a.md", quote: "wrong term", evidenceKey: "Entities:Invoice",
+      reason: "wrong", suggestion: "use Invoice" }] };
+  await publishRun(client, pull, newer);
+  const count = posts.length;
+  release();
+  assert.deepEqual(await planning, { all: [{ number: 7, headSha: pull.head.sha }],
+    review: [{ number: 7, headSha: pull.head.sha }] });
+  assert.equal(posts.length, count);
+  assert.equal(posts.at(-1).body.state, "failure");
 });
 
 test("ineligible author and missing config do not call the model", async () => {
@@ -129,4 +170,21 @@ test("finalizer preserves an already published partial finding", async () => {
   const older = await finalizeSemanticReview({ client, pull, triggerRunId: "81:1" });
   assert.equal(older.triggerRunId, "82:1");
   assert.equal(statuses.length, statusCount);
+});
+
+test("serialized finalizer publishes no-eligible and permission-unavailable outcomes", async () => {
+  const client = { get: async () => pull, getAll: async () => [] };
+  const enabled = { ...config, semanticReview: { enabled: true, model: "m", baseUrl: "https://model.example/v1" } };
+  let pending = 0;
+  const support = deps({ publishPending: async () => { pending++; },
+    collectReviewInput: async () => ({ ...input, files: [] }) });
+  const clean = await finalizeSemanticReview({ client, pull, triggerRunId: "83:1", config: enabled,
+    deps: support.value });
+  assert.equal(clean.outcome, "no-eligible");
+  assert.equal(pending, 1);
+  assert.equal(support.published.length, 1);
+  const unavailable = await finalizeSemanticReview({ client, pull, triggerRunId: "84:1", config: enabled,
+    deps: deps({ publishPending: async () => {}, isEligiblePull: async () => { throw new Error("offline"); } }).value });
+  assert.equal(unavailable.outcome, "unavailable");
+  assert.match(unavailable.unreviewed[0].reason, /permission/i);
 });

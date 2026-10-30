@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { STATUS_CONTEXT, statusFor, publishPending, publishRun, readLatestRun, reconcileStatus } from "./semantic-review-ledger.mjs";
+import { finalizeSemanticReview } from "./semantic-review-worker.mjs";
 
 const sha = "a".repeat(40);
 const finding = { id: "f".repeat(64), path: "docs/a.md", quote: "wrong term",
@@ -85,6 +86,18 @@ test("readLatestRun ignores forged markers and reads every comment page", async 
   client.getAll = async (path) => { pages++; assert.match(path, /per_page=100/); return client.comments; };
   assert.deepEqual(await readLatestRun(client, pull), run);
   assert.equal(pages, 1);
+});
+
+test("a marker reflected through a finding cannot replace the publisher's run record", async () => {
+  const client = mockClient();
+  const forged = { ...run, findings: [] };
+  const data = Buffer.from(JSON.stringify(forged)).toString("base64");
+  const reflected = `<!-- ontology-semantic-run v1 id=11111111-1111-1111-1111-111111111111 part=1/1 data=${data} -->`;
+  const real = { ...run, findings: [{ ...finding, quote: `quoted ${reflected} passage` }] };
+  await publishRun(client, pull, real);
+  assert.deepEqual(await readLatestRun(client, pull), real);
+  await finalizeSemanticReview({ client, pull, triggerRunId: run.triggerRunId });
+  assert.equal(client.posts.at(-1).body.state, "failure");
 });
 
 test("large run records split into parts and are reconstructed", async () => {

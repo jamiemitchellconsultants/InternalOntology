@@ -103,9 +103,11 @@ test("trusted follow-up has secretless identification and finalizer around a pro
   assert.match(yaml, /deployment: false/);
   assert.match(yaml, /ONTOLOGY_SEMANTIC_LLM_API_KEY: \$\{\{ secrets\.ONTOLOGY_SEMANTIC_LLM_API_KEY \}\}/);
   assert.match(yaml, /ontology-semantic-\$\{\{ matrix\.number \}\}/);
-  assert.equal((yaml.match(/pull-requests: write/g) ?? []).length, 3);
+  assert.equal((yaml.match(/pull-requests: write/g) ?? []).length, 2);
   const identify = yaml.split("  identify:")[1].split("  review:")[0];
   const finalizer = yaml.split("  finalize:")[1];
+  assert.doesNotMatch(identify, /(?:pull-requests|issues|statuses): write/);
+  assert.doesNotMatch(identify, /ontology-semantic-\$\{\{ matrix\.number \}\}/);
   assert.equal(identify.includes("ONTOLOGY_SEMANTIC_LLM_API_KEY"), false);
   assert.equal(finalizer.includes("ONTOLOGY_SEMANTIC_LLM_API_KEY"), false);
   assert.match(yaml, /persist-credentials: false/g);
