@@ -2,7 +2,8 @@
 
 Installs a self-contained domain-ontology discipline into any git repository: a canonical
 vocabulary file, an agent protocol, and a deterministic CI check that fails the build when prose
-drifts from it. Optionally, an advisory model-assisted reviewer and enum lock tests.
+drifts from it. Optionally, an advisory model-assisted reviewer, a separate blocking semantic
+review pilot, and enum lock tests.
 
 See [docs/how-it-works.md](docs/how-it-works.md) for what the mechanism is and what it does and
 does not catch.
@@ -28,6 +29,7 @@ node bin/install-ontology.mjs --target /path/to/repo
 | `--ontology-path <path>` | Where the ontology file goes. Defaults to `docs/ontology.md`. Must be repository-relative, with no `..` segment. |
 | `--default-branch <name>` | Branch the lint workflow's `push` trigger fires on. Defaults to the target's current branch (detected via `git`), falling back to `main` if that can't be detected. |
 | `--with-drift-review` | Also install the advisory semantic reviewer, its tests, workflow and runbook. |
+| `--with-semantic-review` | Install the opt-in blocking semantic reviewer, its trusted workflows, tests and [setup runbook](templates/docs/ontology-semantic-review.md). The shipped config stays disabled until maintainers activate it. |
 | `--with-enum-tests <lang>` | Also install a worked-example enum lock test: `csharp`, `typescript`, or `python`. Installed with a `.example` suffix — see [Then seed it](#then-seed-it). |
 | `--dry-run` | Print the file plan and exit without writing. |
 | `--force` | Overwrite existing **kit-owned** files — the scripts and CI workflows. Never touches adopter-owned files (`ontology.config.json`, the ontology document, the enum test); this is the correct way to upgrade an installed repository. |
@@ -61,6 +63,16 @@ repository and cataloguing what it already calls things. The `ontology-setup` sk
 Without the skill, the manual path is: edit `docs/ontology.md`, delete the sections and example
 rows that do not apply, update `sections` in `ontology.config.json` to match, then run
 `node scripts/check-ontology-terms.mjs` and work through what it reports.
+
+## Optional semantic review pilot
+
+After seeding the ontology, install the pilot with `--with-semantic-review` and follow its
+[runbook](templates/docs/ontology-semantic-review.md). The model and endpoint are configured in the
+adopter-owned `ontology.config.json` on the default branch; the model credential is an Actions
+environment secret restricted to that branch. The reviewer runs from trusted default-branch code
+and assesses complete changed Markdown files. Findings can block merge through the fixed
+`ontology/semantic-match` status. Missing coverage is visible and permits merge unless the current
+run also has an active finding.
 
 ## Then, consider Narrative
 

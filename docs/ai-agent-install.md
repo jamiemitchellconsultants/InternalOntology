@@ -26,6 +26,12 @@ model endpoint configured (see `docs/ontology-drift-review.md` after installing)
 core-only is the right default. Add `--with-enum-tests <language>` only if the user's prompt asked
 for enum lock tests specifically.
 
+Add `--with-semantic-review` only when the user requests the blocking semantic pilot. It is a
+separate option from `--with-drift-review`; after installing, follow the copied
+`docs/ontology-semantic-review.md` runbook to configure the protected default-branch environment,
+the model secret, and the required status. The copied config starts disabled, so merely installing
+the files does not send Markdown to a model.
+
 If this step refuses because of an existing unmarked `## Ontology protocol` section in `AGENTS.md`
 or `CLAUDE.md`, **stop and ask** how the user wants that resolved — removing or marking someone
 else's hand-written section is not a call to make unprompted.

@@ -20,7 +20,13 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch }) {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    if (!response.ok) throw new Error(`GitHub API returned ${response.status} for ${url.pathname}`);
+    if (!response.ok) {
+      const needed = response.headers.get("x-accepted-github-permissions");
+      const errorBody = await response.json().catch(() => ({}));
+      const detail = typeof errorBody?.message === "string" ? errorBody.message.replace(/\s+/g, " ").slice(0, 200) : "";
+      throw new Error(`GitHub API ${method} returned ${response.status} for ${url.pathname}` +
+        (needed ? ` (accepted permissions: ${needed})` : "") + (detail ? `: ${detail}` : ""));
+    }
     return { data: await response.json(), next: /<([^>]+)>;\s*rel="next"/.exec(response.headers.get("link") ?? "")?.[1] };
   }
   return {

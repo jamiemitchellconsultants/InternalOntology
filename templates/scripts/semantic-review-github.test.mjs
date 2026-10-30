@@ -86,6 +86,15 @@ test("client writes JSON with the GitHub token only to repository API paths", as
   await assert.rejects(() => client.post("https://evil.example/steal", {}), /outside this repository/);
 });
 
+test("a GitHub authorization error identifies the method and required permission", async () => {
+  const client = createGitHubClient({ token: "token", repository: "org/repo", fetchImpl: async () => ({
+    ok: false, status: 403, headers: { get: (name) => name === "x-accepted-github-permissions" ? "issues=write" : null },
+    json: async () => ({ message: "Resource not accessible by integration" }),
+  }) });
+  await assert.rejects(() => client.post("/issues/7/comments", { body: "test" }),
+    /POST.*403.*issues=write.*Resource not accessible by integration/);
+});
+
 test("collector reads complete changed Markdown blobs, including renamed destinations", async () => {
   const files = [
     { filename: "docs/a file $(bad).md", status: "modified", sha: "blob-a" },

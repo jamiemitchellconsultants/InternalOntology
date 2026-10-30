@@ -54,9 +54,9 @@ Internal components that are ours to build. Named so that specs can describe the
 |------|------------|-------------|
 | `TargetRepository` | `path` | The git repository (must already contain `.git`) the `Installer` writes into. Identity persists across repeated installs and upgrades of the same repository. |
 | `Ontology` | `ontologyPath`, one Markdown table per section | The canonical vocabulary document a `TargetRepository` maintains (`docs/ontology.md` by default). Identity persists as sections and rows are added, renamed, or removed over the repository's life; this file, in this repository, is one instance of it. |
-| `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths`, optional `semanticReview` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific values through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. The proposed `semanticReview` settings are read from the trusted default branch, not an unmerged PR. |
+| `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths`, optional `semanticReview` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific values through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. The `semanticReview` settings are read from the trusted default branch, not an unmerged PR. |
 | `AgentInstructionFile` | one of `AGENTS.md`, `CLAUDE.md` | Whichever file a `TargetRepository` already treats as authoritative for agent instructions (`AGENTS.md` preferred, `CLAUDE.md` otherwise, `AGENTS.md` created if neither exists). Carries the spliced `OntologyProtocol`. |
-| `SemanticReviewRun` | pull request, revision, eligible files, reviewed files, outcome | One attempt to assess changed Markdown against the ontology. Its outcome controls the current semantic check; a later run supersedes it even when that later run cannot review. Introduced for the proposed semantic-matching feature. |
+| `SemanticReviewRun` | pull request, revision, eligible files, reviewed files, outcome | One attempt to assess changed Markdown against the ontology. Its outcome controls the current semantic check; a later run supersedes it even when that later run cannot review. |
 
 ---
 
@@ -95,7 +95,7 @@ enum lock test catches.
 | `SeedOntology` | Adopter, guided by `OntologySetupSkill` | Reading a `TargetRepository`'s own code and docs and drafting `Ontology`'s real rows from them, in place of the installed example rows. |
 | `CheckOntologyTerms` | CI, or Adopter locally | Running the `TermChecker` against a `TargetRepository`'s tracked Markdown (plus any `--also` paths) and reporting every `Violation`. |
 | `ReviewOntologyDrift` | CI, when `DriftReviewer` is installed | The optional advisory pass for paraphrase drift the `TermChecker` cannot see. |
-| `ReviewSemanticMatch` | CI, for an eligible pull request | The proposed blocking semantic assessment of each changed, eligible Markdown file in full, with an explicitly nonblocking result when review cannot run. |
+| `ReviewSemanticMatch` | CI, for an eligible pull request | The blocking semantic assessment of each changed, eligible Markdown file in full, with an explicitly nonblocking result when review cannot run. |
 
 ---
 

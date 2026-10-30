@@ -103,6 +103,7 @@ test("trusted follow-up has secretless identification and finalizer around a pro
   assert.match(yaml, /deployment: false/);
   assert.match(yaml, /ONTOLOGY_SEMANTIC_LLM_API_KEY: \$\{\{ secrets\.ONTOLOGY_SEMANTIC_LLM_API_KEY \}\}/);
   assert.match(yaml, /ontology-semantic-\$\{\{ matrix\.number \}\}/);
+  assert.equal((yaml.match(/pull-requests: write/g) ?? []).length, 3);
   const identify = yaml.split("  identify:")[1].split("  review:")[0];
   const finalizer = yaml.split("  finalize:")[1];
   assert.equal(identify.includes("ONTOLOGY_SEMANTIC_LLM_API_KEY"), false);
@@ -131,9 +132,17 @@ test("the README documents every installer option", () => {
   const readme = readFileSync(fileURLToPath(new URL("../README.md", import.meta.url)), "utf8");
   for (const option of [
     "--target", "--dry-run", "--force", "--ontology-path",
-    "--with-drift-review", "--with-enum-tests",
+    "--with-drift-review", "--with-semantic-review", "--with-enum-tests",
   ]) {
     assert.ok(readme.includes(option), `README does not document ${option}`);
+  }
+});
+
+test("semantic runbook names the protected environment, status, dismissal and fork path", () => {
+  const text = readFileSync(join(TEMPLATES, "docs/ontology-semantic-review.md"), "utf8");
+  for (const phrase of ["ontology-semantic-review", "ONTOLOGY_SEMANTIC_LLM_API_KEY",
+    "ontology/semantic-match", "/ontology-dismiss", "fork", "default branch", "--with-semantic-review"]) {
+    assert.ok(text.includes(phrase), `runbook omits ${phrase}`);
   }
 });
 
