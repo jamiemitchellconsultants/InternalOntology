@@ -1,0 +1,35 @@
+# Feature lifecycle gate. Installed by init-repo with the lifecycle kit; a required check.
+# A pull request that closes a phase sub-issue, or touches docs/features/<slug>/, fails while an
+# earlier phase of that feature is open, unticked or in pushback. Any other pull request passes.
+# The only bypass is the gate-override label, with the reason in the Narrative sections.
+
+name: feature-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  feature-gate:
+    runs-on: ubuntu-latest
+    steps:
+      # The base commit, so a pull request cannot rewrite its own gate.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: |
+          if [ ! -f scripts/feature.mjs ]; then
+            echo "feature-gate: kit not installed on the base branch yet; passing"
+            exit 0
+          fi
+          node scripts/feature.mjs gate-pr --pr ${{ github.event.pull_request.number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
