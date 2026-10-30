@@ -23,6 +23,7 @@ by rewriting the original.
 | [7](#entry-docs-feature-accept-semantic-ontology-matching-vision) | 2026-10-30 | docs(feature): accept semantic ontology matching vision | product | Accept the vision in `docs/features/semantic-ontology-matching/01-vision.md`: findings block merge; model or configuration failure is reported as not reviewed and does not block; repository maintainers own model configuration and… |
 | [8](#entry-docs-feature-define-semantic-matching-behaviours) | 2026-10-30 | docs(feature): define semantic matching behaviours | product | Accept B1–B14 in `docs/features/semantic-ontology-matching/02-behaviours.md`. Review the full current contents of changed eligible Markdown files against the PR's proposed ontology. |
 | [9](#entry-docs-feature-define-semantic-review-architecture) | 2026-10-30 | docs(feature): define semantic review architecture | product | Use a secretless PR trigger followed by trusted default-branch code in a `workflow_run` worker. Read model settings from the default branch's `OntologyConfig` and use a default-branch-only Actions environment secret. |
+| [10](#entry-docs-feature-plan-semantic-matching-implementation) | 2026-10-30 | docs(feature): plan semantic matching implementation | product | Implement the feature in eight independently testable, individually committed tasks: strict configuration; GitHub PR input and eligibility; lossless file batching; grounded model assessment; run ledger and status publication; maintainer… |
 
 ---
 
@@ -251,3 +252,27 @@ The developer must implement and test both workflow halves, PR data validation, 
 Verification: ontology term check passed (66 files, 31 terms); `npm test` passed (243 tests).
 
 AI-Fingerprint: sha256:352d8fd55484
+
+---
+
+<a id="entry-docs-feature-plan-semantic-matching-implementation"></a>
+
+## Entry 10 — 2026-10-30 — docs(feature): plan semantic matching implementation
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+PR #27 accepted a trusted follow-up workflow, complete changed-file review, commit-status outcomes, PR-visible finding and dismissal records, and a separate opt-in from the existing advisory reviewer. The developer phase now needs a test-first sequence that another agent can execute without re-deciding that structure.
+
+## Decision
+
+Implement the feature in eight independently testable, individually committed tasks: strict configuration; GitHub PR input and eligibility; lossless file batching; grounded model assessment; run ledger and status publication; maintainer dismissals; trusted workflow orchestration; and opt-in installation with runbook and end-to-end proof. The detailed plan pins interfaces, fixtures, exact files, and failure outcomes. Every task runs the ontology check and `npm test` before its commit. The accepted architecture and ADRs remain the design authority.
+
+## Consequences
+
+The build can proceed one task and one commit at a time after this plan is reviewed and merged. It must preserve the byte-identical installed-script rule, keep PR data out of secret-bearing execution, and verify the required status on the evaluated GitHub commit in a disposable repository. No implementation code is introduced by this PR. If live branch-protection behavior cannot be verified, the build PR must state that limitation for acceptance rather than claim it passed.
+
+Verification: ontology term check passed (68 files, 31 terms); `npm test` passed (243 tests).
+
+AI-Fingerprint: sha256:6ba7b750f4a7
