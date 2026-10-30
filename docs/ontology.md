@@ -52,6 +52,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `Ontology` | `ontologyPath`, one Markdown table per section | The canonical vocabulary document a `TargetRepository` maintains (`docs/ontology.md` by default). Identity persists as sections and rows are added, renamed, or removed over the repository's life; this file, in this repository, is one instance of it. |
 | `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific values through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. |
 | `AgentInstructionFile` | one of `AGENTS.md`, `CLAUDE.md` | Whichever file a `TargetRepository` already treats as authoritative for agent instructions (`AGENTS.md` preferred, `CLAUDE.md` otherwise, `AGENTS.md` created if neither exists). Carries the spliced `OntologyProtocol`. |
+| `SemanticReviewRun` | pull request, revision, eligible files, reviewed files, outcome | One attempt to assess changed Markdown against the ontology. Its outcome controls the current semantic check; a later run supersedes it even when that later run cannot review. Introduced for the proposed semantic-matching feature. |
 
 ---
 
@@ -64,6 +65,8 @@ Internal components that are ours to build. Named so that specs can describe the
 | `BannedAlias` | `phrase`, `nameInstead` | One paraphrase of a named `External System` that prose must not use, and the canonical name(s) to use instead. |
 | `OntologyProtocol` | Markdown body between `<!-- ontology-protocol:start -->` / `<!-- ontology-protocol:end -->` | The instructions bound into an `AgentInstructionFile`: read `Ontology` before writing anything domain-touching, use its exact names, add a missing concept there first, update it in the same commit as the code change. Replaced wholesale on every install — re-running is what keeps it current, not an edit history of its own. |
 | `Violation` | `file`, `line`, `column`, `message` | One flagged occurrence the `TermChecker` reports: an unknown backticked term, or a banned-alias paraphrase. |
+| `SemanticFinding` | revision, file, passage, ontology evidence, suggested correction | A claim made by a `SemanticReviewRun` that changed Markdown conflicts with the ontology. Its identity is stable across reruns of the same revision and is reconsidered on a new revision. |
+| `FindingDismissal` | `SemanticFinding`, revision, maintainer, reason | A maintainer's recorded decision to disregard one `SemanticFinding` for one PR revision. It survives reruns of that revision and expires when the PR changes. |
 
 ---
 
@@ -88,6 +91,7 @@ enum lock test catches.
 | `SeedOntology` | Adopter, guided by `OntologySetupSkill` | Reading a `TargetRepository`'s own code and docs and drafting `Ontology`'s real rows from them, in place of the installed example rows. |
 | `CheckOntologyTerms` | CI, or Adopter locally | Running the `TermChecker` against a `TargetRepository`'s tracked Markdown (plus any `--also` paths) and reporting every `Violation`. |
 | `ReviewOntologyDrift` | CI, when `DriftReviewer` is installed | The optional advisory pass for paraphrase drift the `TermChecker` cannot see. |
+| `ReviewSemanticMatch` | CI, for an eligible pull request | The proposed blocking semantic assessment of each changed, eligible Markdown file in full, with an explicitly nonblocking result when review cannot run. |
 
 ---
 
@@ -105,6 +109,8 @@ enum lock test catches.
 | `TermChecker` | reads | `Ontology` | many → 1 |
 | `TermChecker` | reads | `OntologyConfig` | many → 1 |
 | `TermChecker` | produces | `Violation` | 1 → many |
+| `SemanticReviewRun` | reports | `SemanticFinding` | 1 → many |
+| `SemanticFinding` | may have | `FindingDismissal` | 1 → 0 or 1 |
 
 ---
 
