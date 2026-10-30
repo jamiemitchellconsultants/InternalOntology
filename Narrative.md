@@ -21,6 +21,7 @@ by rewriting the original.
 | [5](#entry-chore-dogfood-the-ontology-kit-on-its-own-repository) | 2026-09-08 | chore: dogfood the ontology kit on its own repository | product | Installed the kit into its own repository rather than leaving it undogfooded, and seeded the ontology from the kit's real code and docs rather than filling in the template's placeholder rows. |
 | [6](#entry-feat-install-feature-lifecycle-kit) | 2026-10-30 | feat: install feature lifecycle kit | product | Adopt the lifecycle files from the local `claude-plugins` source byte for byte. Keep repository-specific guidance in `AGENTS.md`. The CLI and CI workflow share the same gate rules. |
 | [7](#entry-docs-feature-accept-semantic-ontology-matching-vision) | 2026-10-30 | docs(feature): accept semantic ontology matching vision | product | Accept the vision in `docs/features/semantic-ontology-matching/01-vision.md`: findings block merge; model or configuration failure is reported as not reviewed and does not block; repository maintainers own model configuration and… |
+| [8](#entry-docs-feature-define-semantic-matching-behaviours) | 2026-10-30 | docs(feature): define semantic matching behaviours | product | Accept B1–B14 in `docs/features/semantic-ontology-matching/02-behaviours.md`. Review the full current contents of changed eligible Markdown files against the PR's proposed ontology. |
 
 ---
 
@@ -199,3 +200,27 @@ Accept the vision in `docs/features/semantic-ontology-matching/01-vision.md`: fi
 The analyst and architect phases must define the exact review, resolution, and secure execution behavior. This PR records product intent; it does not yet change the existing reviewer or its advisory documentation. Fork PRs remain outside this feature and have a separate manual-investigation issue (#21).
 
 AI-Fingerprint: sha256:5526c065773d
+
+---
+
+<a id="entry-docs-feature-define-semantic-matching-behaviours"></a>
+
+## Entry 8 — 2026-10-30 — docs(feature): define semantic matching behaviours
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted vision in #14 and PR #22 calls for blocking semantic findings on trusted collaborators' same-repository PRs. The existing optional reviewer is advisory and examines added lines only. The analyst phase had to make the check's observable behavior explicit, including outage, partial review, correction, and dismissal cases.
+
+## Decision
+
+Accept B1–B14 in `docs/features/semantic-ontology-matching/02-behaviours.md`. Review the full current contents of changed eligible Markdown files against the PR's proposed ontology. An active finding blocks merge; the author's agent may correct the branch under the author's identity, while another agent proposes a correction. A maintainer may dismiss a specific finding with a recorded reason for the current revision. The latest run controls the check, so an unavailable or unusable model permits merge with an explicit not-reviewed notice, even after an earlier blocking finding. A partial run blocks if it returned a finding; otherwise it permits merge with incomplete-coverage notice. Repository maintainers control model configuration and credentials. Fork PRs remain outside the automated scope under #21.
+
+## Consequences
+
+The architect must design trusted execution, model configuration, run and dismissal persistence, and PR-visible findings and notices around these behaviors. The outage policy intentionally allows a later failed run to clear an earlier semantic block; the prior finding stays visible as history. The deterministic term check remains independent. This PR introduces behavior and vocabulary only; it does not turn on a semantic check.
+
+Verification: ontology term check passed (60 files, 27 terms); `npm test` passed (243 tests).
+
+AI-Fingerprint: sha256:9a0a869685df
