@@ -9,19 +9,24 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch }) {
     throw new Error("GitHub token and owner/repository are required");
   }
   const root = `${apiOrigin}/repos/${repository}`;
-  async function request(path) {
+  async function request(path, method = "GET", body) {
     const url = new URL(path.startsWith("/") ? path.slice(1) : path, root + "/");
     if (url.origin !== apiOrigin || !url.pathname.startsWith(root.slice(apiOrigin.length) + "/")) {
       throw new Error("GitHub API page is outside this repository");
     }
     const response = await fetchImpl(url.href, {
-      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}` },
+      method,
+      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`,
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) throw new Error(`GitHub API returned ${response.status} for ${url.pathname}`);
     return { data: await response.json(), next: /<([^>]+)>;\s*rel="next"/.exec(response.headers.get("link") ?? "")?.[1] };
   }
   return {
     async get(path) { return (await request(path)).data; },
+    async post(path, body) { return (await request(path, "POST", body)).data; },
+    async patch(path, body) { return (await request(path, "PATCH", body)).data; },
     async getAll(path) {
       const result = [];
       let next = path;

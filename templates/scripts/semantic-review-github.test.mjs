@@ -57,6 +57,21 @@ test("getAll follows Link pagination and encodes user-controlled paths", async (
   assert.equal(urls[0], "https://api.github.com/repos/org/repo/pulls/7/files?per_page=100");
 });
 
+test("client writes JSON with the GitHub token only to repository API paths", async () => {
+  const calls = [];
+  const client = createGitHubClient({ token: "github-token", repository: "org/repo",
+    fetchImpl: async (url, request) => {
+      calls.push({ url, request });
+      return { ok: true, status: 201, headers: { get: () => null }, json: async () => ({ id: 1 }) };
+    } });
+  await client.post("/issues/7/comments", { body: "hello" });
+  assert.equal(calls[0].url, "https://api.github.com/repos/org/repo/issues/7/comments");
+  assert.equal(calls[0].request.method, "POST");
+  assert.equal(calls[0].request.headers.Authorization, "Bearer github-token");
+  assert.deepEqual(JSON.parse(calls[0].request.body), { body: "hello" });
+  await assert.rejects(() => client.post("https://evil.example/steal", {}), /outside this repository/);
+});
+
 test("collector reads complete changed Markdown blobs, including renamed destinations", async () => {
   const files = [
     { filename: "docs/a file $(bad).md", status: "modified", sha: "blob-a" },
