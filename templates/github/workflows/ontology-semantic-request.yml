@@ -1,0 +1,15 @@
+name: Ontology semantic request
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request trusted follow-up
+        run: ':'

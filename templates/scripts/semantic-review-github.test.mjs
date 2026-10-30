@@ -44,6 +44,20 @@ test("resolvePulls falls back to matching head repository and branch", async () 
   assert.deepEqual(result, [pull]);
 });
 
+test("fallback rejects a mismatched run revision and marks ambiguous matches", async () => {
+  const mismatched = await resolvePulls({ getAll: async () => [pull], get: async () => pull },
+    { pull_requests: [], head_branch: "topic", head_repository: { id: 1, owner: { login: "org" } },
+      head_sha: "d".repeat(40) });
+  assert.deepEqual(mismatched, []);
+  const second = { ...pull, number: 8 };
+  const client = { getAll: async () => [pull, second], get: async (path) => path.endsWith("/7") ? pull : second };
+  const ambiguous = await resolvePulls(client,
+    { pull_requests: [], head_branch: "topic", head_repository: { id: 1, owner: { login: "org" } },
+      head_sha: headSha });
+  assert.equal(ambiguous.length, 2);
+  assert.ok(ambiguous.every((item) => item.semanticAssociationAmbiguous));
+});
+
 test("getAll follows Link pagination and encodes user-controlled paths", async () => {
   const urls = [];
   const fetchImpl = async (url) => {

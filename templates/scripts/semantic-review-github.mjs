@@ -45,17 +45,24 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch }) {
 
 export async function resolvePulls(client, workflowRun) {
   const numbers = new Set((workflowRun.pull_requests ?? []).map((item) => item.number).filter(Number.isInteger));
-  if (numbers.size === 0 && workflowRun.head_repository?.owner?.login && workflowRun.head_branch) {
+  const fallback = numbers.size === 0;
+  if (fallback && workflowRun.head_repository?.owner?.login && workflowRun.head_branch) {
     const head = `${workflowRun.head_repository.owner.login}:${workflowRun.head_branch}`;
     const matches = await client.getAll(`/pulls?state=open&head=${encodeURIComponent(head)}&per_page=100`);
     for (const item of matches) {
-      if (item.head?.repo?.id === workflowRun.head_repository.id && item.head?.ref === workflowRun.head_branch) {
+      if (item.head?.repo?.id === workflowRun.head_repository.id && item.head?.ref === workflowRun.head_branch &&
+          (!workflowRun.head_sha || [item.head.sha, item.merge_commit_sha].includes(workflowRun.head_sha))) {
         numbers.add(item.number);
       }
     }
   }
   const pulls = await Promise.all([...numbers].map((number) => client.get(`/pulls/${number}`)));
-  return pulls.filter((item) => item.state === "open");
+  const open = pulls.filter((item) => item.state === "open");
+  if (!fallback) return open;
+  const matched = open.filter((item) => item.head?.repo?.id === workflowRun.head_repository?.id &&
+    item.head?.ref === workflowRun.head_branch &&
+    (!workflowRun.head_sha || [item.head.sha, item.merge_commit_sha].includes(workflowRun.head_sha)));
+  return matched.length > 1 ? matched.map((item) => ({ ...item, semanticAssociationAmbiguous: true })) : matched;
 }
 
 export async function isEligiblePull(client, pull) {

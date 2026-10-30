@@ -1,0 +1,29 @@
+name: Ontology semantic dismissal
+
+on:
+  issue_comment:
+    types: [created, edited, deleted]
+
+permissions: {}
+
+jobs:
+  dismiss:
+    if: github.event.issue.pull_request != null
+    concurrency:
+      group: ontology-semantic-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Reconcile reasoned maintainer dismissal
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/semantic-review-worker.mjs dismiss
