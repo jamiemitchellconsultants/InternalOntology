@@ -25,6 +25,7 @@ by rewriting the original.
 | [9](#entry-docs-feature-define-semantic-review-architecture) | 2026-10-30 | docs(feature): define semantic review architecture | product | Use a secretless PR trigger followed by trusted default-branch code in a `workflow_run` worker. Read model settings from the default branch's `OntologyConfig` and use a default-branch-only Actions environment secret. |
 | [10](#entry-docs-feature-plan-semantic-matching-implementation) | 2026-10-30 | docs(feature): plan semantic matching implementation | product | Implement the feature in eight independently testable, individually committed tasks: strict configuration; GitHub PR input and eligibility; lossless file batching; grounded model assessment; run ledger and status publication; maintainer… |
 | [11](#entry-feat-add-opt-in-semantic-ontology-matching-pilot) | 2026-10-30 | feat: add opt-in semantic ontology matching pilot | product | Ship semantic matching as a separate opt-in. |
+| [12](#entry-docs-complete-semantic-matching-user-acceptance) | 2026-11-01 | docs: complete semantic matching user acceptance | product | Accept the user-phase walkthroughs on their recorded evidence. All B1–B14 local and deployed walkthrough steps passed, and all 14 matching executable cases passed against both the local kit and the installed trial scripts. |
 
 ---
 
@@ -301,3 +302,27 @@ Maintainers configure the model endpoint and a protected `ONTOLOGY_SEMANTIC_LLM_
 Verification: `npm test` passed (303/303); ontology term check passed (69 files, 31 terms); `actionlint` passed all three new workflows. In a [disposable trial PR](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030/pull/1), the [updated trusted workflow](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030/actions/runs/41085701941) completed identification, review, and finalization, publishing a successful unavailable status under branch protection because no model credential was installed. Earlier trial runs verified no-eligible status; a manually simulated failure status blocked merge and a later unavailable status unblocked it. An actual hosted model finding still needs acceptance with a configured pilot model. An empty changed Markdown blob currently reports incomplete coverage rather than a reviewed empty file; this does not clear a finding.
 
 AI-Fingerprint: sha256:df4a17d6d92c
+
+---
+
+<a id="entry-docs-complete-semantic-matching-user-acceptance"></a>
+
+## Entry 12 — 2026-11-01 — docs: complete semantic matching user acceptance
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The merged semantic matching build in #31 needed user acceptance against a real hosted model, protected environment secret and required commit status. The owner authorized Codex to act as tester and selected `muse-spark-1.3-contributor` for the disposable trial repository. The owner also approved using `github-actions[bot]` as the non-maintainer identity for B8 because the trial has no write-role collaborator.
+
+## Decision
+
+Accept the user-phase walkthroughs on their recorded evidence. All B1–B14 local and deployed walkthrough steps passed, and all 14 matching executable cases passed against both the local kit and the installed trial scripts. The hosted model produced grounded findings, blocked merge on active findings, respected reasoned dismissals, treated a later unavailable run as nonblocking, and reported partial coverage explicitly. The B8 bot attempt was rechecked by a trusted rerun and did not dismiss either finding.
+
+## Consequences
+
+Maintainers have a deployment and recovery runbook and a user guide. The pilot remains opt-in and disabled by default in the shipped template; the trial repository retains the protected Meta configuration for evidence. Meta Contributor mode may use submitted trial ontology and PR content to train future models. Fork PR investigation remains tracked in #21. Subjective value still needs a maintainer judgment before wider enablement.
+
+Verification: `npm test` passed 317/317; `node scripts/check-ontology-terms.mjs` passed 73 files against 31 terms; installed acceptance suite passed 14/14. See [the results](docs/features/semantic-ontology-matching/05-acceptance.md) and [trial repository](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030).
+
+AI-Fingerprint: sha256:317f3269861e
