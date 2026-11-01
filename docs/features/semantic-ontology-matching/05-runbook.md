@@ -6,6 +6,9 @@ deployment is the private disposable repository
 Its [trial PR #1](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030/pull/1)
 already verifies the workflow and unavailable-model path. Use a separate trial PR for each scenario
 that must keep its previous comments or status as evidence.
+The deployed acceptance trial uses `muse-spark-1.3-contributor` at `https://api.meta.ai/v1`.
+Meta's [Contributor mode](https://dev.meta.ai/docs/models) may use submitted ontology and PR
+content to train future models.
 
 ## Deploy
 

@@ -188,6 +188,11 @@ test("B8 a reasoned maintainer dismissal clears only its named finding", async (
   assert.equal(dismissals.length, 1);
   assert.equal(dismissals[0].author, "maintainer");
   assert.equal(ledger.statusFor(run, dismissals).state, "failure");
+  client.comments.push({ body: `/ontology-dismiss ${second.id} ${head} Bot has no maintainer role`,
+    user: { login: "github-actions[bot]" } });
+  dismissals = await dismissal.readDismissals(client, pull, run);
+  assert.equal(dismissals.length, 1);
+  assert.equal(ledger.statusFor(run, dismissals).state, "failure");
   client.comments.push({ body: `/ontology-dismiss ${second.id} ${head} The second passage is a quotation`,
     user: { login: "maintainer" } });
   dismissals = await dismissal.readDismissals(client, pull, run);
