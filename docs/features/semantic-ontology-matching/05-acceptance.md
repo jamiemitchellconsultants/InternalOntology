@@ -148,11 +148,11 @@ approved the test.
 
 | Behaviour | Local walkthrough (steps 1, 2) | Local test approval/result | Deployed walkthrough (steps 1, 2) | Deployed installed-code test | Date and walkthrough person | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| B1 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | Local selection: `docs/spec.md` only; no missing coverage |
-| B2 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | Scratch `git diff` changed only line 2; local request contained both lines |
+| B1 | pass, pass | Codex approved / pass | pass, pass | pass | 2026-11-01, Codex (local and deployed) | Local selection: `docs/spec.md` only; [trial PR #3](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030/pull/3) changed four file types and reported one eligible Markdown file |
+| B2 | pass, pass | Codex approved / pass | pass, pending | pending | 2026-11-01, Codex (local and deployed) | Scratch and [trial PR #3](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030/pull/3) changed only line 2; local model request contained both lines |
 | B3 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | Local prompt used proposed row; previous row absent |
 | B4 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | Local failure comment contained path, quote, evidence and suggestion |
-| B5 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | Local reviewed and no-eligible outcomes both succeeded |
+| B5 | pass, pass | Codex approved / pass | pending, pass | pending | 2026-11-01, Codex (local and deployed) | Local reviewed and no-eligible outcomes succeeded; [trial PR #1 code-only revision](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030/pull/1) reported no eligible changed Markdown |
 | B6 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | New SHA succeeded; two run comments retained |
 | B7 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | Ordinary proposal was not a dismissal; finding still failed |
 | B8 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | One dismissal left failure; two maintainer dismissals succeeded; write-only ignored |
@@ -161,7 +161,7 @@ approved the test.
 | B11 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | Partial run failed and named both finding and unreviewed path |
 | B12 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | Partial run succeeded with coverage warning and unreviewed path |
 | B13 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | Trusted endpoint/model used; invalid trusted config was unavailable |
-| B14 | pass, pass | Codex approved / pass | pending, pending | pending | 2026-11-01, Codex | Disabled succeeded; deterministic checker still flagged the invented term |
+| B14 | pass, pass | Codex approved / pass | pass, pass | pass | 2026-11-01, Codex (local and deployed) | [Trial PR #4](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030/pull/4) disabled the pilot; [trial PR #3](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030/pull/3) showed disabled success and [deterministic check failure](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030/actions/runs/41287351006); installed-code tests B1 and B14 passed 2/2 |
 
 Codex acted as the user tester under the owner's 2026-11-01 authorization. It followed the local
 fixture walkthrough before approving and running each matching test. The local suite passed 14/14
