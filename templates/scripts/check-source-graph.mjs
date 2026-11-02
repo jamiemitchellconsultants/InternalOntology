@@ -1,8 +1,9 @@
 import { validateConfig, normaliseRepoRelativePath } from "./ontology-config.mjs";
 import { parseTurtle } from "./owl-ontology.mjs";
-import { lineCount } from "./source-graph-git.mjs";
+import { lineCount, changedPaths, treeFromIndex, treeFromRevision } from "./source-graph-git.mjs";
 import { parseGraphTurtle } from "./source-graph-turtle.mjs";
-import { CORE, ROLE_KEYS, loadGraph, matchSelector, resolveCoverage } from "./source-graph-model.mjs";
+import { pathToFileURL } from "node:url";
+import { CORE, ROLE_KEYS, loadGraph, matchSelector, resolveCoverage, refreshIdFor } from "./source-graph-model.mjs";
 
 export class CheckSetupError extends Error {}
 export function loadCheckConfig(tree) {
@@ -90,4 +91,91 @@ export function checkTree({ tree, config }) {
   }
   if (resolveCoverage(graph, `${graph.root}/probe`).status !== "kit:excluded") add({ file: graph.root }, "root-not-excluded", "graph root is not excluded");
   return findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule) || a.message.localeCompare(b.message)).map(({ line, ...f }) => f);
+}
+
+function configForTree(tree) {
+  if (!tree.has("ontology.config.json")) throw new CheckSetupError("ontology.config.json missing");
+  try { return validateConfig(JSON.parse(tree.text("ontology.config.json")), { ontologyExists: (p) => tree.has(p) }); }
+  catch (error) { throw new CheckSetupError(error.message); }
+}
+function recordMap(graph) {
+  const result = new Map();
+  for (const r of graph.byType("kit:GraphRefreshRecord")) {
+    const path = r.first("kit:path")?.object;
+    if (!result.has(path)) result.set(path, []);
+    result.get(path).push(r);
+  }
+  return result;
+}
+function freshness(tree, config, graph) {
+  const findings = [], records = recordMap(graph), manifests = graph.byType("kit:SourceKnowledgeGraph");
+  const add = (r, rule, message) => findings.push({ file: r?.file || graph.root, subject: r?.iri || "", rule, message });
+  for (const [path, list] of records) {
+    const covered = resolveCoverage(graph, path).status === "kit:covered";
+    if (tree.has(path) && !covered) continue;
+    for (const r of list) {
+      const blob = r.first("kit:blobId")?.object, deleted = r.first("kit:deleted")?.object, outcome = r.first("kit:reviewOutcome")?.object;
+      if (list.length > 1 || r.iri !== refreshIdFor(path) || Boolean(blob) === (deleted !== undefined) || (deleted !== undefined && Number(deleted) !== 1) || !CORE.outcomes.includes(outcome) || (blob && !tree.has(path)) || (deleted !== undefined && tree.has(path))) add(r, "refresh-malformed", `invalid refresh record for ${path}`);
+      if (!manifests.some((m) => m.values("kit:refreshRecord").some((p) => p.object === r.iri))) add(r, "refresh-unreferenced", `refresh record for ${path} is not referenced`);
+    }
+  }
+  for (const path of tree.paths()) {
+    if (path.startsWith(graph.root + "/") || resolveCoverage(graph, path).status !== "kit:covered") continue;
+    const r = records.get(path)?.[0], expected = tree.blobId(path);
+    if (!r) add(null, "refresh-missing", `${path} requires kit:blobId ${expected}`);
+    else if (r.first("kit:blobId")?.object !== expected) add(r, "refresh-stale", `${path} requires kit:blobId ${expected}`);
+  }
+  return findings;
+}
+export function checkRevision(tree) {
+  const config = loadCheckConfig(tree), graph = loadGraph(tree, config);
+  return [...checkTree({ tree, config }), ...freshness(tree, config, graph)];
+}
+export function checkPullRequest({ baseTree, headTree }) {
+  const baseConfig = configForTree(baseTree), headConfig = configForTree(headTree);
+  if (baseConfig.sourceGraph.enabled && (!headConfig.sourceGraph.enabled || headConfig.sourceGraph.root !== baseConfig.sourceGraph.root)) return [{ file: "ontology.config.json", subject: "", rule: "graph-disabled", message: "a pull request cannot disable or relocate the enabled graph" }];
+  const config = loadCheckConfig(headTree), headGraph = loadGraph(headTree, config);
+  const baseGraph = baseConfig.sourceGraph.enabled ? loadGraph(baseTree, baseConfig) : null;
+  const findings = [...checkTree({ tree: headTree, config }), ...freshness(headTree, config, headGraph)];
+  const headRecords = recordMap(headGraph), baseRecords = baseGraph ? recordMap(baseGraph) : new Map();
+  const covered = (g, p) => g && resolveCoverage(g, p).status === "kit:covered";
+  for (const { path } of changedPaths(baseTree, headTree)) {
+    if (path.startsWith(headGraph.root + "/") || !(covered(baseGraph, path) || covered(headGraph, path))) continue;
+    const record = headRecords.get(path)?.[0], old = baseRecords.get(path)?.[0], expected = headTree.has(path) ? headTree.blobId(path) : "deleted 1";
+    if (!record) { if (!findings.some((f) => f.rule === "refresh-missing" && f.message.includes(path))) findings.push({ file: headGraph.root, subject: "", rule: "refresh-missing", message: `${path} requires ${expected}` }); continue; }
+    const nowBlob = record.first("kit:blobId")?.object, nowDeleted = record.first("kit:deleted")?.object;
+    const oldBlob = old?.first("kit:blobId")?.object, oldDeleted = old?.first("kit:deleted")?.object;
+    if ((headTree.has(path) ? nowBlob !== expected : Number(nowDeleted) !== 1) || (old && nowBlob === oldBlob && nowDeleted === oldDeleted)) {
+      if (!findings.some((f) => f.rule === "refresh-stale" && f.message.includes(path))) findings.push({ file: record.file, subject: record.iri, rule: "refresh-stale", message: `${path} requires ${expected} and a changed review record` });
+    }
+  }
+  return findings;
+}
+export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stderr = process.stderr } = {}) {
+  try {
+    let rev, base, head, staged = false, json = false;
+    for (let i = 0; i < argv.length; i++) {
+      const arg = argv[i];
+      if (arg === "--help") { stdout.write("Usage: check-source-graph [--rev REV | --base REV --head REV | --staged] [--json]\n"); return 0; }
+      if (arg === "--json") json = true;
+      else if (arg === "--staged") staged = true;
+      else if (["--rev", "--base", "--head"].includes(arg) && argv[i + 1] && !argv[i + 1].startsWith("--")) { const v = argv[++i]; if (arg === "--rev") rev = v; else if (arg === "--base") base = v; else head = v; }
+      else throw new CheckSetupError(`invalid option ${arg}`);
+    }
+    if ((staged && (rev || head)) || (head && !base) || (rev && base)) throw new CheckSetupError("incompatible revision options");
+    const tree = staged ? treeFromIndex(cwd) : treeFromRevision(cwd, head || rev || "HEAD");
+    const findings = base || staged ? checkPullRequest({ baseTree: treeFromRevision(cwd, base || "HEAD"), headTree: tree }) : checkRevision(tree);
+    const label = `${staged ? "candidate tree" : "revision"} ${tree.id}`;
+    if (json) stdout.write(JSON.stringify({ revision: tree.id, ok: !findings.length, findings }) + "\n");
+    else {
+      stdout.write(`${findings.length ? "source graph checked" : "source graph ok"}: ${label}\n`);
+      if (!findings.length) stdout.write("structurally valid; whether each claim is true is for maintainers to review\n");
+      for (const f of findings) stderr.write(`${f.file}: ${f.subject ? f.subject + ": " : ""}${f.rule}: ${f.message}\n`);
+    }
+    return findings.length ? 1 : 0;
+  } catch (error) { stderr.write(`${error.message}\n`); return 2; }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = main(process.argv.slice(2));
 }
