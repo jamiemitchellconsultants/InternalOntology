@@ -27,6 +27,7 @@ by rewriting the original.
 | [11](#entry-feat-add-opt-in-semantic-ontology-matching-pilot) | 2026-10-30 | feat: add opt-in semantic ontology matching pilot | product | Ship semantic matching as a separate opt-in. |
 | [12](#entry-docs-complete-semantic-matching-user-acceptance) | 2026-11-01 | docs: complete semantic matching user acceptance | product | Accept the user-phase walkthroughs on their recorded evidence. All B1–B14 local and deployed walkthrough steps passed, and all 14 matching executable cases passed against both the local kit and the installed trial scripts. |
 | [13](#entry-docs-feature-vision-for-source-knowledge-graph) | 2026-11-02 | docs(feature): vision for source knowledge graph | product | The product-owner vision makes agent grounding the primary outcome. An agent prepares a source-owned graph before a pull request; deterministic CI checks its structure and evidence, and maintainers review meaning. |
+| [14](#entry-docs-feature-behaviours-for-source-knowledge-graph) | 2026-11-02 | docs(feature): behaviours for source knowledge graph | product | Include selected design and architecture documents as evidence alongside code, tests, ontology terms, and eligible deployment files. |
 
 ---
 
@@ -347,3 +348,23 @@ The product-owner vision makes agent grounding the primary outcome. An agent pre
 ## Consequences
 
 The analyst can define the observable behavior and coverage rules without assuming one graph schema or extraction method. The architect must preserve byte-identical installed scripts and repository-specific configuration. Division-ontology can later consume reviewed source facts at recorded commits and derive C4 views where evidence is available. Numeric grounding targets wait for a representative baseline.
+
+---
+
+<a id="entry-docs-feature-behaviours-for-source-knowledge-graph"></a>
+
+## Entry 14 — 2026-11-02 — docs(feature): behaviours for source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted vision in #42 calls for a source-owned graph that grounds AI agents and can support wider views than the ontology alone. A single repository need not contain every fact needed for all C4 levels. The analyst needed to decide which sources may supply evidence, when a changed file blocks the PR check, and whether inferred relationships can be published.
+
+## Decision
+
+Include selected design and architecture documents as evidence alongside code, tests, ontology terms, and eligible deployment files. A changed file inside declared graph coverage requires a graph refresh or an explicit record that review found no fact change; the deterministic pull-request check blocks when that review is missing. Publish inferred relationships only when they are clearly labeled and cite reviewable source observations, and present them as tentative to agents.
+
+## Consequences
+
+Maintainers can review direct assertions, inferences, evidence, and gaps in the same PR. CI can check structure and freshness but cannot establish semantic truth, so maintainers remain responsible for claims. Repositories can declare partial coverage; out-of-scope files do not trigger the freshness check. The recorded revision representation, graph schema, extraction method, and query interface remain for architecture to decide. The numeric grounding target remains deferred until a representative baseline exists.
