@@ -31,6 +31,7 @@ by rewriting the original.
 | [15](#entry-docs-feature-architecture-for-source-knowledge-graph) | 2026-11-02 | docs(feature): architecture for source knowledge graph | product | Store the graph as canonical Turtle files with named resources and shared ontology concept IRIs. |
 | [16](#entry-docs-feature-plan-source-knowledge-graph-implementation) | 2026-11-02 | docs(feature): plan source knowledge graph implementation | product | Fill the gaps conservatively and record them in the task plan's decisions table. An evidence role with no configured selector accepts no evidence, so Terraform-only deployment is plain configuration. |
 | [17](#entry-clarify-git-command-delimiters-in-source-graph-plan) | 2026-11-02 | Clarify Git command delimiters in source graph plan | product | Use argument arrays for every Git invocation and NUL-delimited output for commands that list paths. Keep the detailed plan's specified arguments for object and tree commands. |
+| [18](#entry-clarify-source-graph-configuration-reset-behaviour) | 2026-11-02 | Clarify source graph configuration reset behaviour | product | Preserve existing configuration for normal installs and forced upgrades. An explicit content reset restores the graph-enabled starter configuration and discards the prior settings, consistent with the existing reset contract. |
 
 ---
 
@@ -433,3 +434,23 @@ Use argument arrays for every Git invocation and NUL-delimited output for comman
 ## Consequences
 
 The build can handle unusual filenames without adding unsupported options to Git commands. The graph behaviour and architecture remain unchanged.
+
+---
+
+<a id="entry-clarify-source-graph-configuration-reset-behaviour"></a>
+
+## Entry 18 — 2026-11-02 — Clarify source graph configuration reset behaviour
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The source graph plan said existing configuration is never edited, while the installer's explicit content reset already replaces adopter-owned configuration. The build needed a consistent rule for combining the graph option with that reset.
+
+## Decision
+
+Preserve existing configuration for normal installs and forced upgrades. An explicit content reset restores the graph-enabled starter configuration and discards the prior settings, consistent with the existing reset contract.
+
+## Consequences
+
+The detailed plan includes a test for the combined options and the absence of a config notice after reset. Existing settings remain protected during normal installation and forced upgrades; an explicit reset remains destructive.
