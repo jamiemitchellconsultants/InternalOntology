@@ -28,3 +28,14 @@ export async function withScratchRepo(body) {
 export function blobId(dir, rel) {
   return execFileSync("git", ["-C", dir, "hash-object", "--", rel], { encoding: "utf8" }).trim();
 }
+
+import { formatGraphTurtle } from "./source-graph-turtle.mjs";
+export const NS = "https://ontology.example/widgets#";
+export const S = (text) => ({ literal: text });                   // string value marker
+export function block(subject, type, pairs) {                      // pairs: [predicate, value]
+  return { subject, type, line: 0, pairs: pairs.map(([predicate, value]) =>
+    typeof value === "number" ? { predicate, object: String(value), objectType: "integer" }
+    : value?.literal !== undefined ? { predicate, object: value.literal, objectType: "string" }
+    : { predicate, object: value, objectType: "iri" }) };
+}
+export const ttl = (blocks, namespace = NS) => formatGraphTurtle({ namespace, blocks });
