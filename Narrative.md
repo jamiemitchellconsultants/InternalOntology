@@ -30,6 +30,7 @@ by rewriting the original.
 | [14](#entry-docs-feature-behaviours-for-source-knowledge-graph) | 2026-11-02 | docs(feature): behaviours for source knowledge graph | product | Include selected design and architecture documents as evidence alongside code, tests, ontology terms, and eligible deployment files. |
 | [15](#entry-docs-feature-architecture-for-source-knowledge-graph) | 2026-11-02 | docs(feature): architecture for source knowledge graph | product | Store the graph as canonical Turtle files with named resources and shared ontology concept IRIs. |
 | [16](#entry-docs-feature-plan-source-knowledge-graph-implementation) | 2026-11-02 | docs(feature): plan source knowledge graph implementation | product | Fill the gaps conservatively and record them in the task plan's decisions table. An evidence role with no configured selector accepts no evidence, so Terraform-only deployment is plain configuration. |
+| [17](#entry-clarify-git-command-delimiters-in-source-graph-plan) | 2026-11-02 | Clarify Git command delimiters in source graph plan | product | Use argument arrays for every Git invocation and NUL-delimited output for commands that list paths. Keep the detailed plan's specified arguments for object and tree commands. |
 
 ---
 
@@ -412,3 +413,23 @@ Fill the gaps conservatively and record them in the task plan's decisions table.
 The build can proceed task by task with each behaviour mapped to the task that proves it. The first broad declaration of coverage by an adopter needs one review record per covered file, which an agent must write by hand; the checker prints each expected blob ID, and a record-writing helper is left as a possible later change. The branch-protection integration of the new workflow is verified only in a disposable GitHub repository during the final task, or reported as unverified. Numeric grounding targets stay deferred.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-clarify-git-command-delimiters-in-source-graph-plan"></a>
+
+## Entry 17 — 2026-11-02 — Clarify Git command delimiters in source graph plan
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The build found that Task 3 required `-z` for every Git command, although the specified object and tree commands do not all support that option.
+
+## Decision
+
+Use argument arrays for every Git invocation and NUL-delimited output for commands that list paths. Keep the detailed plan's specified arguments for object and tree commands.
+
+## Consequences
+
+The build can handle unusual filenames without adding unsupported options to Git commands. The graph behaviour and architecture remain unchanged.
