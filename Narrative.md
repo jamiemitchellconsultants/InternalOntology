@@ -26,6 +26,7 @@ by rewriting the original.
 | [10](#entry-docs-feature-plan-semantic-matching-implementation) | 2026-10-30 | docs(feature): plan semantic matching implementation | product | Implement the feature in eight independently testable, individually committed tasks: strict configuration; GitHub PR input and eligibility; lossless file batching; grounded model assessment; run ledger and status publication; maintainer… |
 | [11](#entry-feat-add-opt-in-semantic-ontology-matching-pilot) | 2026-10-30 | feat: add opt-in semantic ontology matching pilot | product | Ship semantic matching as a separate opt-in. |
 | [12](#entry-docs-complete-semantic-matching-user-acceptance) | 2026-11-01 | docs: complete semantic matching user acceptance | product | Accept the user-phase walkthroughs on their recorded evidence. All B1–B14 local and deployed walkthrough steps passed, and all 14 matching executable cases passed against both the local kit and the installed trial scripts. |
+| [13](#entry-docs-feature-vision-for-source-knowledge-graph) | 2026-11-02 | docs(feature): vision for source knowledge graph | product | The product-owner vision makes agent grounding the primary outcome. An agent prepares a source-owned graph before a pull request; deterministic CI checks its structure and evidence, and maintainers review meaning. |
 
 ---
 
@@ -326,3 +327,23 @@ Maintainers have a deployment and recovery runbook and a user guide. The pilot r
 Verification: `npm test` passed 317/317; `node scripts/check-ontology-terms.mjs` passed 73 files against 31 terms; installed acceptance suite passed 14/14. See [the results](docs/features/semantic-ontology-matching/05-acceptance.md) and [trial repository](https://github.com/jamiemitchellconsultants/ontology-semantic-trial-20261030).
 
 AI-Fingerprint: sha256:317f3269861e
+
+---
+
+<a id="entry-docs-feature-vision-for-source-knowledge-graph"></a>
+
+## Entry 13 — 2026-11-02 — docs(feature): vision for source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The current Kit gives agents a canonical vocabulary, while repository structure, dependencies, tests, and deployment facts remain scattered. A JointBooking Graphify spike showed useful file-and-line evidence but also an inferred path through test helpers. The target is a wider graph for agent grounding, with C4 diagrams as one downstream view. Corporate use requires a high bar for external dependencies.
+
+## Decision
+
+The product-owner vision makes agent grounding the primary outcome. An agent prepares a source-owned graph before a pull request; deterministic CI checks its structure and evidence, and maintainers review meaning. Repositories may declare partial coverage. Evaluation spans C#, TypeScript, Java, and Python. The JointBooking pilot considers Terraform alone for deployment evidence. Graphify remains a research aid and is not a Kit or CI dependency.
+
+## Consequences
+
+The analyst can define the observable behavior and coverage rules without assuming one graph schema or extraction method. The architect must preserve byte-identical installed scripts and repository-specific configuration. Division-ontology can later consume reviewed source facts at recorded commits and derive C4 views where evidence is available. Numeric grounding targets wait for a representative baseline.
