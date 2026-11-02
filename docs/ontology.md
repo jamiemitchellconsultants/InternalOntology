@@ -55,7 +55,8 @@ Internal components that are ours to build. Named so that specs can describe the
 | `TargetRepository` | `path` | The git repository (must already contain `.git`) the `Installer` writes into. Identity persists across repeated installs and upgrades of the same repository. |
 | `Ontology` | `ontologyPath`, one Markdown table per section | The canonical vocabulary document a `TargetRepository` maintains (`docs/ontology.md` by default). Identity persists as sections and rows are added, renamed, or removed over the repository's life; this file, in this repository, is one instance of it. |
 | `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths`, optional `semanticReview` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific values through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. The `semanticReview` settings are read from the trusted default branch, not an unmerged PR. |
-| `SourceKnowledgeGraph` | source repository, recorded revision, source-backed facts, declared coverage | A reviewable, versioned account of repository facts that extends beyond the canonical vocabulary in `Ontology`. An agent prepares it before a pull request; its available facts ground later agent work and may support downstream views. Missing coverage is explicit. |
+| `SourceKnowledgeGraph` | source repository, recorded revision, source-supported assertions, declared coverage | A reviewable, versioned account of repository facts and clearly marked inferences that extends beyond the canonical vocabulary in `Ontology`. An agent prepares it before a pull request; its assertions ground later agent work and may support downstream views. Missing coverage is explicit. |
+| `GraphAssertion` | stable identity, subject, relationship, object, basis, evidence | One reviewable claim in a `SourceKnowledgeGraph` about a repository fact or relationship. Its basis distinguishes a directly evidenced claim from an inference supported by source observations. Its identity persists when the same claim is refreshed at a later source revision. |
 | `AgentInstructionFile` | one of `AGENTS.md`, `CLAUDE.md` | Whichever file a `TargetRepository` already treats as authoritative for agent instructions (`AGENTS.md` preferred, `CLAUDE.md` otherwise, `AGENTS.md` created if neither exists). Carries the spliced `OntologyProtocol`. |
 | `SemanticReviewRun` | pull request, revision, eligible files, reviewed files, outcome | One attempt to assess changed Markdown against the ontology. Its outcome controls the current semantic check; a later run supersedes it even when that later run cannot review. |
 
@@ -69,6 +70,8 @@ Internal components that are ours to build. Named so that specs can describe the
 | `AllowlistEntry` | `term`, `reason` | One term excused from the unknown-term check, with the written reason a reviewer would need to accept it. |
 | `BannedAlias` | `phrase`, `nameInstead` | One paraphrase of a named `External System` that prose must not use, and the canonical name(s) to use instead. |
 | `OntologyProtocol` | Markdown body between `<!-- ontology-protocol:start -->` / `<!-- ontology-protocol:end -->` | The instructions bound into an `AgentInstructionFile`: read `Ontology` before writing anything domain-touching, use its exact names, add a missing concept there first, update it in the same commit as the code change. Replaced wholesale on every install — re-running is what keeps it current, not an edit history of its own. |
+| `GraphEvidence` | source path, location, revision | A source reference supporting one `GraphAssertion`, whether the source is code, a test, a selected design document, the `Ontology`, or an eligible deployment file. For an inferred assertion it identifies the observations behind the inference, not direct proof of the relationship. Defined by the referenced source and its recorded revision. |
+| `GraphCoverage` | declared scope, status, reason | The portion of a `TargetRepository` that a `SourceKnowledgeGraph` says it covers or leaves unknown. Missing coverage remains visible rather than being inferred from absent assertions. |
 | `Violation` | `file`, `line`, `column`, `message` | One flagged occurrence the `TermChecker` reports: an unknown backticked term, or a banned-alias paraphrase. |
 | `SemanticFinding` | revision, file, passage, ontology evidence, suggested correction | A claim made by a `SemanticReviewRun` that changed Markdown conflicts with the ontology. Its identity is stable across reruns of the same revision and is reconsidered on a new revision. |
 | `FindingDismissal` | `SemanticFinding`, revision, maintainer, reason | A maintainer's recorded decision to disregard one `SemanticFinding` for one PR revision. It survives reruns of that revision and expires when the PR changes. |
@@ -97,6 +100,9 @@ enum lock test catches.
 | `CheckOntologyTerms` | CI, or Adopter locally | Running the `TermChecker` against a `TargetRepository`'s tracked Markdown (plus any `--also` paths) and reporting every `Violation`. |
 | `ReviewOntologyDrift` | CI, when `DriftReviewer` is installed | The optional advisory pass for paraphrase drift the `TermChecker` cannot see. |
 | `ReviewSemanticMatch` | CI, for an eligible pull request | The blocking semantic assessment of each changed, eligible Markdown file in full, with an explicitly nonblocking result when review cannot run. |
+| `RefreshSourceKnowledgeGraph` | AI agent, before a pull request | Review changed files within declared `GraphCoverage` and update the proposed `SourceKnowledgeGraph` or record that its existing assertions still hold. |
+| `CheckSourceKnowledgeGraph` | CI, on a pull request | Deterministically check the proposed `SourceKnowledgeGraph` and whether changed files in declared `GraphCoverage` were reviewed before merge; leave semantic truth to maintainers. |
+| `GroundWithSourceKnowledgeGraph` | AI coding agent | Find relevant `GraphAssertion`s for a repository task, inspect their `GraphEvidence`, distinguish inferences from directly evidenced claims, and identify unknown or stale areas instead of inventing facts. |
 
 ---
 
@@ -122,6 +128,9 @@ enum lock test catches.
 | `SemanticReviewWorker` | reads | `Ontology` | many → 1 |
 | `SemanticStatusPublisher` | publishes | `SemanticReviewRun` | 1 → many |
 | `SemanticDismissalHandler` | records | `FindingDismissal` | 1 → many |
+| `SourceKnowledgeGraph` | contains | `GraphAssertion` | 1 → 0 or many |
+| `SourceKnowledgeGraph` | declares | `GraphCoverage` | 1 → many |
+| `GraphAssertion` | cites | `GraphEvidence` | 1 → 1 or many |
 
 ---
 
@@ -153,3 +162,6 @@ enum lock test catches.
   Anything that varies belongs in that repository's own `OntologyConfig`.
 - Running `Install` against a `TargetRepository` creates no runtime dependency between it and this
   repository: no shared vocabulary, registry, or package resolved at runtime.
+- **`GraphAssertion`** — an inferred relationship is explicitly labeled as an inference and cites
+  the source observations behind it; neither the graph nor an agent presents it as directly
+  observed merely because its evidence paths exist.
