@@ -29,6 +29,7 @@ by rewriting the original.
 | [13](#entry-docs-feature-vision-for-source-knowledge-graph) | 2026-11-02 | docs(feature): vision for source knowledge graph | product | The product-owner vision makes agent grounding the primary outcome. An agent prepares a source-owned graph before a pull request; deterministic CI checks its structure and evidence, and maintainers review meaning. |
 | [14](#entry-docs-feature-behaviours-for-source-knowledge-graph) | 2026-11-02 | docs(feature): behaviours for source knowledge graph | product | Include selected design and architecture documents as evidence alongside code, tests, ontology terms, and eligible deployment files. |
 | [15](#entry-docs-feature-architecture-for-source-knowledge-graph) | 2026-11-02 | docs(feature): architecture for source knowledge graph | product | Store the graph as canonical Turtle files with named resources and shared ontology concept IRIs. |
+| [16](#entry-docs-feature-plan-source-knowledge-graph-implementation) | 2026-11-02 | docs(feature): plan source knowledge graph implementation | product | Fill the gaps conservatively and record them in the task plan's decisions table. An evidence role with no configured selector accepts no evidence, so Terraform-only deployment is plain configuration. |
 
 ---
 
@@ -389,3 +390,25 @@ Store the graph as canonical Turtle files with named resources and shared ontolo
 ## Consequences
 
 A PR exposes changes to assertions, evidence, coverage, and no-fact-change reviews. The deterministic checker validates a documented canonical Turtle subset, structure, and freshness without making semantic claims; maintainers judge whether evidence supports direct or inferred assertions. The source graph can be combined with the canonical ontology by RDF consumers without translating JSON. Repositories can participate with partial coverage, and downstream consumers derive only the views their pinned facts support. The first implementation must define and test the Turtle contract, coverage priority, reader output, and local/CI revision modes. Numeric grounding targets remain deferred until a representative baseline exists.
+
+---
+
+<a id="entry-docs-feature-plan-source-knowledge-graph-implementation"></a>
+
+## Entry 16 — 2026-11-02 — docs(feature): plan source knowledge graph implementation
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted architecture fixes the behaviour of the graph but leaves several contract details to the developer: the shape of the graph settings in `OntologyConfig`, the IRIs for evidence roles and outcomes, how a deleted file is recorded, how a review record is named, and how the checker and reader are invoked locally and in CI. The plan has to settle these without changing a behaviour or an ADR, keep the installed scripts byte-identical across repositories, and let every claim be proved by a test that runs without a model, secret or network.
+
+## Decision
+
+Fill the gaps conservatively and record them in the task plan's decisions table. An evidence role with no configured selector accepts no evidence, so Terraform-only deployment is plain configuration. Every existing covered file must carry a review record whose blob equals its current blob; pull request mode adds the base-and-proposed union rule from ADR 0006 and a guard against a pull request disabling or relocating the check. Revisions are read from Git objects, including the index for a staged candidate, never from the working tree. Rejected: baking a fixed evidence default into the scripts, which would break byte-identical installs, and reading configuration from the working directory, which a pull request could rewrite.
+
+## Consequences
+
+The build can proceed task by task with each behaviour mapped to the task that proves it. The first broad declaration of coverage by an adopter needs one review record per covered file, which an agent must write by hand; the checker prints each expected blob ID, and a record-writing helper is left as a possible later change. The branch-protection integration of the new workflow is verified only in a disposable GitHub repository during the final task, or reported as unverified. Numeric grounding targets stay deferred.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
