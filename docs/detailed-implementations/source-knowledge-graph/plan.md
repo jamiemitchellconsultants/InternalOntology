@@ -250,6 +250,10 @@ Implementation notes. Resolve with `git rev-parse --verify --quiet <rev>^{commit
 `id` is the tree ID, for a revision it is the commit SHA. Renames are not detected: a move is one
 deletion and one addition.
 
+Use `-z` for commands that list paths, such as `git ls-tree`, so filenames are parsed as data.
+Do not add `-z` to `git rev-parse`, `git write-tree`, or `git cat-file`; their output is an object
+ID or blob content, and they use the arguments specified above.
+
 The helper, written now and extended in Task 5:
 
 ```js
