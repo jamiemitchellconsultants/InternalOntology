@@ -1352,8 +1352,11 @@ Test failure first, write the files, rerun, run global checks, commit
   `{{ONTOLOGY_TTL_PATH}}`; defaults: `implementation: ["**"]`, `test: ["**"]`,
   `selected-document: ["docs/**"]`, `ontology: [ontologyPath, ontologyTtlPath]`, `deployment: []`.
   When `ontology.config.json` is written fresh, `insertConfigSection(configText, sectionText)`
-  replaces the final `\n}` with `,\n  "sourceGraph": …\n}`. An existing config is never edited;
-  `install()` returns `configNotice` holding the section text and a sentence naming the file.
+  replaces the final `\n}` with `,\n  "sourceGraph": …\n}`. A normal install or `--force`
+  preserves an existing config and `install()` returns `configNotice` holding the section text and
+  a sentence naming the file. With explicit `--reset-content`, replace an existing config with the
+  starter config including the `sourceGraph` section, discard its previous settings, and return no
+  config notice. This retains the existing destructive reset behaviour for adopter-owned content.
 - The workflow, with `{{DEFAULT_BRANCH}}` substituted:
 
 ```yaml
@@ -1483,6 +1486,22 @@ test("--force keeps adopter graph data and --reset-content restores the starter"
     assert.equal(readFileSync(nodes, "utf8"), "adopter data\n");
     install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true, resetContent: true });
     assert.notEqual(readFileSync(nodes, "utf8"), "adopter data\n");
+  });
+});
+
+test("--reset-content replaces an existing config with the graph-enabled starter", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets" });
+    const configPath = join(repo.dir, "ontology.config.json");
+    const existing = JSON.parse(readFileSync(configPath, "utf8"));
+    existing.ignorePaths = ["custom/**"];
+    writeFileSync(configPath, JSON.stringify(existing));
+    const result = install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true, resetContent: true });
+    const reset = JSON.parse(readFileSync(configPath, "utf8"));
+    assert.deepEqual(reset.ignorePaths, []);
+    assert.equal(reset.sourceGraph.enabled, true);
+    assert.equal(reset.sourceGraph.root, "docs/source-knowledge-graph");
+    assert.equal(result.configNotice, null);
   });
 });
 
