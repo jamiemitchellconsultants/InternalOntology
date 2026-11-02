@@ -575,3 +575,128 @@ test("the CLI exits non-zero with a readable message on a non-git target", async
     assert.match(stderr, /is not a git repository/);
   });
 });
+
+import { writeFileSync } from "node:fs";
+import { loadConfig } from "../templates/scripts/ontology-config.mjs";
+
+test("--with-source-graph adds scripts, tests, helper, workflow, schema, runbook and starter graph", () => {
+  const entries = buildPlan({ withSourceGraph: true });
+  const dests = entries.map((e) => e.dest);
+  for (const path of [
+    "scripts/source-graph-turtle.mjs", "scripts/source-graph-git.mjs", "scripts/source-graph-model.mjs",
+    "scripts/check-source-graph.mjs", "scripts/query-source-graph.mjs", "scripts/source-graph-test-helpers.mjs",
+    "scripts/check-source-graph.test.mjs", "scripts/query-source-graph.test.mjs",
+    ".github/workflows/source-graph-check.yml", "docs/source-knowledge-graph.md",
+    "docs/source-knowledge-graph/graph-schema.ttl", "docs/source-knowledge-graph/manifest.ttl",
+    "docs/source-knowledge-graph/nodes.ttl",
+  ]) assert.ok(dests.includes(path), `missing ${path}`);
+  const owner = (dest) => entries.find((e) => e.dest === dest).ownedBy;
+  assert.equal(owner("docs/source-knowledge-graph/manifest.ttl"), "adopter");
+  assert.equal(owner("docs/source-knowledge-graph/nodes.ttl"), "adopter");
+  assert.equal(owner("docs/source-knowledge-graph/graph-schema.ttl"), "kit");
+  assert.equal(owner("scripts/check-source-graph.mjs"), "kit");
+});
+
+test("a core install writes nothing about the source graph", () => {
+  assert.equal(buildPlan({}).some((e) => /source-graph|source-knowledge-graph/.test(e.dest)), false);
+});
+
+test("--source-graph-root moves the graph files and rejects an unsafe root", async () => {
+  const dests = buildPlan({ withSourceGraph: true, sourceGraphRoot: "graph" }).map((e) => e.dest);
+  assert.ok(dests.includes("graph/manifest.ttl"));
+  await withTempRepo(async (repo) => {
+    assert.throws(() => install({ target: repo.dir, sourceGraphRoot: "../out", withSourceGraph: true }), /--source-graph-root/);
+  });
+});
+
+test("installed graph scripts are byte-identical to the templates and the fresh config validates", async () => {
+  await withTempRepo(async (repo) => {
+    const result = install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
+    for (const name of ["check-source-graph", "query-source-graph", "source-graph-model", "source-graph-git", "source-graph-turtle"]) {
+      const rel = `scripts/${name}.mjs`;
+      assert.equal(readFileSync(join(repo.dir, rel), "utf8"),
+        readFileSync(fileURLToPath(new URL(`../templates/${rel}`, import.meta.url)), "utf8"));
+    }
+    const config = loadConfig({ cwd: repo.dir });
+    assert.equal(config.sourceGraph.enabled, true);
+    assert.equal(result.configNotice, null);
+  });
+});
+
+test("a fresh config contains the sourceGraph section; an existing one is left alone with a notice", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
+    const raw = JSON.parse(readFileSync(join(repo.dir, "ontology.config.json"), "utf8"));
+    assert.equal(raw.sourceGraph.enabled, true);
+    assert.equal(raw.sourceGraph.root, "docs/source-knowledge-graph");
+    assert.deepEqual(raw.sourceGraph.evidence.ontology, ["docs/ontology.md", "docs/ontology.ttl"]);
+  });
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets" });
+    const before = readFileSync(join(repo.dir, "ontology.config.json"), "utf8");
+    const result = install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
+    assert.equal(readFileSync(join(repo.dir, "ontology.config.json"), "utf8"), before);
+    assert.match(result.configNotice, /sourceGraph/);
+    assert.match(result.configNotice, /ontology\.config\.json/);
+  });
+});
+
+test("the graph protocol block is spliced once, idempotently, after the ontology block", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
+    const once = readFileSync(join(repo.dir, "AGENTS.md"), "utf8");
+    install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true, force: true });
+    const twice = readFileSync(join(repo.dir, "AGENTS.md"), "utf8");
+    assert.equal(twice, once);
+    assert.equal(once.split("<!-- source-graph-protocol:start -->").length, 2);
+    assert.ok(once.indexOf("<!-- ontology-protocol:end -->") < once.indexOf("<!-- source-graph-protocol:start -->"));
+    assert.match(once, /docs\/source-knowledge-graph/);
+  });
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets" });
+    assert.doesNotMatch(readFileSync(join(repo.dir, "AGENTS.md"), "utf8"), /source-graph-protocol/);
+  });
+});
+
+test("--force keeps adopter graph data and --reset-content restores the starter", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
+    const nodes = join(repo.dir, "docs/source-knowledge-graph/nodes.ttl");
+    writeFileSync(nodes, "adopter data\n");
+    install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true, force: true });
+    assert.equal(readFileSync(nodes, "utf8"), "adopter data\n");
+    install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true, resetContent: true });
+    assert.notEqual(readFileSync(nodes, "utf8"), "adopter data\n");
+  });
+});
+
+test("the workflow is read-only, secretless, full-history and passes the base through env", () => {
+  const text = readFileSync(fileURLToPath(new URL("../templates/github/workflows/source-graph-check.yml", import.meta.url)), "utf8");
+  assert.match(text, /permissions:\s+contents: read/);
+  assert.match(text, /fetch-depth: 0/);
+  assert.match(text, /BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(text, /--base "\$BASE_SHA" --head HEAD/);
+  assert.match(text, /--rev HEAD/);
+  assert.doesNotMatch(text, /secrets\.|write|pull_request_target|run:.*\$\{\{/);
+});
+
+test("source graph CLI options enable the feature", () => {
+  assert.equal(parseCliArgs(["--target", "x", "--with-source-graph"]).withSourceGraph, true);
+  assert.equal(parseCliArgs(["--target", "x", "--source-graph-root", "g"]).withSourceGraph, true);
+});
+
+test("--reset-content replaces an existing config with the graph-enabled starter", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets" });
+    const configPath = join(repo.dir, "ontology.config.json");
+    const existing = JSON.parse(readFileSync(configPath, "utf8"));
+    existing.ignorePaths = ["custom/**"];
+    writeFileSync(configPath, JSON.stringify(existing));
+    const result = install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true, resetContent: true });
+    const reset = JSON.parse(readFileSync(configPath, "utf8"));
+    assert.deepEqual(reset.ignorePaths, []);
+    assert.equal(reset.sourceGraph.enabled, true);
+    assert.equal(reset.sourceGraph.root, "docs/source-knowledge-graph");
+    assert.equal(result.configNotice, null);
+  });
+});

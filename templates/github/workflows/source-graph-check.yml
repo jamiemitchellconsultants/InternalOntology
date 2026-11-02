@@ -1,0 +1,29 @@
+name: Source graph check
+
+on:
+  pull_request:
+  push:
+    branches: ["{{DEFAULT_BRANCH}}"]
+
+permissions:
+  contents: read
+
+jobs:
+  source-graph:
+    name: source-graph
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check the proposed graph against the pull request base
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-source-graph.mjs --base "$BASE_SHA" --head HEAD
+      - name: Check the merged graph
+        if: github.event_name == 'push'
+        run: node scripts/check-source-graph.mjs --rev HEAD
