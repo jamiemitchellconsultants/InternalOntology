@@ -32,6 +32,10 @@ separate option from `--with-drift-review`; after installing, follow the copied
 the model secret, and the required status. The copied config starts disabled, so merely installing
 the files does not send Markdown to a model.
 
+Add `--with-source-graph` only when the user requests it. Commit `docs/ontology.ttl` first using
+`node scripts/build-ontology.mjs`; the graph check requires it. If the installer prints a config
+notice for an existing config, give it to the user to apply.
+
 If this step refuses because of an existing unmarked `## Ontology protocol` section in `AGENTS.md`
 or `CLAUDE.md`, **stop and ask** how the user wants that resolved — removing or marking someone
 else's hand-written section is not a call to make unprompted.

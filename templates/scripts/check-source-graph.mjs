@@ -2,7 +2,8 @@ import { validateConfig, normaliseRepoRelativePath } from "./ontology-config.mjs
 import { parseTurtle } from "./owl-ontology.mjs";
 import { lineCount, changedPaths, treeFromIndex, treeFromRevision } from "./source-graph-git.mjs";
 import { parseGraphTurtle } from "./source-graph-turtle.mjs";
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { CORE, ROLE_KEYS, loadGraph, matchSelector, resolveCoverage, refreshIdFor } from "./source-graph-model.mjs";
 
 export class CheckSetupError extends Error {}
@@ -176,6 +177,9 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
   } catch (error) { stderr.write(`${error.message}\n`); return 2; }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+let isEntryPoint = false;
+try { isEntryPoint = Boolean(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url); }
+catch { /* An unresolvable argument cannot name this module. */ }
+if (isEntryPoint) {
   process.exitCode = main(process.argv.slice(2));
 }

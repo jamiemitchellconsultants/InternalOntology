@@ -1,4 +1,5 @@
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { treeFromRevision } from "./source-graph-git.mjs";
 import { loadCheckConfig } from "./check-source-graph.mjs";
 import { loadGraph, resolveCoverage } from "./source-graph-model.mjs";
@@ -93,4 +94,7 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
     return 0;
   } catch (error) { stderr.write(`${error.message}\n`); return 2; }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = main(process.argv.slice(2));
+let isEntryPoint = false;
+try { isEntryPoint = Boolean(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url); }
+catch { /* An unresolvable argument cannot name this module. */ }
+if (isEntryPoint) process.exitCode = main(process.argv.slice(2));

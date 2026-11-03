@@ -182,5 +182,8 @@ enum lock test catches.
   observed merely because its evidence paths exist.
 - **`GraphRefreshRecord`** — a changed file in the union of base and proposed covered scopes
   requires a current reviewed blob or deletion record even when its graph assertions remain valid.
+- **`GraphRefreshRecord`** — every covered existing file has a record whose blob equals its current blob
+  at the checked revision.
+- **`OntologyConfig`** — a pull request cannot disable or relocate an enabled source graph check.
 - **`GraphEvidence`** — its source path lies in declared covered scope, matches its eligible role,
   and resolves to the cited blob and line range in the graph's effective Git revision.
