@@ -172,13 +172,13 @@ The architecture fixes behaviour; these fill the gaps it deliberately left to th
 
 ### Task 10: Cross-language acceptance, documentation and ontology
 
-**Files:** Create `tests/source-graph-acceptance.test.mjs`; modify `templates/scripts/source-graph-test-helpers.mjs`, `README.md`, `docs/ai-agent-install.md`, `docs/ontology.md`.
+**Files:** Create `tests/source-graph-acceptance.test.mjs`; modify `templates/scripts/check-source-graph.mjs`, `templates/scripts/query-source-graph.mjs`, `templates/scripts/source-graph-test-helpers.mjs` if necessary, `README.md`, `docs/ai-agent-install.md`, `docs/ontology.md`.
 
 **Interfaces:** the widgets fixture from Task 5 is built for `csharp`, `typescript`, `java` and `python` (equivalent source, test and dependency files, ontology Turtle, graph files, records computed with `git hash-object`); a pilot variant adds Terraform and Docker Compose. The acceptance test asserts that normalised checker and reader output is identical across the four languages (B13), runs B1–B15 end to end against an installed repository (clean install, covered change blocked, refreshed change passes, reader sees the pinned commit), proves the installed commands work from a pure-Git checkout with the working tree removed, and proves the graph files install with `--force` intact.
 
-- [ ] **Step 1: Write failing acceptance tests** for the four-language equivalence, the pilot (B14), the full installed loop, and the term checker over the installed repository.
+- [ ] **Step 1: Write failing acceptance tests** for the four-language equivalence, the pilot (B14), the full installed loop, the term checker over the installed repository, and invoking both installed commands through a symlinked script path. Assert that the bare-Git checker and reader produce their expected output, not just exit 0. Ensure the shipped-test check actually runs installed test files.
 - [ ] **Step 2: Run** `node --test tests/source-graph-acceptance.test.mjs`; expect failure.
-- [ ] **Step 3: Implement** the fixture builders and update README (option table, install and migration), the install guide, and the repository ontology for any term the build introduced, in the same commit.
+- [ ] **Step 3: Implement** the fixture builders as needed, repair both command entry-point guards so a symlinked script path executes the command, and update README (option table, install and migration), the install guide, and the repository ontology for any term the build introduced, in the same commit. Task 10 owns the entry-point repair in its one commit; do not rewrite the already pushed Task 6 and 7 commits.
 - [ ] **Step 4: Run** focused tests and `npm test`; expect pass. In a disposable GitHub repository, confirm the workflow runs on a PR and its check name can be required; if GitHub access is unavailable, state the branch-protection integration as unverified for the user's acceptance rather than claiming it passed.
 - [ ] **Step 5: Stage, inspect, run global checks, commit** `feat: accept the source graph across languages`, and push.
 
