@@ -34,6 +34,7 @@ by rewriting the original.
 | [18](#entry-clarify-source-graph-configuration-reset-behaviour) | 2026-11-02 | Clarify source graph configuration reset behaviour | product | Preserve existing configuration for normal installs and forced upgrades. An explicit content reset restores the graph-enabled starter configuration and discards the prior settings, consistent with the existing reset contract. |
 | [19](#entry-plan-symlink-safe-source-graph-command-execution) | 2026-11-03 | Plan symlink-safe source graph command execution | product | Task 10 will repair both command entry-point guards and test execution through linked script paths. Its acceptance tests will assert command output and run the installed test files explicitly. |
 | [20](#entry-plan-final-source-graph-review-repairs) | 2026-11-03 | Plan final source graph review repairs | product | Compare each base covered selector by its literal pattern with proposed coverage declarations. |
+| [21](#entry-user-source-knowledge-graph-docs-and-acceptance) | 2026-11-03 | [User] Source knowledge graph docs and acceptance | product | Codex acted as user tester and test approver under the owner's instruction. All 15 behaviour walkthroughs and their executable cases passed in the local build and deployed trials. |
 
 ---
 
@@ -496,3 +497,23 @@ Compare each base covered selector by its literal pattern with proposed coverage
 ## Consequences
 
 Coverage removal is visible even without changed source files. Literal pattern comparison avoids guessing glob equivalence from tracked files, so a selector rewrite must retain an explicit old-scope marker. The existing base/head review-record rule still applies to changed files. The installed checker, installer and acceptance tests receive focused regressions. The build handoff remains blocked until the plan amendment is reviewed and merged, the pushback is cleared, and Task 11 passes. Branch-protection integration remains for user acceptance.
+
+---
+
+<a id="entry-user-source-knowledge-graph-docs-and-acceptance"></a>
+
+## Entry 21 — 2026-11-03 — [User] Source knowledge graph docs and acceptance
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The merged source graph build was ready for its User phase. Issue #41 requires a usable runbook and guide, followed by local and deployed acceptance for every behaviour.
+
+## Decision
+
+Codex acted as user tester and test approver under the owner's instruction. All 15 behaviour walkthroughs and their executable cases passed in the local build and deployed trials. The phase records that acceptance result with source and Actions evidence.
+
+## Consequences
+
+The source graph has an auditable user-phase acceptance record and operating guidance. Its structural check can be required on adopter PRs, while maintainers still judge the meaning of graph assertions. This PR completes the User phase for review; the parent feature closes after this PR merges.
