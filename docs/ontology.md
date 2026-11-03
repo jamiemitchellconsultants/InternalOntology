@@ -110,6 +110,7 @@ enum lock test catches.
 | `RefreshSourceKnowledgeGraph` | AI agent, before a pull request | Review changed files within declared `GraphCoverage` and update the proposed `SourceKnowledgeGraph` or record that its existing assertions still hold. |
 | `CheckSourceKnowledgeGraph` | CI, on a pull request | Deterministically check the proposed `SourceKnowledgeGraph` and whether changed files in declared `GraphCoverage` were reviewed before merge; leave semantic truth to maintainers. |
 | `GroundWithSourceKnowledgeGraph` | AI coding agent | Find relevant `GraphAssertion`s for a repository task, inspect their `GraphEvidence`, distinguish inferences from directly evidenced claims, and identify unknown or stale areas instead of inventing facts. |
+| `RenderSourceKnowledgeGraph` | Maintainer, through a Git workflow | Generate a human-readable Markdown document of the current `SourceKnowledgeGraph`, preserving its recorded claims, evidence access, direct or inferred basis, coverage limits, and references for finding the underlying Turtle. The Turtle remains canonical; rendering does not judge semantic accuracy. |
 
 ---
 
