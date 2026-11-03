@@ -296,3 +296,118 @@ test("the checker script runs as a command", async () => {
   const output = execFileSync(process.execPath, [new URL("./check-source-graph.mjs", import.meta.url).pathname, "--help"], { encoding: "utf8" });
   assert.match(output, /Usage:/);
 });
+
+test("empty evidence path and line zero each produce a finding", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    const evidence = find(spec.evidence, ":evidence-e1");
+    setPair(evidence, "kit:path", S(""));
+    setPair(evidence, "kit:startLine", 0);
+    writeGraph(repo, spec);
+    repo.commit("invalid evidence");
+    const findings = checkRevision(treeFromRevision(repo.dir, "HEAD"));
+    assert.ok(findings.some((f) => f.subject === evidence.subject && f.rule === "evidence-path-missing"));
+    assert.ok(findings.some((f) => f.subject === evidence.subject && f.rule === "evidence-range"));
+  });
+});
+
+test("non-normalized evidence paths fail before coverage or blob lookup", async () => {
+  for (const badPath of [" ", "./src/Invoice.cs", "../src/Invoice.cs", "/src/Invoice.cs"]) {
+    await withScratchRepo(async (repo) => {
+      const spec = widgets(repo);
+      const evidence = find(spec.evidence, ":evidence-e1");
+      setPair(evidence, "kit:path", S(badPath));
+      writeGraph(repo, spec);
+      repo.commit("invalid path");
+      assert.ok(checkRevision(treeFromRevision(repo.dir, "HEAD")).some(
+        (f) => f.subject === evidence.subject && f.rule === "evidence-path-missing" &&
+          f.message.includes("invalid path")), badPath);
+    });
+  }
+});
+
+test("removed covered selector is visible with no source edit", async () => {
+  const findings = await pr((repo, spec) => {
+    spec.coverage = spec.coverage.filter((c) => c.subject !== ":coverage-c0");
+    const removed = new Set(spec.evidence.filter((e) =>
+      e.pairs.some((p) => p.predicate === "kit:path" && p.object === spec.paths.impl))
+      .map((e) => e.subject));
+    spec.evidence = spec.evidence.filter((e) => !removed.has(e.subject));
+    spec.assertions = spec.assertions.filter((a) =>
+      !a.pairs.some((p) => p.predicate === "kit:evidence" && removed.has(p.object)));
+  });
+  assert.ok(findings.some((f) => f.rule === "coverage-transition" && f.message.includes("src/**")),
+    JSON.stringify(findings));
+});
+
+test("narrowed selector needs the old selector as a reasoned gap", async () => {
+  const narrow = (repo, spec) => spec.coverage.push(block(":coverage-impl-only", "kit:GraphCoverage", [
+    ["kit:pathSelector", S(spec.paths.impl)], ["kit:priority", 11], ["kit:status", "kit:covered"]]));
+  const missing = await pr((repo, spec) => {
+    spec.coverage = spec.coverage.filter((c) => c.subject !== ":coverage-c0");
+    narrow(repo, spec);
+  });
+  assert.ok(missing.some((f) => f.rule === "coverage-transition" && f.message.includes("src/**")));
+  const explicit = await pr((repo, spec) => {
+    const old = find(spec.coverage, ":coverage-c0");
+    setPair(old, "kit:status", "kit:unknown");
+    setPair(old, "kit:reason", S("Only the invoice source remains covered"));
+    narrow(repo, spec);
+  });
+  assert.deepEqual(explicit, []);
+  const noReason = await pr((repo, spec) => {
+    setPair(find(spec.coverage, ":coverage-c0"), "kit:status", "kit:excluded");
+    narrow(repo, spec);
+  });
+  assert.ok(noReason.some((f) => f.rule === "coverage-malformed"));
+});
+
+test("adding unrelated future coverage does not create a transition", async () => {
+  assert.deepEqual(await pr((repo, spec) => spec.coverage.push(block(":coverage-future", "kit:GraphCoverage", [
+    ["kit:pathSelector", S("future/**")], ["kit:priority", 10], ["kit:status", "kit:covered"]]))), []);
+});
+
+async function excludedChangedSource(mutateRecord) {
+  return pr((repo, spec) => {
+    repo.write(spec.paths.impl, "changed but excluded\n");
+    const coverage = find(spec.coverage, ":coverage-c0");
+    setPair(coverage, "kit:status", "kit:excluded");
+    setPair(coverage, "kit:reason", S("Implementation scope removed after review"));
+    const removed = new Set(spec.evidence.filter((e) =>
+      e.pairs.some((p) => p.predicate === "kit:path" && p.object === spec.paths.impl))
+      .map((e) => e.subject));
+    spec.evidence = spec.evidence.filter((e) => !removed.has(e.subject));
+    spec.assertions = spec.assertions.filter((a) =>
+      !a.pairs.some((p) => p.predicate === "kit:evidence" && removed.has(p.object)));
+    const index = spec.records.findIndex((r) =>
+      r.pairs.some((p) => p.predicate === "kit:path" && p.object === spec.paths.impl));
+    assert.ok(index >= 0);
+    const record = refreshRecord(repo, spec.paths.impl);
+    spec.records[index] = record;
+    mutateRecord?.(record, spec);
+  });
+}
+
+test("a valid review record permits a changed file to leave coverage", async () => {
+  assert.deepEqual(await excludedChangedSource(), []);
+});
+
+test("a changed file leaving coverage rejects both blob and deletion", async () => {
+  const findings = await excludedChangedSource((record) => setPair(record, "kit:deleted", 1));
+  assert.ok(findings.some((f) => f.rule === "refresh-malformed" && f.message.includes("src/Invoice.cs")));
+});
+
+test("a changed file leaving coverage rejects an invalid review outcome", async () => {
+  const findings = await excludedChangedSource((record) => setPair(record, "kit:reviewOutcome", "kit:banana"));
+  assert.ok(findings.some((f) => f.rule === "refresh-malformed" && f.message.includes("src/Invoice.cs")));
+});
+
+test("a changed file leaving coverage requires its review record in the manifest", async () => {
+  const findings = await excludedChangedSource((record, spec) => { spec.omitFromManifest = [record.subject]; });
+  assert.ok(findings.some((f) => f.rule === "refresh-unreferenced" && f.message.includes("src/Invoice.cs")));
+});
+
+test("a changed file leaving coverage rejects the wrong review record IRI", async () => {
+  const findings = await excludedChangedSource((record) => { record.subject = ":not-a-refresh-id"; });
+  assert.ok(findings.some((f) => f.rule === "refresh-malformed" && f.message.includes("src/Invoice.cs")));
+});

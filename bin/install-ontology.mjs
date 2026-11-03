@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { normaliseRepoRelativePath } from "../templates/scripts/ontology-config.mjs";
+import { normaliseRepoRelativePath, validateConfig } from "../templates/scripts/ontology-config.mjs";
 
 // Installed with a `.example` suffix so an SDK compile glob or test-runner collection never picks
 // it up on its own — the template names an undefined example enum and has no test-framework
@@ -263,6 +263,7 @@ export function install(options) {
   const withSourceGraph = options.withSourceGraph || options.sourceGraphRoot !== undefined;
   const sourceGraphRoot = options.sourceGraphRoot === undefined ? "docs/source-knowledge-graph" : normaliseRepoRelativePath(options.sourceGraphRoot, "--source-graph-root");
   if (!sourceGraphRoot) throw new Error("--source-graph-root must be non-empty");
+  const configExists = existsSync(join(target, "ontology.config.json"));
 
   const agentFile = detectAgentFile(target);
   const agentPath = join(target, agentFile.path);
@@ -283,13 +284,18 @@ export function install(options) {
     GRAPH_ROOT: sourceGraphRoot,
   };
   values.NAMESPACE_URI = `https://ontology.example/${slugifyForNamespace(values.PROJECT_NAME)}#`;
+  if (withSourceGraph && configExists && !resetContent) {
+    let existingConfig;
+    try { existingConfig = JSON.parse(readFileSync(join(target, "ontology.config.json"), "utf8")); }
+    catch (error) { throw new Error(`ontology.config.json: ${error.message}`); }
+    values.NAMESPACE_URI = validateConfig(existingConfig, { ontologyExists: (path) => existsSync(join(target, path)) }).namespaceUri;
+  }
 
   const plan = buildPlan({ ...options, ontologyPath, withSourceGraph, sourceGraphRoot });
   const written = [];
   /** @type {{ dest: string, ownedBy: "kit" | "adopter" }[]} */
   const skipped = [];
   let enumTestExample = null;
-  const configExists = existsSync(join(target, "ontology.config.json"));
   const sectionText = withSourceGraph ? substituteJsonString(readFileSync(join(TEMPLATE_ROOT, "source-graph/config-section.json"), "utf8"), values).trim() : null;
   const configNotice = withSourceGraph && configExists && !resetContent ? `Add this section to ontology.config.json:\n"sourceGraph": ${sectionText}` : null;
 

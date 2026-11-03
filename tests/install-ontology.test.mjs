@@ -700,3 +700,54 @@ test("--reset-content replaces an existing config with the graph-enabled starter
     assert.equal(result.configNotice, null);
   });
 });
+
+test("graph opt-in uses the namespace of a preserved config", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Old" });
+    const configPath = join(repo.dir, "ontology.config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    config.namespaceUri = "https://customer.example/ontology#";
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    const before = readFileSync(configPath, "utf8");
+    const result = install({ target: repo.dir, projectName: "Different", withSourceGraph: true });
+    assert.equal(readFileSync(configPath, "utf8"), before);
+    assert.match(result.configNotice, /"sourceGraph":/);
+    for (const name of ["manifest.ttl", "nodes.ttl"]) {
+      assert.match(readFileSync(join(repo.dir, "docs/source-knowledge-graph", name), "utf8"),
+        /@prefix : <https:\/\/customer\.example\/ontology#> \./);
+    }
+    const manifest = join(repo.dir, "docs/source-knowledge-graph/manifest.ttl");
+    writeFileSync(manifest, "adopter graph\n");
+    install({ target: repo.dir, projectName: "Different", withSourceGraph: true, force: true });
+    assert.equal(readFileSync(configPath, "utf8"), before);
+    assert.equal(readFileSync(manifest, "utf8"), "adopter graph\n");
+  });
+});
+
+test("explicit graph reset replaces config and starters with one namespace", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Old" });
+    const configPath = join(repo.dir, "ontology.config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    config.namespaceUri = "https://customer.example/ontology#";
+    writeFileSync(configPath, JSON.stringify(config));
+    const result = install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true,
+      resetContent: true });
+    assert.equal(result.configNotice, null);
+    assert.equal(JSON.parse(readFileSync(configPath, "utf8")).namespaceUri,
+      "https://ontology.example/widgets#");
+    for (const name of ["manifest.ttl", "nodes.ttl"]) {
+      assert.match(readFileSync(join(repo.dir, "docs/source-knowledge-graph", name), "utf8"),
+        /@prefix : <https:\/\/ontology\.example\/widgets#> \./);
+    }
+  });
+});
+
+test("invalid preserved config fails before graph starter writes", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Old" });
+    writeFileSync(join(repo.dir, "ontology.config.json"), "{invalid json");
+    assert.throws(() => install({ target: repo.dir, withSourceGraph: true }), /ontology\.config\.json|JSON/);
+    assert.equal(existsSync(join(repo.dir, "docs/source-knowledge-graph/manifest.ttl")), false);
+  });
+});

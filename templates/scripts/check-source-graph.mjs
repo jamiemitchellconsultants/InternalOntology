@@ -77,12 +77,17 @@ export function checkTree({ tree, config }) {
       const path = value(r, "kit:path"), role = value(r, "kit:role"), blob = value(r, "kit:blobId"), start = Number(value(r, "kit:startLine")), end = Number(value(r, "kit:endLine"));
       if (!CORE.roles.includes(role)) add(r, "bad-value", `invalid role ${role}`);
       if (typeof blob !== "string" || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(blob)) add(r, "bad-value", `invalid blob ID for ${path}`);
-      if (path && !tree.has(path)) add(r, "evidence-path-missing", `${path} is missing`);
-      if (path && resolveCoverage(graph, path).status !== "kit:covered") add(r, "evidence-out-of-coverage", `${path} is outside coverage`);
-      if (path && !(config.sourceGraph.evidence[ROLE_KEYS[role]] || []).some((s) => matchSelector(s, path))) add(r, "evidence-role-mismatch", `${path} does not match ${role}`);
-      if (path && tree.has(path)) {
+      let validPath = false;
+      try { validPath = typeof path === "string" && !!path.trim() && normaliseRepoRelativePath(path, "evidence path") === path; }
+      catch { /* The path is invalid and is reported below. */ }
+      if (!validPath) add(r, "evidence-path-missing", `invalid path ${JSON.stringify(path)}`);
+      else if (!tree.has(path)) add(r, "evidence-path-missing", `${path} is missing`);
+      if (validPath && resolveCoverage(graph, path).status !== "kit:covered") add(r, "evidence-out-of-coverage", `${path} is outside coverage`);
+      if (validPath && !(config.sourceGraph.evidence[ROLE_KEYS[role]] || []).some((s) => matchSelector(s, path))) add(r, "evidence-role-mismatch", `${path} does not match ${role}`);
+      const badRange = !Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start;
+      if (badRange || (validPath && tree.has(path) && end > lineCount(tree.read(path)))) add(r, "evidence-range", `${path} has invalid line range ${start}-${end}`);
+      if (validPath && tree.has(path)) {
         if (blob !== tree.blobId(path)) add(r, "evidence-blob-mismatch", `${path} expected blob ${tree.blobId(path)}, cited ${blob}`);
-        if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > lineCount(tree.read(path))) add(r, "evidence-range", `${path} has invalid line range ${start}-${end}`);
       }
     }
   }
@@ -108,12 +113,12 @@ function recordMap(graph) {
   }
   return result;
 }
-function freshness(tree, config, graph) {
+function freshness(tree, config, graph, requiredPaths = new Set()) {
   const findings = [], records = recordMap(graph), manifests = graph.byType("kit:SourceKnowledgeGraph");
   const add = (r, rule, message) => findings.push({ file: r?.file || graph.root, subject: r?.iri || "", rule, message });
   for (const [path, list] of records) {
     const covered = resolveCoverage(graph, path).status === "kit:covered";
-    if (tree.has(path) && !covered) continue;
+    if (tree.has(path) && !covered && !requiredPaths.has(path)) continue;
     for (const r of list) {
       const blob = r.first("kit:blobId")?.object, deleted = r.first("kit:deleted")?.object, outcome = r.first("kit:reviewOutcome")?.object;
       if (list.length > 1 || r.iri !== refreshIdFor(path) || Boolean(blob) === (deleted !== undefined) || (deleted !== undefined && Number(deleted) !== 1) || !CORE.outcomes.includes(outcome) || (blob && !tree.has(path)) || (deleted !== undefined && tree.has(path))) add(r, "refresh-malformed", `invalid refresh record for ${path}`);
@@ -137,11 +142,30 @@ export function checkPullRequest({ baseTree, headTree }) {
   if (baseConfig.sourceGraph.enabled && (!headConfig.sourceGraph.enabled || headConfig.sourceGraph.root !== baseConfig.sourceGraph.root)) return [{ file: "ontology.config.json", subject: "", rule: "graph-disabled", message: "a pull request cannot disable or relocate the enabled graph" }];
   const config = loadCheckConfig(headTree), headGraph = loadGraph(headTree, config);
   const baseGraph = baseConfig.sourceGraph.enabled ? loadGraph(baseTree, baseConfig) : null;
-  const findings = [...checkTree({ tree: headTree, config }), ...freshness(headTree, config, headGraph)];
-  const headRecords = recordMap(headGraph), baseRecords = baseGraph ? recordMap(baseGraph) : new Map();
   const covered = (g, p) => g && resolveCoverage(g, p).status === "kit:covered";
-  for (const { path } of changedPaths(baseTree, headTree)) {
-    if (path.startsWith(headGraph.root + "/") || !(covered(baseGraph, path) || covered(headGraph, path))) continue;
+  const changed = changedPaths(baseTree, headTree);
+  const requiredPaths = new Set(changed.filter(({ path }) =>
+    !path.startsWith(headGraph.root + "/") && (covered(baseGraph, path) || covered(headGraph, path)))
+    .map(({ path }) => path));
+  const findings = [...checkTree({ tree: headTree, config }), ...freshness(headTree, config, headGraph, requiredPaths)];
+  if (baseGraph) {
+    const proposedSelectors = new Set(headGraph.byType("kit:GraphCoverage")
+      .map((r) => r.first("kit:pathSelector")?.object));
+    const seen = new Set();
+    for (const coverage of baseGraph.byType("kit:GraphCoverage")) {
+      if (coverage.first("kit:status")?.object !== "kit:covered") continue;
+      const selector = coverage.first("kit:pathSelector")?.object;
+      if (typeof selector !== "string" || seen.has(selector)) continue;
+      seen.add(selector);
+      if (!proposedSelectors.has(selector)) findings.push({
+        file: `${headGraph.root}/manifest.ttl`, subject: coverage.iri, rule: "coverage-transition",
+        message: `base covered selector ${JSON.stringify(selector)} was removed; retain it as covered or as a reasoned unknown/excluded scope`,
+      });
+    }
+  }
+  const headRecords = recordMap(headGraph), baseRecords = baseGraph ? recordMap(baseGraph) : new Map();
+  for (const { path } of changed) {
+    if (!requiredPaths.has(path)) continue;
     const record = headRecords.get(path)?.[0], old = baseRecords.get(path)?.[0], expected = headTree.has(path) ? headTree.blobId(path) : "deleted 1";
     if (!record) { if (!findings.some((f) => f.rule === "refresh-missing" && f.message.includes(path))) findings.push({ file: headGraph.root, subject: "", rule: "refresh-missing", message: `${path} requires ${expected}` }); continue; }
     const nowBlob = record.first("kit:blobId")?.object, nowDeleted = record.first("kit:deleted")?.object;
@@ -150,7 +174,7 @@ export function checkPullRequest({ baseTree, headTree }) {
       if (!findings.some((f) => f.rule === "refresh-stale" && f.message.includes(path))) findings.push({ file: record.file, subject: record.iri, rule: "refresh-stale", message: `${path} requires ${expected} and a changed review record` });
     }
   }
-  return findings;
+  return findings.sort((a, b) => a.file.localeCompare(b.file) || a.subject.localeCompare(b.subject) || a.rule.localeCompare(b.rule) || a.message.localeCompare(b.message));
 }
 export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stderr = process.stderr } = {}) {
   try {

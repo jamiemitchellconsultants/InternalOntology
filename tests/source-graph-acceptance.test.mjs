@@ -148,3 +148,23 @@ test("the kit documentation describes source graph installation and safeguards",
   assert.match(ontology, /every covered existing file has a record whose blob equals its current blob/);
   assert.match(ontology, /cannot disable or relocate an enabled source graph check/);
 });
+
+test("a custom-namespace existing config produces a runnable starter graph", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Original" });
+    const configPath = join(repo.dir, "ontology.config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    config.namespaceUri = "https://customer.example/ontology#";
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    const notice = install({ target: repo.dir, projectName: "Other", withSourceGraph: true }).configNotice;
+    const section = JSON.parse(`{${notice.slice(notice.indexOf('"sourceGraph":'))}}`).sourceGraph;
+    config.sourceGraph = section;
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    const build = run(repo.dir, ["scripts/build-ontology.mjs"]);
+    assert.equal(build.code, 0, build.err);
+    repo.git("add", "-A"); repo.git("commit", "-q", "-m", "enable graph");
+    const check = run(repo.dir, ["scripts/check-source-graph.mjs", "--rev", "HEAD"]);
+    assert.equal(check.code, 0, check.err);
+    assert.match(check.out, /source graph ok: revision [0-9a-f]{40}/);
+  });
+});
