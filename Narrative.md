@@ -32,6 +32,7 @@ by rewriting the original.
 | [16](#entry-docs-feature-plan-source-knowledge-graph-implementation) | 2026-11-02 | docs(feature): plan source knowledge graph implementation | product | Fill the gaps conservatively and record them in the task plan's decisions table. An evidence role with no configured selector accepts no evidence, so Terraform-only deployment is plain configuration. |
 | [17](#entry-clarify-git-command-delimiters-in-source-graph-plan) | 2026-11-02 | Clarify Git command delimiters in source graph plan | product | Use argument arrays for every Git invocation and NUL-delimited output for commands that list paths. Keep the detailed plan's specified arguments for object and tree commands. |
 | [18](#entry-clarify-source-graph-configuration-reset-behaviour) | 2026-11-02 | Clarify source graph configuration reset behaviour | product | Preserve existing configuration for normal installs and forced upgrades. An explicit content reset restores the graph-enabled starter configuration and discards the prior settings, consistent with the existing reset contract. |
+| [19](#entry-plan-symlink-safe-source-graph-command-execution) | 2026-11-03 | Plan symlink-safe source graph command execution | product | Task 10 will repair both command entry-point guards and test execution through linked script paths. Its acceptance tests will assert command output and run the installed test files explicitly. |
 
 ---
 
@@ -454,3 +455,23 @@ Preserve existing configuration for normal installs and forced upgrades. An expl
 ## Consequences
 
 The detailed plan includes a test for the combined options and the absence of a config notice after reset. Existing settings remain protected during normal installation and forced upgrades; an explicit reset remains destructive.
+
+---
+
+<a id="entry-plan-symlink-safe-source-graph-command-execution"></a>
+
+## Entry 19 — 2026-11-03 — Plan symlink-safe source graph command execution
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The bare-Git acceptance test found that the installed commands can silently exit without running when their script paths include a symbolic link. The supplied test also allowed the nested shipped-test invocation to run no tests.
+
+## Decision
+
+Task 10 will repair both command entry-point guards and test execution through linked script paths. Its acceptance tests will assert command output and run the installed test files explicitly. Keep the existing task commits intact and include the repairs in the single Task 10 commit.
+
+## Consequences
+
+The build retains its ordered commit history and verifies that both commands actually run from a bare checkout. Script-path resolution does not change where graph data or configuration is read. GitHub branch-protection verification remains a separate acceptance check.
