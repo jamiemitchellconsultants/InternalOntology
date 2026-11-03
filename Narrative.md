@@ -34,6 +34,7 @@ by rewriting the original.
 | [18](#entry-clarify-source-graph-configuration-reset-behaviour) | 2026-11-02 | Clarify source graph configuration reset behaviour | product | Preserve existing configuration for normal installs and forced upgrades. An explicit content reset restores the graph-enabled starter configuration and discards the prior settings, consistent with the existing reset contract. |
 | [19](#entry-plan-symlink-safe-source-graph-command-execution) | 2026-11-03 | Plan symlink-safe source graph command execution | product | Task 10 will repair both command entry-point guards and test execution through linked script paths. Its acceptance tests will assert command output and run the installed test files explicitly. |
 | [20](#entry-plan-final-source-graph-review-repairs) | 2026-11-03 | Plan final source graph review repairs | product | Compare each base covered selector by its literal pattern with proposed coverage declarations. |
+| [21](#entry-build-the-source-knowledge-graph-opt-in) | 2026-11-03 | Build the source knowledge graph opt-in | product | Validate evidence path syntax and line bounds independently. Compare base covered selectors by literal pattern with proposed declarations; retain a removed scope as reasoned unknown or excluded coverage. |
 
 ---
 
@@ -496,3 +497,23 @@ Compare each base covered selector by its literal pattern with proposed coverage
 ## Consequences
 
 Coverage removal is visible even without changed source files. Literal pattern comparison avoids guessing glob equivalence from tracked files, so a selector rewrite must retain an explicit old-scope marker. The existing base/head review-record rule still applies to changed files. The installed checker, installer and acceptance tests receive focused regressions. The build handoff remains blocked until the plan amendment is reviewed and merged, the pushback is cleared, and Task 11 passes. Branch-protection integration remains for user acceptance.
+
+---
+
+<a id="entry-build-the-source-knowledge-graph-opt-in"></a>
+
+## Entry 21 — 2026-11-03 — Build the source knowledge graph opt-in
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted architecture requires changed files in either base or proposed covered scope to have valid, reviewable records. Final review found empty evidence paths and line zero could pass, starter graph files could use the wrong namespace beside an existing config, and a covered selector could disappear without a reasoned gap. The independent code review also reproduced malformed or unreferenced records passing when a changed file left coverage, because the head-only exemption skipped record validation.
+
+## Decision
+
+Validate evidence path syntax and line bounds independently. Compare base covered selectors by literal pattern with proposed declarations; retain a removed scope as reasoned unknown or excluded coverage. Use the preserved config's namespace for newly installed starter graph files, while explicit reset replaces config and starters together. Apply full review-record validation to changed paths covered by either the base or proposed graph, including paths that leave coverage in the proposed graph; continue ignoring old records for unchanged paths outside current coverage. Keep all repairs in the one Task 11 commit after the ten pushed task commits.
+
+## Consequences
+
+Graph-only scope removal is visible, and a transition PR cannot satisfy its remaining review obligation with a malformed record. Literal selector comparison avoids inferring glob equivalence from a finite file list, so a selector rewrite retains an explicit old-scope marker. Normal installation and force preserve adopter-owned config and graph data; reset discards them together. The checker still validates structure and review records, while maintainers judge semantic truth. GitHub branch-protection integration remains unverified for the user acceptance phase.
