@@ -37,7 +37,8 @@ const KNOWN_SECTION_KEYS = new Set(["required", "optional"]);
  * @typedef {{ ontologyPath: string, namespaceUri: string, sections: { required: string[], optional: string[] },
  *             allowlist: AllowlistEntry[], bannedAliases: BannedAlias[], ignorePaths: string[],
  *             semanticReview: { enabled: boolean, model: string, baseUrl: string },
- *             sourceGraph: { enabled: boolean, root: string, evidence: Record<string, string[]> } }} OntologyConfig
+ *             sourceGraph: { enabled: boolean, root: string, evidence: Record<string, string[]>,
+ *                            markdownPath: string, repositoryUrl: string } }} OntologyConfig
  */
 
 /**
@@ -123,12 +124,12 @@ function validateSemanticReview(value) {
 
 function validateSourceGraph(value, ontologyPath) {
   const defaultRoot = "docs/source-knowledge-graph";
-  if (value === undefined) return { enabled: false, root: defaultRoot, evidence: {} };
+  if (value === undefined) value = { enabled: false };
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${CONFIG_FILENAME}: sourceGraph must be an object`);
   }
   for (const key of Object.keys(value)) {
-    if (!["enabled", "root", "evidence"].includes(key)) {
+    if (!["enabled", "root", "evidence", "markdownPath", "repositoryUrl"].includes(key)) {
       throw new Error(`${CONFIG_FILENAME}: unknown key "sourceGraph.${key}"`);
     }
   }
@@ -161,7 +162,35 @@ function validateSourceGraph(value, ontologyPath) {
   if (value.enabled && !ontologyPath.endsWith(".md")) {
     throw new Error(`${CONFIG_FILENAME}: sourceGraph requires ontologyPath ending in .md`);
   }
-  return { enabled: value.enabled, root: normalizedRoot, evidence };
+  const outputLabel = `${CONFIG_FILENAME}: sourceGraph.markdownPath`;
+  const output = value.markdownPath === undefined ? `${normalizedRoot}/README.md` : value.markdownPath;
+  if (typeof output !== "string" || !output.trim()) throw new Error(`${outputLabel} must be a non-empty path`);
+  const markdownPath = normaliseRepoRelativePath(output, outputLabel);
+  if (!markdownPath.startsWith(normalizedRoot + "/") || !markdownPath.endsWith(".md") ||
+      markdownPath.split("/").some((part) => !part || part === ".") ||
+      [ontologyPath, ontologyPath.replace(/\.md$/, ".ttl")].includes(markdownPath)) {
+    throw new Error(`${outputLabel} must be a distinct .md file strictly inside the graph root`);
+  }
+  const repositoryUrl = validateRepositoryUrl(value.repositoryUrl);
+  return { enabled: value.enabled, root: normalizedRoot, evidence, markdownPath, repositoryUrl };
+}
+
+function validateRepositoryUrl(value) {
+  const label = `${CONFIG_FILENAME}: sourceGraph.repositoryUrl`;
+  if (value === undefined) return "";
+  if (typeof value !== "string") throw new Error(`${label} must be an HTTPS repository browser URL`);
+  const raw = value.trim();
+  if (!raw) return "";
+  let parsed;
+  try { parsed = new URL(raw); } catch { throw new Error(`${label} must be an HTTPS repository browser URL`); }
+  const rawPath = /^https:\/\/[^/]+(\/[^?#]*)?$/i.exec(raw)?.[1]?.replace(/\/$/, "");
+  let segments;
+  try { segments = rawPath?.slice(1).split("/").map(decodeURIComponent); } catch { /* rejected below */ }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || raw.includes("?") || raw.includes("#") ||
+      segments?.length !== 2 || segments.some((part) => !/^[A-Za-z0-9_.-]+$/.test(part) || part === "." || part === "..")) {
+    throw new Error(`${label} must be HTTPS with an owner/repository path and no credentials, query or fragment`);
+  }
+  return `${parsed.origin}/${segments.join("/")}`;
 }
 
 /**
