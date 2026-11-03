@@ -36,6 +36,7 @@ by rewriting the original.
 | [20](#entry-plan-final-source-graph-review-repairs) | 2026-11-03 | Plan final source graph review repairs | product | Compare each base covered selector by its literal pattern with proposed coverage declarations. |
 | [21](#entry-user-source-knowledge-graph-docs-and-acceptance) | 2026-11-03 | [User] Source knowledge graph docs and acceptance | product | Codex acted as user tester and test approver under the owner's instruction. All 15 behaviour walkthroughs and their executable cases passed in the local build and deployed trials. |
 | [22](#entry-po-vision-human-readable-source-knowledge-graph) | 2026-11-03 | [PO] Vision: human-readable source knowledge graph | product | Provide an ordinary generated Markdown document of the current whole graph, produced from canonical Turtle through a Git workflow. |
+| [23](#entry-analyst-behaviours-human-readable-source-knowledge-graph) | 2026-11-03 | [Analyst] Behaviours: human-readable source knowledge graph | product | Define fourteen behaviours for a faithful current-state Markdown document with readable recorded names, accessible evidence at the input snapshot, clear direct or inferred basis, unambiguous references back to Turtle, and explicit… |
 
 ---
 
@@ -538,3 +539,23 @@ Provide an ordinary generated Markdown document of the current whole graph, prod
 ## Consequences
 
 Maintainers will be able to inspect the graph's current meaning without decoding Turtle. Detailed change investigation remains in Turtle, using terms found in Markdown. The analyst must turn the outcomes into observable behaviors; layout, output path, command, and workflow publishing mechanics remain for later phases. A passing structural check continues to make no claim of semantic accuracy.
+
+---
+
+<a id="entry-analyst-behaviours-human-readable-source-knowledge-graph"></a>
+
+## Entry 23 — 2026-11-03 — [Analyst] Behaviours: human-readable source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted vision addresses the readability problem exposed by JEPA-Speech's first live use: maintainers need to inspect current graph claims to assess accuracy without interpreting Turtle structure. Before architecture, the vision's outcomes need observable scenarios and explicit decisions about evidence presentation, graph limits, traceability, and generation failure.
+
+## Decision
+
+Define fourteen behaviours for a faithful current-state Markdown document with readable recorded names, accessible evidence at the input snapshot, clear direct or inferred basis, unambiguous references back to Turtle, and explicit coverage limits. Repeated generation from identical inputs is byte-identical. Invalid input fails visibly and cannot publish an apparently successful partial replacement; valid empty or partially covered graphs remain renderable. Use one canonical rendering use case, `RenderSourceKnowledgeGraph`.
+
+## Consequences
+
+The architect has a testable behavioural contract. Output location, document layout, snapshot representation, generation command and workflow publishing mechanics remain architecture decisions. The design must preserve stable evidence references without introducing a self-referential generated commit. The JEPA-Speech pilot supplies the initial readability trial, supplemented by inference, ambiguity, coverage, failure and configuration cases. Assertion-change reports, diagrams, extraction and semantic correctness judgement remain out of scope.
