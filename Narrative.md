@@ -35,6 +35,7 @@ by rewriting the original.
 | [19](#entry-plan-symlink-safe-source-graph-command-execution) | 2026-11-03 | Plan symlink-safe source graph command execution | product | Task 10 will repair both command entry-point guards and test execution through linked script paths. Its acceptance tests will assert command output and run the installed test files explicitly. |
 | [20](#entry-plan-final-source-graph-review-repairs) | 2026-11-03 | Plan final source graph review repairs | product | Compare each base covered selector by its literal pattern with proposed coverage declarations. |
 | [21](#entry-user-source-knowledge-graph-docs-and-acceptance) | 2026-11-03 | [User] Source knowledge graph docs and acceptance | product | Codex acted as user tester and test approver under the owner's instruction. All 15 behaviour walkthroughs and their executable cases passed in the local build and deployed trials. |
+| [22](#entry-po-vision-human-readable-source-knowledge-graph) | 2026-11-03 | [PO] Vision: human-readable source knowledge graph | product | Provide an ordinary generated Markdown document of the current whole graph, produced from canonical Turtle through a Git workflow. |
 
 ---
 
@@ -517,3 +518,23 @@ Codex acted as user tester and test approver under the owner's instruction. All 
 ## Consequences
 
 The source graph has an auditable user-phase acceptance record and operating guidance. Its structural check can be required on adopter PRs, while maintainers still judge the meaning of graph assertions. This PR completes the User phase for review; the parent feature closes after this PR merges.
+
+---
+
+<a id="entry-po-vision-human-readable-source-knowledge-graph"></a>
+
+## Entry 22 — 2026-11-03 — [PO] Vision: human-readable source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+JEPA-Speech was the first live use of the source knowledge graph introduced by feature #35. Its maintainer found meaningful content embedded in structural Turtle elements and needed a readable document to judge accuracy, much as generated ontology Markdown exposes the ontology's content.
+
+## Decision
+
+Provide an ordinary generated Markdown document of the current whole graph, produced from canonical Turtle through a Git workflow. Preserve readable claims, supporting evidence, direct or inferred basis, coverage limits, and terms or references for finding the corresponding Turtle assertions. Exclude added/changed/removed reports, diagrams, and an interactive browser from this feature.
+
+## Consequences
+
+Maintainers will be able to inspect the graph's current meaning without decoding Turtle. Detailed change investigation remains in Turtle, using terms found in Markdown. The analyst must turn the outcomes into observable behaviors; layout, output path, command, and workflow publishing mechanics remain for later phases. A passing structural check continues to make no claim of semantic accuracy.
