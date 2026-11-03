@@ -8,6 +8,9 @@ starting. Work on `feature/source-knowledge-graph/dev-build`. Each numbered task
 test-first commit and push. Run its focused test, `node scripts/check-ontology-terms.mjs` and
 `npm test` before every commit; stage only that task's intended files and review the cached diff.
 The installed files must remain byte-identical across adopting repositories.
+Tasks 1–10 are already pushed through `c1a3983`. This amendment defines Task 11 as one additive
+repair commit after that head; do not amend, squash or reorder those commits. Begin Task 11 only
+after the amendment pull request has been reviewed and merged and pushback has been cleared.
 
 The code fragments below are contracts and complete minimal tests, not implementation bodies. Keep
 test names and assertions; where a fixture exposes a further boundary named in the task plan, add a
@@ -40,7 +43,7 @@ on standard error: `<file>: <subject>: <rule>: <message>` (the subject part is o
 `missing-predicate`, `bad-value`, `dangling-reference`, `unknown-kind`, `unknown-relationship`,
 `missing-basis`, `missing-evidence`, `evidence-path-missing`, `evidence-out-of-coverage`,
 `evidence-role-mismatch`, `evidence-blob-mismatch`, `evidence-range`, `denotes-missing`,
-`coverage-malformed`, `coverage-conflict`, `coverage-unreferenced`, `root-not-excluded`,
+`coverage-malformed`, `coverage-conflict`, `coverage-unreferenced`, `coverage-transition`, `root-not-excluded`,
 `refresh-missing`, `refresh-stale`, `refresh-malformed`, `refresh-unreferenced`, `graph-disabled`.
 
 **Resource classes, predicates and value kinds** (the single table the checker validates; `iri*`
@@ -610,12 +613,16 @@ Rules, each a small function over `loadGraph`'s result so one failure never hide
 6. A node kind must be in `CORE.kinds` or a declared local kind; an assertion relationship likewise
    (`unknown-kind`, `unknown-relationship`). A local definition must use the `:` prefix and have
    a non-empty `rdfs:comment`; a missing definition is reported under the same rules.
-7. Evidence: `kit:role` must be in `CORE.roles` (`bad-value`); the path must exist in the tree
-   (`evidence-path-missing`); `resolveCoverage` must give `kit:covered` (`evidence-out-of-coverage`);
+7. Evidence: `kit:role` must be in `CORE.roles` (`bad-value`); `kit:path` must be non-empty,
+   repository-relative and already normalized (`evidence-path-missing`, naming the evidence
+   resource); the path must exist in the tree (`evidence-path-missing`); `resolveCoverage` must give
+   `kit:covered` (`evidence-out-of-coverage`);
    the path must match a selector for the role in `config.sourceGraph.evidence` — a role with no
    entry matches nothing (`evidence-role-mismatch`); `kit:blobId` must equal the tree's blob for
    that path (`evidence-blob-mismatch`, message includes the expected ID); and
-   `1 ≤ startLine ≤ endLine ≤ lineCount(blob)` (`evidence-range`).
+   `1 ≤ startLine ≤ endLine ≤ lineCount(blob)` (`evidence-range`). Validate the lower bound and
+   ordering even when the path is absent, so an empty path with line zero reports both defects.
+   Task 11 supplies these regressions and the repair; Task 5's commit is already pushed.
 8. A node of kind `kit:concept` needs `kit:denotes` whose IRI is a subject in the ontology Turtle
    (`denotes-missing`).
 9. Coverage: selector is a non-empty repository-relative string without `..`, priority is an
@@ -905,6 +912,19 @@ Refresh-record rules (all against the tree being checked, `head` in a PR):
   if it is absent in head, a `kit:deleted 1` record. Each path newly covered in head and not
   covered in base needs a current record even when unchanged. Base coverage comes from
   `loadGraph(baseTree, baseConfig)`; if the base has no graph, base coverage is empty.
+- Coverage transition (PR mode only). For every base `kit:GraphCoverage` resource with
+  `kit:status kit:covered`, take its literal `kit:pathSelector` string. The proposed graph must
+  declare that same selector, regardless of coverage resource IRI, either as covered or as
+  unknown/excluded with a non-empty reason. If no proposed declaration has that selector, emit
+  `coverage-transition` on the manifest with the removed selector in the message. Treat a changed
+  selector string as removal plus addition; a narrower covered selector requires a retained
+  reasoned unknown/excluded declaration for the old selector, with a higher-priority covered
+  declaration for the narrowed part if desired. Compare declarations without enumerating tracked
+  paths, so a removal with no changed source files cannot escape. Existing `coverage-malformed`
+  checks reject gap declarations with blank reasons. Do not attempt to prove glob equivalence;
+  preserving the literal old selector is the stable reviewable transition. The union rule above
+  still requires records for changed paths covered in either revision. This implements ADR 0006's
+  explicit removed-scope rule. Task 11 supplies the regressions and repair; Task 6 is already pushed.
 - Bypass guard (PR mode only). If the base config has `sourceGraph.enabled` and the head config
   does not, or the root differs, return a single `graph-disabled` finding naming
   `ontology.config.json` (`loadCheckConfig` would otherwise exit 2 for a disabled head, so the PR
@@ -1356,7 +1376,14 @@ Test failure first, write the files, rerun, run global checks, commit
   preserves an existing config and `install()` returns `configNotice` holding the section text and
   a sentence naming the file. With explicit `--reset-content`, replace an existing config with the
   starter config including the `sourceGraph` section, discard its previous settings, and return no
-  config notice. This retains the existing destructive reset behaviour for adopter-owned content.
+  config notice. When an existing config is preserved, resolve its `namespaceUri` through
+  `validateConfig` before writing new starter manifest and nodes, and substitute that URI in those
+  new files (including the validator's default when the field is absent).
+  The graph `configNotice` still describes only the opt-in section. If the preserved config is
+  invalid, fail before writing rather than install graph files with a guessed namespace. With
+  explicit reset, use the generated namespace in both replacement config and graph starters.
+  Do not rewrite pre-existing adopter graph files during normal or
+  `--force` installation. Task 11 supplies this regression and repair; Task 9 is already pushed.
 - The workflow, with `{{DEFAULT_BRANCH}}` substituted:
 
 ```yaml
@@ -1718,6 +1745,242 @@ for the user's acceptance rather than claiming it passed. Commit
 `feat: accept the source graph across languages` and push. In the commit body, explain that the
 bare-Git test had checked only the checker's exit code and that the nested shipped-test invocation
 could silently run no tests; the amended assertions verify actual command and test output.
+
+## Task 11 — final-review repair after the ten pushed tasks
+
+**Start point and files.** Resume `feature/source-knowledge-graph/dev-build` at `c1a3983` after
+this amendment is merged and pushback is cleared. Modify only
+`templates/scripts/check-source-graph.mjs`, `templates/scripts/check-source-graph.test.mjs`,
+`bin/install-ontology.mjs`, `tests/install-ontology.test.mjs`, and
+`tests/source-graph-acceptance.test.mjs`. The first two are the Task 5/6 checker repair; the next
+two are the Task 9 installer repair; the last verifies the installed loop. The current ontology
+already defines the relevant concepts and invariants, so this repair introduces no new ontology
+term. Keep the ten existing task commits byte-for-byte and append one repair commit.
+
+**Interface contracts.** Keep `checkTree`, `checkPullRequest`, `install` and `buildPlan` signatures,
+the existing exit codes, and the installed script layout. `checkTree` reports
+`evidence-path-missing` for a blank or non-normalized `kit:path` (as well as an absent blob) and
+`evidence-range` whenever the line integers are not positive and ordered, even if the source path
+does not exist. Only compare with the blob's line count when the path exists. `checkPullRequest`
+compares the base graph's covered selectors with all proposed selector strings and reports
+`coverage-transition` for each base covered selector that disappeared. The finding names the
+old selector and its base declaration. A proposed declaration with the same selector and status
+unknown/excluded is accepted only with its non-empty reason; the existing single-tree shape check
+enforces that requirement. A narrower covered selector may take higher priority within that
+reasoned gap. This declaration-level rule is separate from, and does not weaken, the existing
+union-of-covered-scopes record rule for changed files. A base graph absent because the feature is
+being installed has no transitions to compare. `install` resolves `NAMESPACE_URI` from a preserved
+existing config through `validateConfig`, using the target's own ontology path for validation;
+fresh installation and explicit reset keep using the generated starter namespace. Resolve this
+before any writes. Existing adopter graph files remain untouched without reset.
+
+**Step 1 — write the checker regressions, then see them fail.** Append to
+`templates/scripts/check-source-graph.test.mjs`, reusing `pr`, `widgets`, `writeGraph`,
+`withScratchRepo`, `find`, `setPair`, `block`, `S`, `checkRevision` and `treeFromRevision` already
+in that file. The tests must include these assertions:
+
+```js
+test("empty evidence path and line zero each produce a finding", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    const evidence = find(spec.evidence, ":evidence-e1");
+    setPair(evidence, "kit:path", S(""));
+    setPair(evidence, "kit:startLine", 0);
+    writeGraph(repo, spec);
+    repo.commit("invalid evidence");
+    const findings = checkRevision(treeFromRevision(repo.dir, "HEAD"));
+    assert.ok(findings.some((f) => f.subject === evidence.subject && f.rule === "evidence-path-missing"));
+    assert.ok(findings.some((f) => f.subject === evidence.subject && f.rule === "evidence-range"));
+  });
+});
+
+test("non-normalized evidence paths fail before coverage or blob lookup", async () => {
+  for (const badPath of [" ", "./src/Invoice.cs", "../src/Invoice.cs", "/src/Invoice.cs"]) {
+    await withScratchRepo(async (repo) => {
+      const spec = widgets(repo);
+      const evidence = find(spec.evidence, ":evidence-e1");
+      setPair(evidence, "kit:path", S(badPath));
+      writeGraph(repo, spec);
+      repo.commit("invalid path");
+      assert.ok(checkRevision(treeFromRevision(repo.dir, "HEAD")).some(
+        (f) => f.subject === evidence.subject && f.rule === "evidence-path-missing"), badPath);
+    });
+  }
+});
+
+test("removed covered selector is visible with no source edit", async () => {
+  const findings = await pr((repo, spec) => {
+    spec.coverage = spec.coverage.filter((c) => c.subject !== ":coverage-c0");
+    const removed = new Set(spec.evidence.filter((e) =>
+      e.pairs.some((p) => p.predicate === "kit:path" && p.object === spec.paths.impl))
+      .map((e) => e.subject));
+    spec.evidence = spec.evidence.filter((e) => !removed.has(e.subject));
+    spec.assertions = spec.assertions.filter((a) =>
+      !a.pairs.some((p) => p.predicate === "kit:evidence" && removed.has(p.object)));
+  });
+  assert.ok(findings.some((f) => f.rule === "coverage-transition" && f.message.includes("src/**")),
+    JSON.stringify(findings));
+});
+
+test("narrowed selector needs the old selector as a reasoned gap", async () => {
+  const narrow = (repo, spec) => spec.coverage.push(block(":coverage-impl-only", "kit:GraphCoverage", [
+    ["kit:pathSelector", S(spec.paths.impl)], ["kit:priority", 11], ["kit:status", "kit:covered"]]));
+  const missing = await pr((repo, spec) => {
+    spec.coverage = spec.coverage.filter((c) => c.subject !== ":coverage-c0");
+    narrow(repo, spec);
+  });
+  assert.ok(missing.some((f) => f.rule === "coverage-transition" && f.message.includes("src/**")));
+  const explicit = await pr((repo, spec) => {
+    const old = find(spec.coverage, ":coverage-c0");
+    setPair(old, "kit:status", "kit:unknown");
+    setPair(old, "kit:reason", S("Only the invoice source remains covered"));
+    narrow(repo, spec);
+  });
+  assert.deepEqual(explicit, []);
+  const noReason = await pr((repo, spec) => {
+    setPair(find(spec.coverage, ":coverage-c0"), "kit:status", "kit:excluded");
+    narrow(repo, spec);
+  });
+  assert.ok(noReason.some((f) => f.rule === "coverage-malformed"));
+});
+
+test("adding unrelated future coverage does not create a transition", async () => {
+  assert.deepEqual(await pr((repo, spec) => spec.coverage.push(block(":coverage-future", "kit:GraphCoverage", [
+    ["kit:pathSelector", S("future/**")], ["kit:priority", 10], ["kit:status", "kit:covered"]]))), []);
+});
+```
+
+If a fixture mutation inadvertently creates an unrelated finding, adjust the fixture so the
+assertion isolates the intended rule; keep the source files unchanged in the removed-selector
+test. Run `node --test templates/scripts/check-source-graph.test.mjs` and confirm the new cases
+fail against the current checker. The existing changed-file narrowing and deletion tests remain
+in place; they exercise the independent record rule.
+
+**Step 2 — write the installer and installed-loop regressions, then see them fail.** Append to
+`tests/install-ontology.test.mjs` using its `withTempRepo`, `install`, `readFileSync` and
+`writeFileSync`. The custom
+namespace test starts with a core install, then edits its config to
+`https://customer.example/ontology#` and opts into the graph with a deliberately different
+`projectName`. Assert that the config is byte-for-byte preserved, both newly written Turtle
+starters start with the custom `@prefix :`, and the notice supplies the `sourceGraph` section.
+Apply that section to the preserved config, run the installed `build-ontology.mjs`, commit the
+files, then run the installed checker with `--rev HEAD`; assert its stdout contains
+`source graph ok: revision`, not just exit code 0. Also assert `--force` preserves a hand-edited
+adopter manifest and the config. A separate reset case changes the existing namespace, calls
+`install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true,
+resetContent: true })`, and asserts that both replacement graph starters and the replacement
+config use `https://ontology.example/widgets#`, with no config notice. Add a test for malformed
+preserved config to verify that opt-in fails before writing any graph starter. In
+`tests/source-graph-acceptance.test.mjs`, add an installed-checker regression that applies an
+existing config's custom namespace, enables the supplied graph section, commits and checks the
+starter graph; assert the command's output. Run
+`node --test tests/install-ontology.test.mjs tests/source-graph-acceptance.test.mjs`; confirm the
+custom-namespace case fails on the current installer with `namespace-mismatch`.
+
+The concrete assertions for `tests/install-ontology.test.mjs` are:
+
+```js
+test("graph opt-in uses the namespace of a preserved config", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Old" });
+    const configPath = join(repo.dir, "ontology.config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    config.namespaceUri = "https://customer.example/ontology#";
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    const before = readFileSync(configPath, "utf8");
+    const result = install({ target: repo.dir, projectName: "Different", withSourceGraph: true });
+    assert.equal(readFileSync(configPath, "utf8"), before);
+    assert.match(result.configNotice, /"sourceGraph":/);
+    for (const name of ["manifest.ttl", "nodes.ttl"]) {
+      assert.match(readFileSync(join(repo.dir, "docs/source-knowledge-graph", name), "utf8"),
+        /@prefix : <https:\/\/customer\.example\/ontology#> \./);
+    }
+    const manifest = join(repo.dir, "docs/source-knowledge-graph/manifest.ttl");
+    writeFileSync(manifest, "adopter graph\n");
+    install({ target: repo.dir, projectName: "Different", withSourceGraph: true, force: true });
+    assert.equal(readFileSync(configPath, "utf8"), before);
+    assert.equal(readFileSync(manifest, "utf8"), "adopter graph\n");
+  });
+});
+
+test("explicit graph reset replaces config and starters with one namespace", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Old" });
+    const configPath = join(repo.dir, "ontology.config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    config.namespaceUri = "https://customer.example/ontology#";
+    writeFileSync(configPath, JSON.stringify(config));
+    const result = install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true,
+      resetContent: true });
+    assert.equal(result.configNotice, null);
+    assert.equal(JSON.parse(readFileSync(configPath, "utf8")).namespaceUri,
+      "https://ontology.example/widgets#");
+    for (const name of ["manifest.ttl", "nodes.ttl"]) {
+      assert.match(readFileSync(join(repo.dir, "docs/source-knowledge-graph", name), "utf8"),
+        /@prefix : <https:\/\/ontology\.example\/widgets#> \./);
+    }
+  });
+});
+
+test("invalid preserved config fails before graph starter writes", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Old" });
+    writeFileSync(join(repo.dir, "ontology.config.json"), "{invalid json");
+    assert.throws(() => install({ target: repo.dir, withSourceGraph: true }), /ontology\.config\.json|JSON/);
+    assert.equal(existsSync(join(repo.dir, "docs/source-knowledge-graph/manifest.ttl")), false);
+  });
+});
+```
+
+Add `existsSync` to that test file's `node:fs` import. The installed acceptance case uses the
+existing `run` helper and imports already in `tests/source-graph-acceptance.test.mjs`:
+
+```js
+test("a custom-namespace existing config produces a runnable starter graph", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Original" });
+    const configPath = join(repo.dir, "ontology.config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    config.namespaceUri = "https://customer.example/ontology#";
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    const notice = install({ target: repo.dir, projectName: "Other", withSourceGraph: true }).configNotice;
+    const section = JSON.parse(`{${notice.slice(notice.indexOf('"sourceGraph":'))}}`).sourceGraph;
+    config.sourceGraph = section;
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    const build = run(repo.dir, ["scripts/build-ontology.mjs"]);
+    assert.equal(build.code, 0, build.err);
+    repo.git("add", "-A"); repo.git("commit", "-q", "-m", "enable graph");
+    const check = run(repo.dir, ["scripts/check-source-graph.mjs", "--rev", "HEAD"]);
+    assert.equal(check.code, 0, check.err);
+    assert.match(check.out, /source graph ok: revision [0-9a-f]{40}/);
+  });
+});
+```
+
+**Step 3 — implement the smallest repairs.** In `checkTree`, validate path syntax before guarded
+blob, coverage and role checks. Validate integer lower bounds and ordering outside the `tree.has`
+branch; validate the upper bound inside it. Keep one deterministic `evidence-path-missing` finding
+per invalid path. In `checkPullRequest`, read each base covered resource's literal selector and
+check presence in the proposed coverage resource set. Emit one `coverage-transition` per missing
+selector; sort consistently with the existing finding order and do not enumerate file paths to
+decide whether the declaration may disappear. In `install`, when graph opt-in preserves an
+existing config, read it and call `validateConfig` with `ontologyExists` against the target;
+use its resolved `namespaceUri` for `NAMESPACE_URI` before the write loop. Skip this read for
+`--reset-content`, because it intentionally replaces the config. Do not change any kit-owned
+script's installed bytes based on the target repository.
+
+**Step 4 — verify.** Run the three focused test files, then
+`node scripts/check-ontology-terms.mjs` and `npm test`. Inspect `git diff` for only the five
+files named above. The GitHub required-check and branch-protection integration remains
+unverified until a disposable GitHub repository demonstrates it; do not claim that local tests
+prove it.
+
+**Step 5 — one repair commit and push.** Stage only the five named files, review
+`git diff --cached --name-only` and `git diff --cached`, rerun the ontology checker and full
+suite, then commit `fix: close source graph review gaps` and push to the existing
+`feature/source-knowledge-graph/dev-build` branch. Do not amend Tasks 1–10 or create separate
+fix commits for their original file owners. This is the reviewed repair boundary for the reopened
+build; only after it passes may the dev-build checklist and handoff resume.
 
 ## Handoff notes for the build
 
