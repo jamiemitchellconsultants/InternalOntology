@@ -37,6 +37,7 @@ by rewriting the original.
 | [21](#entry-user-source-knowledge-graph-docs-and-acceptance) | 2026-11-03 | [User] Source knowledge graph docs and acceptance | product | Codex acted as user tester and test approver under the owner's instruction. All 15 behaviour walkthroughs and their executable cases passed in the local build and deployed trials. |
 | [22](#entry-po-vision-human-readable-source-knowledge-graph) | 2026-11-03 | [PO] Vision: human-readable source knowledge graph | product | Provide an ordinary generated Markdown document of the current whole graph, produced from canonical Turtle through a Git workflow. |
 | [23](#entry-analyst-behaviours-human-readable-source-knowledge-graph) | 2026-11-03 | [Analyst] Behaviours: human-readable source knowledge graph | product | Define fourteen behaviours for a faithful current-state Markdown document with readable recorded names, accessible evidence at the input snapshot, clear direct or inferred basis, unambiguous references back to Turtle, and explicit… |
+| [24](#entry-architect-structure-human-readable-source-knowledge-graph) | 2026-11-03 | [Architect] Structure: human-readable source knowledge graph | product | Keep generated Markdown with the source PR, defaulting to a README inside the excluded graph root, and use a read-only freshness workflow ([ADR… |
 
 ---
 
@@ -559,3 +560,23 @@ Define fourteen behaviours for a faithful current-state Markdown document with r
 ## Consequences
 
 The architect has a testable behavioural contract. Output location, document layout, snapshot representation, generation command and workflow publishing mechanics remain architecture decisions. The design must preserve stable evidence references without introducing a self-referential generated commit. The JEPA-Speech pilot supplies the initial readability trial, supplemented by inference, ambiguity, coverage, failure and configuration cases. Assertion-change reports, diagrams, extraction and semantic correctness judgement remain out of scope.
+
+---
+
+<a id="entry-architect-structure-human-readable-source-knowledge-graph"></a>
+
+## Entry 24 — 2026-11-03 — [Architect] Structure: human-readable source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+JEPA-Speech's first live use exposed how Turtle structure obscures the claims maintainers need to assess. The accepted behaviours require a faithful readable view with evidence, explicit basis, coverage limits and trustworthy source references. Architecture must provide those outcomes while preserving identical installed scripts and avoiding a self-referential generated commit hash.
+
+## Decision
+
+Keep generated Markdown with the source PR, defaulting to a README inside the excluded graph root, and use a read-only freshness workflow ([ADR 0009](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/human-readable-source-knowledge-graph/architect/docs/adr/0009-source-graph-markdown-in-source-pr.md)). Pin links to an existing source commit, compare its complete input projection with the current candidate, and retrieve missing source objects during checkout/bootstrap after history rewriting ([ADR 0010](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/human-readable-source-knowledge-graph/architect/docs/adr/0010-source-graph-markdown-revision-context.md)). Use one deterministic renderer with the existing parser/model/checker, explicit ordering, escaped readable text and atomic local replacement ([ADR 0011](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/human-readable-source-knowledge-graph/architect/docs/adr/0011-source-graph-markdown-renderer.md)).
+
+## Consequences
+
+Maintainers can review the generated document alongside graph changes. Authors commit canonical changes, generate from that snapshot, then commit the document in the same PR. Rendering requires a configured repository browser URL; the generated path is configurable within the graph root. CI checks source projection equality and exact Markdown bytes with read-only permissions. Squash/rebase source retrieval and links after branch movement need explicit acceptance coverage. Developer planning follows this phase; implementation is not part of this PR.
