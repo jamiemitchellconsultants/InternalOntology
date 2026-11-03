@@ -1,0 +1,93 @@
+@prefix kit: <https://ontology-kit.dev/schema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+kit:GraphVocabulary a rdfs:Class ;
+    kit:schemaVersion 1 ;
+    rdfs:comment "Core source graph vocabulary." .
+
+kit:concept a kit:GraphKind ;
+    rdfs:comment "A canonical Ontology concept." .
+
+kit:source-file a kit:GraphKind ;
+    rdfs:comment "A tracked implementation file." .
+
+kit:source-symbol a kit:GraphKind ;
+    rdfs:comment "A named code element in a source file." .
+
+kit:test a kit:GraphKind ;
+    rdfs:comment "A test file or named test case." .
+
+kit:dependency a kit:GraphKind ;
+    rdfs:comment "A declared package or external dependency." .
+
+kit:document a kit:GraphKind ;
+    rdfs:comment "A selected design, architecture, or other authored document." .
+
+kit:deployment-resource a kit:GraphKind ;
+    rdfs:comment "A resource declared by eligible deployment evidence." .
+
+kit:system a kit:GraphKind ;
+    rdfs:comment "A software system named by reviewed source or selected documents." .
+
+kit:component a kit:GraphKind ;
+    rdfs:comment "A logical part of a system named by reviewed source or selected documents." .
+
+kit:contains a kit:GraphRelationship ;
+    rdfs:comment "The subject contains the object." .
+
+kit:implements a kit:GraphRelationship ;
+    rdfs:comment "A source element realizes the named concept or behaviour." .
+
+kit:tested-by a kit:GraphRelationship ;
+    rdfs:comment "The subject has the named test as evidence of expected behaviour." .
+
+kit:depends-on a kit:GraphRelationship ;
+    rdfs:comment "The subject declares or uses the named dependency." .
+
+kit:documented-by a kit:GraphRelationship ;
+    rdfs:comment "The subject is described by the named document." .
+
+kit:calls a kit:GraphRelationship ;
+    rdfs:comment "A source element invokes another source element." .
+
+kit:communicates-with a kit:GraphRelationship ;
+    rdfs:comment "A system or component exchanges information with another." .
+
+kit:deployed-by a kit:GraphRelationship ;
+    rdfs:comment "A system or component is deployed through the named resource." .
+
+kit:role-implementation a kit:GraphRole ;
+    rdfs:comment "role implementation" .
+
+kit:role-test a kit:GraphRole ;
+    rdfs:comment "role test" .
+
+kit:role-selected-document a kit:GraphRole ;
+    rdfs:comment "role selected document" .
+
+kit:role-ontology a kit:GraphRole ;
+    rdfs:comment "role ontology" .
+
+kit:role-deployment a kit:GraphRole ;
+    rdfs:comment "role deployment" .
+
+kit:direct a kit:GraphBasis ;
+    rdfs:comment "direct" .
+
+kit:inferred a kit:GraphBasis ;
+    rdfs:comment "inferred" .
+
+kit:covered a kit:GraphStatus ;
+    rdfs:comment "covered" .
+
+kit:unknown a kit:GraphStatus ;
+    rdfs:comment "unknown" .
+
+kit:excluded a kit:GraphStatus ;
+    rdfs:comment "excluded" .
+
+kit:graph-updated a kit:GraphOutcome ;
+    rdfs:comment "graph updated" .
+
+kit:no-fact-change a kit:GraphOutcome ;
+    rdfs:comment "no fact change" .

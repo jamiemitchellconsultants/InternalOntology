@@ -30,6 +30,8 @@ node bin/install-ontology.mjs --target /path/to/repo
 | `--default-branch <name>` | Branch the lint workflow's `push` trigger fires on. Defaults to the target's current branch (detected via `git`), falling back to `main` if that can't be detected. |
 | `--with-drift-review` | Also install the advisory semantic reviewer, its tests, workflow and runbook. |
 | `--with-semantic-review` | Install the opt-in blocking semantic reviewer, its trusted workflows, tests and [setup runbook](templates/docs/ontology-semantic-review.md). The shipped config stays disabled until maintainers activate it. |
+| `--with-source-graph` | Install the opt-in source graph checker, reader, workflow and [runbook](templates/docs/source-knowledge-graph.md). |
+| `--source-graph-root <path>` | Select the graph root and enable source graph installation. |
 | `--with-enum-tests <lang>` | Also install a worked-example enum lock test: `csharp`, `typescript`, or `python`. Installed with a `.example` suffix — see [Then seed it](#then-seed-it). |
 | `--dry-run` | Print the file plan and exit without writing. |
 | `--force` | Overwrite existing **kit-owned** files — the scripts and CI workflows. Never touches adopter-owned files (`ontology.config.json`, the ontology document, the enum test); this is the correct way to upgrade an installed repository. |
@@ -73,6 +75,16 @@ environment secret restricted to that branch. The reviewer runs from trusted def
 and assesses complete changed Markdown files. Findings can block merge through the fixed
 `ontology/semantic-match` status. Missing coverage is visible and permits merge unless the current
 run also has an active finding.
+
+## Optional source knowledge graph
+
+The source graph records repository facts, their evidence and declared coverage at a Git revision.
+Install it explicitly with `--with-source-graph`; this adds local reader and checker scripts, an
+agent protocol, a workflow and starter graph files. For an existing Markdown-only ontology, run
+`node scripts/build-ontology.mjs` and commit the resulting Turtle source first. The workflow blocks
+merges only once maintainers require its `source-graph` check in branch protection. A passing check
+shows structural validity and review records for covered changes; maintainers judge whether the
+claims are true. See the [source graph runbook](templates/docs/source-knowledge-graph.md).
 
 ## Then, consider Narrative
 

@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { normaliseRepoRelativePath } from "../templates/scripts/ontology-config.mjs";
+import { normaliseRepoRelativePath, validateConfig } from "../templates/scripts/ontology-config.mjs";
 
 // Installed with a `.example` suffix so an SDK compile glob or test-runner collection never picks
 // it up on its own — the template names an undefined example enum and has no test-framework
@@ -93,6 +93,21 @@ export function buildPlan(options) {
       substitute: false, ownedBy: "kit" });
   }
 
+  if (options.withSourceGraph) {
+    const root = options.sourceGraphRoot ?? "docs/source-knowledge-graph";
+    for (const name of ["source-graph-turtle", "source-graph-git", "source-graph-model", "check-source-graph", "query-source-graph"]) {
+      for (const suffix of [".mjs", ".test.mjs"]) {
+        const path = `scripts/${name}${suffix}`;
+        plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
+      }
+    }
+    plan.push({ template: "scripts/source-graph-test-helpers.mjs", dest: "scripts/source-graph-test-helpers.mjs", substitute: false, ownedBy: "kit" },
+      { template: "github/workflows/source-graph-check.yml", dest: ".github/workflows/source-graph-check.yml", substitute: true, ownedBy: "kit" },
+      { template: "docs/source-knowledge-graph.md", dest: "docs/source-knowledge-graph.md", substitute: true, ownedBy: "kit" },
+      { template: "source-graph/graph-schema.ttl", dest: `${root}/graph-schema.ttl`, substitute: false, ownedBy: "kit" },
+      ...["manifest.ttl", "nodes.ttl"].map((name) => ({ template: `source-graph/${name}`, dest: `${root}/${name}`, substitute: true, ownedBy: "adopter" })));
+  }
+
   if (options.withEnumTests) {
     const chosen = ENUM_TEST_TEMPLATES[options.withEnumTests];
     if (!chosen) {
@@ -138,22 +153,26 @@ export function hasUnmarkedProtocolSection(existing) {
  * @returns {string}
  */
 export function spliceProtocol(existing, body) {
-  const block = `${START_MARKER}\n${body.trim()}\n${END_MARKER}\n`;
-  const start = existing.indexOf(START_MARKER);
+  return spliceBlock(existing, body, START_MARKER, END_MARKER);
+}
+
+export function spliceBlock(existing, body, startMarker, endMarker) {
+  const block = `${startMarker}\n${body.trim()}\n${endMarker}\n`;
+  const start = existing.indexOf(startMarker);
 
   if (start === -1) {
-    if (existing.includes(END_MARKER)) {
+    if (existing.includes(endMarker)) {
       throw new Error("unterminated ontology-protocol marker: found an end marker with no start marker");
     }
     const separator = existing.trim() ? `${existing.replace(/\s*$/, "")}\n\n` : "";
     return `${separator}${block}`;
   }
 
-  const end = existing.indexOf(END_MARKER, start);
+  const end = existing.indexOf(endMarker, start);
   if (end === -1) {
     throw new Error("unterminated ontology-protocol marker: found a start marker with no end marker");
   }
-  return existing.slice(0, start) + block + existing.slice(end + END_MARKER.length + 1);
+  return existing.slice(0, start) + block + existing.slice(end + endMarker.length + 1);
 }
 
 /**
@@ -241,6 +260,10 @@ export function install(options) {
   const ontologyPath = options.ontologyPath
     ? normaliseRepoRelativePath(options.ontologyPath, "--ontology-path")
     : "docs/ontology.md";
+  const withSourceGraph = options.withSourceGraph || options.sourceGraphRoot !== undefined;
+  const sourceGraphRoot = options.sourceGraphRoot === undefined ? "docs/source-knowledge-graph" : normaliseRepoRelativePath(options.sourceGraphRoot, "--source-graph-root");
+  if (!sourceGraphRoot) throw new Error("--source-graph-root must be non-empty");
+  const configExists = existsSync(join(target, "ontology.config.json"));
 
   const agentFile = detectAgentFile(target);
   const agentPath = join(target, agentFile.path);
@@ -258,14 +281,23 @@ export function install(options) {
     ONTOLOGY_PATH: ontologyPath,
     ONTOLOGY_TTL_PATH: ontologyPath.replace(/\.md$/, ".ttl"),
     DEFAULT_BRANCH: options.defaultBranch ?? detectDefaultBranch(target),
+    GRAPH_ROOT: sourceGraphRoot,
   };
   values.NAMESPACE_URI = `https://ontology.example/${slugifyForNamespace(values.PROJECT_NAME)}#`;
+  if (withSourceGraph && configExists && !resetContent) {
+    let existingConfig;
+    try { existingConfig = JSON.parse(readFileSync(join(target, "ontology.config.json"), "utf8")); }
+    catch (error) { throw new Error(`ontology.config.json: ${error.message}`); }
+    values.NAMESPACE_URI = validateConfig(existingConfig, { ontologyExists: (path) => existsSync(join(target, path)) }).namespaceUri;
+  }
 
-  const plan = buildPlan({ ...options, ontologyPath });
+  const plan = buildPlan({ ...options, ontologyPath, withSourceGraph, sourceGraphRoot });
   const written = [];
   /** @type {{ dest: string, ownedBy: "kit" | "adopter" }[]} */
   const skipped = [];
   let enumTestExample = null;
+  const sectionText = withSourceGraph ? substituteJsonString(readFileSync(join(TEMPLATE_ROOT, "source-graph/config-section.json"), "utf8"), values).trim() : null;
+  const configNotice = withSourceGraph && configExists && !resetContent ? `Add this section to ontology.config.json:\n"sourceGraph": ${sectionText}` : null;
 
   for (const entry of plan) {
     const destPath = join(target, entry.dest);
@@ -281,9 +313,10 @@ export function install(options) {
       continue;
     }
     const source = readFileSync(join(TEMPLATE_ROOT, entry.template), "utf8");
-    const content = entry.substitute
+    let content = entry.substitute
       ? (entry.template === "ontology.config.json" ? substituteJsonString : substitute)(source, values)
       : source;
+    if (withSourceGraph && entry.template === "ontology.config.json") content = content.replace(/\n}\s*$/, `,\n  "sourceGraph": ${sectionText}\n}\n`);
     if (!dryRun) {
       mkdirSync(dirname(destPath), { recursive: true });
       writeFileSync(destPath, content);
@@ -297,10 +330,15 @@ export function install(options) {
     readFileSync(join(TEMPLATE_ROOT, "protocol/ontology-protocol.md"), "utf8"),
     values,
   );
-  if (!dryRun) writeFileSync(agentPath, spliceProtocol(existingAgentText, protocolBody));
+  let agentText = spliceProtocol(existingAgentText, protocolBody);
+  if (withSourceGraph) {
+    const graphBody = substitute(readFileSync(join(TEMPLATE_ROOT, "protocol/source-graph-protocol.md"), "utf8"), values);
+    agentText = spliceBlock(agentText, graphBody, "<!-- source-graph-protocol:start -->", "<!-- source-graph-protocol:end -->");
+  }
+  if (!dryRun) writeFileSync(agentPath, agentText);
   written.push(agentFile.path);
 
-  return { written, skipped, agentFile: agentFile.path, enumTestExample };
+  return { written, skipped, agentFile: agentFile.path, enumTestExample, configNotice };
 }
 
 const VALUE_OPTIONS = {
@@ -309,10 +347,12 @@ const VALUE_OPTIONS = {
   "--ontology-path": "ontologyPath",
   "--default-branch": "defaultBranch",
   "--with-enum-tests": "withEnumTests",
+  "--source-graph-root": "sourceGraphRoot",
 };
 const FLAG_OPTIONS = {
   "--with-drift-review": "withDriftReview",
   "--with-semantic-review": "withSemanticReview",
+  "--with-source-graph": "withSourceGraph",
   "--force": "force",
   "--reset-content": "resetContent",
   "--dry-run": "dryRun",
@@ -335,6 +375,8 @@ const USAGE =
   "                           branch (detected via git), falling back to \"main\".\n" +
   "  --with-drift-review      Also install the advisory semantic reviewer, its tests, workflow and runbook.\n" +
   "  --with-semantic-review   Install the opt-in blocking semantic reviewer and its setup runbook.\n" +
+  "  --with-source-graph      Install the opt-in source graph and its workflow.\n" +
+  "  --source-graph-root <path> Set the graph root and enable source graph installation.\n" +
   "  --with-enum-tests <lang> Also install a worked-example enum lock test: csharp, typescript, or python.\n" +
   "  --force                  Overwrite existing kit-owned files (the scripts and CI workflows).\n" +
   "                           Never overwrites adopter-owned files (ontology.config.json, the ontology\n" +
@@ -360,6 +402,7 @@ export function parseCliArgs(argv) {
       const value = argv[++index];
       if (value === undefined || value.startsWith("--")) throw new Error(`${arg} needs a value`);
       options[VALUE_OPTIONS[arg]] = value;
+      if (arg === "--source-graph-root") options.withSourceGraph = true;
     } else if (arg in FLAG_OPTIONS) {
       options[FLAG_OPTIONS[arg]] = true;
     } else {
@@ -370,7 +413,7 @@ export function parseCliArgs(argv) {
     throw new Error(
       "--target is required — usage: node bin/install-ontology.mjs --target <repo> " +
         "[--project-name <name>] [--ontology-path <path>] [--default-branch <name>] " +
-        "[--with-drift-review] [--with-semantic-review] [--with-enum-tests csharp|typescript|python] " +
+        "[--with-drift-review] [--with-semantic-review] [--with-source-graph] [--source-graph-root <path>] [--with-enum-tests csharp|typescript|python] " +
         "[--force] [--reset-content] [--dry-run]",
     );
   }
@@ -410,6 +453,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       }
       console.log("Next: run `node scripts/build-ontology.mjs` to create ontology.ttl, then fill it in.");
       console.log("The skills/ontology-setup skill can seed the ontology from this repository's own docs and code.");
+      if (result.configNotice) console.log(result.configNotice);
+      if (options.withSourceGraph) console.log("Commit docs/ontology.ttl first (`node scripts/build-ontology.mjs`); the graph check requires it.");
     }
   } catch (error) {
     console.error(`ontology kit: ${error instanceof Error ? error.message : error}`);

@@ -1,0 +1,3 @@
+@prefix : <{{NAMESPACE_URI}}> .
+@prefix kit: <https://ontology-kit.dev/schema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .

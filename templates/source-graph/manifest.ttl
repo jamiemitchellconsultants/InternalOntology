@@ -1,0 +1,13 @@
+@prefix : <{{NAMESPACE_URI}}> .
+@prefix kit: <https://ontology-kit.dev/schema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+:coverage-graph-root a kit:GraphCoverage ;
+    kit:pathSelector "{{GRAPH_ROOT}}/**" ;
+    kit:priority 1000 ;
+    kit:reason "Graph files are excluded from covered source." ;
+    kit:status kit:excluded .
+
+:graph a kit:SourceKnowledgeGraph ;
+    kit:coverage :coverage-graph-root ;
+    kit:schemaVersion 1 .

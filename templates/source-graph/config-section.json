@@ -1,0 +1,11 @@
+{
+    "enabled": true,
+    "root": "{{GRAPH_ROOT}}",
+    "evidence": {
+      "implementation": ["**"],
+      "test": ["**"],
+      "selected-document": ["docs/**"],
+      "ontology": ["{{ONTOLOGY_PATH}}", "{{ONTOLOGY_TTL_PATH}}"],
+      "deployment": []
+    }
+  }

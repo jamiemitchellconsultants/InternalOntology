@@ -41,6 +41,7 @@ test("a minimal config is filled in with empty defaults", () => {
     bannedAliases: [],
     ignorePaths: [],
     semanticReview: { enabled: false, model: "", baseUrl: "" },
+    sourceGraph: { enabled: false, root: "docs/source-knowledge-graph", evidence: {} },
   });
 });
 
@@ -334,4 +335,46 @@ test("loadConfig with only configPath resolves ontologyPath against the config's
     const config = loadConfig({ configPath });
     assert.equal(config.ontologyPath, "docs/ontology.md");
   });
+});
+
+const graphOn = (extra = {}) => ({
+  ...minimal,
+  sourceGraph: { enabled: true, root: "docs/source-knowledge-graph", evidence: {}, ...extra },
+});
+const ok = { ontologyExists: () => true };
+
+test("source graph is disabled with defaults when the section is absent", () => {
+  assert.deepEqual(validateConfig(minimal, ok).sourceGraph,
+    { enabled: false, root: "docs/source-knowledge-graph", evidence: {} });
+});
+
+test("an enabled source graph keeps its root and per-role selectors", () => {
+  const value = validateConfig(graphOn({
+    root: "./graph", evidence: { deployment: ["**/*.tf"], test: ["tests/**"] },
+  }), ok);
+  assert.deepEqual(value.sourceGraph,
+    { enabled: true, root: "graph", evidence: { deployment: ["**/*.tf"], test: ["tests/**"] } });
+});
+
+test("source graph rejects null, unknown keys, bad roots and bad selectors", () => {
+  const bad = [
+    [null, /sourceGraph/],
+    [{ enabled: true, extra: 1 }, /sourceGraph\.extra/],
+    [{ enabled: true, evidence: { docker: ["x"] } }, /sourceGraph\.evidence\.docker/],
+    [{ enabled: true, root: "/abs" }, /repository-relative/],
+    [{ enabled: true, root: "../up" }, /\.\./],
+    [{ enabled: true, evidence: { test: "tests/**" } }, /array/],
+    [{ enabled: true, evidence: { test: [""] } }, /non-empty/],
+    [{ enabled: "yes" }, /enabled/],
+  ];
+  for (const [sourceGraph, pattern] of bad) {
+    assert.throws(() => validateConfig({ ...minimal, sourceGraph }, ok), pattern);
+  }
+});
+
+test("an enabled source graph needs a Markdown ontology path to derive the Turtle source", () => {
+  assert.throws(
+    () => validateConfig({ ontologyPath: "docs/ontology.txt", sourceGraph: { enabled: true } }, ok),
+    /\.md/,
+  );
 });

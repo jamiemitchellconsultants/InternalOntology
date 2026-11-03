@@ -22,6 +22,7 @@ const KNOWN_KEYS = new Set([
   "bannedAliases",
   "ignorePaths",
   "semanticReview",
+  "sourceGraph",
 ]);
 
 const DEFAULT_NAMESPACE_URI = "https://ontology.example/ontology#";
@@ -35,7 +36,8 @@ const KNOWN_SECTION_KEYS = new Set(["required", "optional"]);
  * @typedef {{ phrase: string, nameInstead: string[] }} BannedAlias
  * @typedef {{ ontologyPath: string, namespaceUri: string, sections: { required: string[], optional: string[] },
  *             allowlist: AllowlistEntry[], bannedAliases: BannedAlias[], ignorePaths: string[],
- *             semanticReview: { enabled: boolean, model: string, baseUrl: string } }} OntologyConfig
+ *             semanticReview: { enabled: boolean, model: string, baseUrl: string },
+ *             sourceGraph: { enabled: boolean, root: string, evidence: Record<string, string[]> } }} OntologyConfig
  */
 
 /**
@@ -117,6 +119,49 @@ function validateSemanticReview(value) {
     }
   }
   return { enabled: value.enabled, model: model.trim(), baseUrl: baseUrl.trim().replace(/\/+$/, "") };
+}
+
+function validateSourceGraph(value, ontologyPath) {
+  const defaultRoot = "docs/source-knowledge-graph";
+  if (value === undefined) return { enabled: false, root: defaultRoot, evidence: {} };
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${CONFIG_FILENAME}: sourceGraph must be an object`);
+  }
+  for (const key of Object.keys(value)) {
+    if (!["enabled", "root", "evidence"].includes(key)) {
+      throw new Error(`${CONFIG_FILENAME}: unknown key "sourceGraph.${key}"`);
+    }
+  }
+  if (typeof value.enabled !== "boolean") {
+    throw new Error(`${CONFIG_FILENAME}: sourceGraph.enabled must be a boolean`);
+  }
+  const root = value.root === undefined ? defaultRoot : value.root;
+  if (typeof root !== "string" || !root.trim()) {
+    throw new Error(`${CONFIG_FILENAME}: sourceGraph.root must be a non-empty string`);
+  }
+  const normalizedRoot = normaliseRepoRelativePath(root, `${CONFIG_FILENAME}: sourceGraph.root`);
+  if (!normalizedRoot) throw new Error(`${CONFIG_FILENAME}: sourceGraph.root must be non-empty`);
+  const inputEvidence = value.evidence === undefined ? {} : value.evidence;
+  if (inputEvidence === null || typeof inputEvidence !== "object" || Array.isArray(inputEvidence)) {
+    throw new Error(`${CONFIG_FILENAME}: sourceGraph.evidence must be an object`);
+  }
+  const evidence = {};
+  for (const [role, selectors] of Object.entries(inputEvidence)) {
+    const label = `sourceGraph.evidence.${role}`;
+    if (!["implementation", "test", "selected-document", "ontology", "deployment"].includes(role)) {
+      throw new Error(`${CONFIG_FILENAME}: unknown key "${label}"`);
+    }
+    if (!Array.isArray(selectors)) throw new Error(`${CONFIG_FILENAME}: ${label} must be an array`);
+    evidence[role] = requireStringArray(selectors, label).map((selector) => {
+      const normalized = normaliseRepoRelativePath(selector, `${CONFIG_FILENAME}: ${label}`);
+      if (!normalized) throw new Error(`${CONFIG_FILENAME}: ${label} must contain non-empty selectors`);
+      return normalized;
+    });
+  }
+  if (value.enabled && !ontologyPath.endsWith(".md")) {
+    throw new Error(`${CONFIG_FILENAME}: sourceGraph requires ontologyPath ending in .md`);
+  }
+  return { enabled: value.enabled, root: normalizedRoot, evidence };
 }
 
 /**
@@ -220,6 +265,7 @@ export function validateConfig(raw, deps = {}) {
     bannedAliases,
     ignorePaths: requireStringArray(input.ignorePaths, "ignorePaths"),
     semanticReview: validateSemanticReview(input.semanticReview),
+    sourceGraph: validateSourceGraph(input.sourceGraph, ontologyPath),
   };
 }
 
