@@ -1525,12 +1525,24 @@ tests/templates.test.mjs`, implement, rerun, run `npm test`, run global checks, 
 
 ## Task 10 — cross-language acceptance, documentation and ontology
 
-**Files:** new `tests/source-graph-acceptance.test.mjs`; modify `README.md`,
-`docs/ai-agent-install.md`, `docs/ontology.md`; the widgets fixture is
-reused unchanged.
+**Files:** new `tests/source-graph-acceptance.test.mjs`; modify
+`templates/scripts/check-source-graph.mjs`, `templates/scripts/query-source-graph.mjs`, `README.md`,
+`docs/ai-agent-install.md`, `docs/ontology.md`; the widgets fixture is reused unchanged.
 
 **Interfaces:** no new interface; the widgets fixture already holds Terraform and an uncovered
 Docker Compose file, and its `deployment` selector is `**/*.tf`. Nothing new is installed.
+
+Both command entry-point guards must recognise invocation through a symlinked script path. Resolve
+`process.argv[1]` using `realpathSync` and compare it to the filesystem path of `import.meta.url`
+using `fileURLToPath`; handle a missing or unresolvable argument as a non-entry-point import. This
+only resolves the command script's own path; graph data and configuration still come from Git
+objects. The already pushed Task 6 and 7 commits remain intact: include both script repairs in the
+single Task 10 commit, after their regression tests fail.
+
+The supplied bare-Git and shipped-test cases below are amended to ensure they really execute:
+clear `NODE_TEST_CONTEXT` for spawned Node processes, enumerate the installed `.test.mjs` files
+instead of passing a directory to `node --test`, and assert output from both bare-Git commands and
+from an installed test. Add the explicit symlink test below. Preserve all existing assertions.
 
 Complete tests:
 
@@ -1538,7 +1550,7 @@ Complete tests:
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { install } from "../bin/install-ontology.mjs";
@@ -1546,7 +1558,8 @@ import { withTempRepo } from "./helpers/temp-repo.mjs";
 import { widgets, writeGraph, refreshRecord, blobId, setPair, find, S, LANGUAGES } from "../templates/scripts/source-graph-test-helpers.mjs";
 
 const run = (dir, args) => {
-  try { return { code: 0, out: execFileSync("node", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }), err: "" }; }
+  const { NODE_TEST_CONTEXT, ...env } = process.env;
+  try { return { code: 0, out: execFileSync("node", args, { cwd: dir, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }), err: "" }; }
   catch (e) { return { code: e.status, out: e.stdout?.toString() ?? "", err: e.stderr?.toString() ?? "" }; }
 };
 
@@ -1617,6 +1630,10 @@ test("the checker and reader work from git objects alone, with the working tree 
       cpSync(join(repo.dir, "scripts"), join(clone, "scripts"), { recursive: true });
       const check = run(join(clone, "r.git"), [join(clone, "scripts/check-source-graph.mjs"), "--rev", "HEAD"]);
       assert.equal(check.code, 0, check.err);
+      assert.match(check.out, /source graph ok: revision/);
+      const query = run(join(clone, "r.git"), [join(clone, "scripts/query-source-graph.mjs"), "search", "invoice"]);
+      assert.equal(query.code, 0, query.err);
+      assert.match(query.out, /node-invoice/);
     } finally { rmSync(clone, { recursive: true, force: true }); }
   });
 });
@@ -1649,8 +1666,24 @@ test("the installed Markdown passes the adopter's own term check", async () => {
 test("the shipped graph tests pass inside the target repository", async () => {
   await withTempRepo(async (repo) => {
     install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
-    const result = run(repo.dir, ["--test", "scripts/"]);
+    const tests = readdirSync(join(repo.dir, "scripts")).filter((name) => name.endsWith(".test.mjs"));
+    assert.ok(tests.length > 0);
+    const result = run(repo.dir, ["--test", ...tests.map((name) => `scripts/${name}`)]);
     assert.equal(result.code, 0, result.out + result.err);
+    assert.match(result.out, /a canonical document parses/);
+  });
+});
+
+test("both commands execute when their script path contains a symlink", async () => {
+  await withTempRepo(async (repo) => {
+    await installedWidgets(repo, "csharp");
+    symlinkSync(join(repo.dir, "scripts"), join(repo.dir, "linked-scripts"), "dir");
+    const check = run(repo.dir, ["linked-scripts/check-source-graph.mjs", "--rev", "HEAD"]);
+    assert.equal(check.code, 0, check.err);
+    assert.match(check.out, /source graph ok: revision/);
+    const query = run(repo.dir, ["linked-scripts/query-source-graph.mjs", "search", "invoice"]);
+    assert.equal(query.code, 0, query.err);
+    assert.match(query.out, /node-invoice/);
   });
 });
 ```
@@ -1682,7 +1715,9 @@ changes a covered file without a record, and confirm the `source-graph` check fa
 file, then refresh and confirm it passes; confirm the job name can be required in branch
 protection. If GitHub access is unavailable, say the branch-protection integration is unverified
 for the user's acceptance rather than claiming it passed. Commit
-`feat: accept the source graph across languages` and push.
+`feat: accept the source graph across languages` and push. In the commit body, explain that the
+bare-Git test had checked only the checker's exit code and that the nested shipped-test invocation
+could silently run no tests; the amended assertions verify actual command and test output.
 
 ## Handoff notes for the build
 
