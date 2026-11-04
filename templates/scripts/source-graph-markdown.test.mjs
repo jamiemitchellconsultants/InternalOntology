@@ -99,6 +99,10 @@ test('B4/B6/B7: source destinations remain immutable after branch advancement an
     const link = sourceLink(input, f.spec.paths.impl, 1, 3);
     assert.equal(link, `${input.repositoryUrl}/blob/${f.source}/${f.spec.paths.impl}#L1-L3`);
     assert.equal(sourceLink(input, 'src/a #%.cs', 2), `${input.repositoryUrl}/blob/${f.source}/src/a%20%23%25.cs#L2`);
+    for (const path of ['src/Invoice).cs', 'docs/source-knowledge-graph/assertions/(claims.ttl']) {
+      const destination = sourceLink(input, path, 1, 3);
+      assert.equal(destination, `${input.repositoryUrl}/blob/${f.source}/${path.replace(')', '%29').replace('(', '%28')}#L1-L3`);
+    }
     r.write(f.spec.paths.impl, 'new branch contents\n');
     r.commit('advance the branch after opening Markdown');
     const pinned = new URL(link).pathname.split('/blob/')[1].split('/');

@@ -32,7 +32,7 @@ export function sourceLink(input, path, startLine, endLine = startLine) {
     throw new RenderError("invalid source link path or line range");
   }
   const fragment = `#L${startLine}${endLine === startLine ? "" : `-L${endLine}`}`;
-  return `${input.repositoryUrl}/blob/${input.tree.id}/${path.split("/").map(encodeURIComponent).join("/")}${fragment}`;
+  return `${input.repositoryUrl}/blob/${input.tree.id}/${path.split("/").map(segment => encodeURIComponent(segment).replace(/[()]/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase())).join("/")}${fragment}`;
 }
 
 export function renderMarkdown(input) {
