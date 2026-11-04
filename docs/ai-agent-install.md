@@ -32,9 +32,11 @@ separate option from `--with-drift-review`; after installing, follow the copied
 the model secret, and the required status. The copied config starts disabled, so merely installing
 the files does not send Markdown to a model.
 
-Add `--with-source-graph` only when the user requests it. Commit `docs/ontology.ttl` first using
-`node scripts/build-ontology.mjs`; the graph check requires it. If the installer prints a config
-notice for an existing config, give it to the user to apply.
+Add `--with-source-graph` only when the user requests it. Commit `docs/ontology.ttl` first using `node scripts/build-ontology.mjs`; the graph check requires it. If the installer prints a config notice for an existing config, give it to the user to apply. The option also installs the Markdown renderer and the read-only `source-graph-markdown` workflow. It creates no placeholder view.
+
+Before generating the readable graph, set `sourceGraph.repositoryUrl` to the repository's HTTPS browser URL, including owner and repository, without credentials, query or fragment. GitHub Enterprise browser URLs are supported. `sourceGraph.markdownPath` defaults to `<graph-root>/README.md`; choose another `.md` path inside the root if that file contains authored content. Keep the operating guide at `docs/source-knowledge-graph.md` separate from the generated view. These settings live in the adopter's config; installed scripts are identical across repositories.
+
+Commit all canonical inputs first: configuration, ontologies, graph files and covered source. Then run `node scripts/render-source-graph.mjs`, review the readable claims against their evidence links, stage the output, and run `node scripts/render-source-graph.mjs --check --staged` and the ontology term check before committing the document in the same PR. Do not hand-edit the output or generate it after merge. Configure branch protection to require both `source-graph` and `source-graph-markdown`. The installed `docs/source-knowledge-graph.md` explains historical checks, missing-source recovery and preserving existing output on failure.
 
 If this step refuses because of an existing unmarked `## Ontology protocol` section in `AGENTS.md`
 or `CLAUDE.md`, **stop and ask** how the user wants that resolved — removing or marking someone

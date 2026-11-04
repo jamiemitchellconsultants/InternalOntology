@@ -41,7 +41,7 @@ test("a minimal config is filled in with empty defaults", () => {
     bannedAliases: [],
     ignorePaths: [],
     semanticReview: { enabled: false, model: "", baseUrl: "" },
-    sourceGraph: { enabled: false, root: "docs/source-knowledge-graph", evidence: {} },
+    sourceGraph: { enabled: false, root: "docs/source-knowledge-graph", evidence: {}, markdownPath: "docs/source-knowledge-graph/README.md", repositoryUrl: "" },
   });
 });
 
@@ -345,7 +345,7 @@ const ok = { ontologyExists: () => true };
 
 test("source graph is disabled with defaults when the section is absent", () => {
   assert.deepEqual(validateConfig(minimal, ok).sourceGraph,
-    { enabled: false, root: "docs/source-knowledge-graph", evidence: {} });
+    { enabled: false, root: "docs/source-knowledge-graph", evidence: {}, markdownPath: "docs/source-knowledge-graph/README.md", repositoryUrl: "" });
 });
 
 test("an enabled source graph keeps its root and per-role selectors", () => {
@@ -353,7 +353,7 @@ test("an enabled source graph keeps its root and per-role selectors", () => {
     root: "./graph", evidence: { deployment: ["**/*.tf"], test: ["tests/**"] },
   }), ok);
   assert.deepEqual(value.sourceGraph,
-    { enabled: true, root: "graph", evidence: { deployment: ["**/*.tf"], test: ["tests/**"] } });
+    { enabled: true, root: "graph", evidence: { deployment: ["**/*.tf"], test: ["tests/**"] }, markdownPath: "graph/README.md", repositoryUrl: "" });
 });
 
 test("source graph rejects null, unknown keys, bad roots and bad selectors", () => {
@@ -377,4 +377,45 @@ test("an enabled source graph needs a Markdown ontology path to derive the Turtl
     () => validateConfig({ ontologyPath: "docs/ontology.txt", sourceGraph: { enabled: true } }, ok),
     /\.md/,
   );
+});
+
+const renderConfig = (extra = {}) => ({
+  ...minimal,
+  sourceGraph: { enabled: true, root: 'graph', evidence: {}, ...extra },
+});
+const renderDeps = { ontologyExists: () => true };
+
+test('renderer settings normalize defaults without requiring a URL for graph-only use', () => {
+  const c = validateConfig(renderConfig(), renderDeps);
+  assert.equal(c.sourceGraph.markdownPath, 'graph/README.md');
+  assert.equal(c.sourceGraph.repositoryUrl, '');
+  assert.equal(validateConfig(renderConfig({ repositoryUrl: '' }), renderDeps).sourceGraph.repositoryUrl, '');
+  const absent = validateConfig(minimal, renderDeps).sourceGraph;
+  assert.equal(absent.markdownPath, 'docs/source-knowledge-graph/README.md');
+  assert.equal(absent.repositoryUrl, '');
+});
+
+test('renderer settings support a custom root, document and Enterprise browser base', () => {
+  const c = validateConfig(renderConfig({ root: './graph', markdownPath: './graph/view.md',
+    repositoryUrl: 'https://git.example.test/team/widgets/' }), renderDeps);
+  assert.equal(c.sourceGraph.root, 'graph');
+  assert.equal(c.sourceGraph.markdownPath, 'graph/view.md');
+  assert.equal(c.sourceGraph.repositoryUrl, 'https://git.example.test/team/widgets');
+});
+
+test('renderer output cannot leave excluded graph scope or overwrite the ontology', () => {
+  for (const markdownPath of ['/tmp/view.md', '../view.md', 'outside/view.md', 'graph/../view.md',
+    'graph/view.ttl', 'graph/', '']) {
+    assert.throws(() => validateConfig(renderConfig({ markdownPath }), renderDeps), /markdownPath/);
+  }
+  assert.throws(() => validateConfig({ ...minimal, sourceGraph: {
+    enabled: true, root: 'docs', markdownPath: 'docs/ontology.md' } }, renderDeps), /markdownPath/);
+});
+
+test('renderer browser URLs reject credentials, non-HTTPS and ambiguous bases', () => {
+  for (const repositoryUrl of ['http://github.com/team/repo', 'https://user:secret@host/team/repo',
+    'https://host/team/repo?q=1', 'https://host/team/repo#x', 'https://host/team',
+    'https://host/team/repo/extra', 'https://host/team%2frepo/name', 'https://host/team/../repo']) {
+    assert.throws(() => validateConfig(renderConfig({ repositoryUrl }), renderDeps), /repositoryUrl/);
+  }
 });

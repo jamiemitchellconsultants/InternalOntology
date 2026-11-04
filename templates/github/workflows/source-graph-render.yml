@@ -1,0 +1,26 @@
+name: Source graph Markdown
+on:
+  pull_request:
+  push:
+    branches: ["{{DEFAULT_BRANCH}}"]
+permissions:
+  contents: read
+jobs:
+  source-graph-markdown:
+    name: source-graph-markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fetch pinned source snapshot
+        run: |
+          source_revision="$(node scripts/render-source-graph.mjs --print-source-rev --rev HEAD)"
+          if ! git cat-file -e "${source_revision}^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$source_revision"
+          fi
+      - name: Check source graph Markdown
+        run: node scripts/render-source-graph.mjs --check --rev HEAD

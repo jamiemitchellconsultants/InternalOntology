@@ -119,6 +119,9 @@ test("the shipped graph tests pass inside the target repository", async () => {
     install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
     const tests = readdirSync(join(repo.dir, "scripts")).filter((name) => name.endsWith(".test.mjs"));
     assert.ok(tests.length > 0);
+    for (const name of ["source-graph-render-input", "source-graph-markdown", "render-source-graph"]) {
+      assert.ok(tests.includes(`${name}.test.mjs`), `missing installed ${name} tests`);
+    }
     const result = run(repo.dir, ["--test", ...tests.map((name) => `scripts/${name}`)]);
     assert.equal(result.code, 0, result.out + result.err);
     assert.match(result.out, /a canonical document parses/);
