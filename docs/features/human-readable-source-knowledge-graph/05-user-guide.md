@@ -16,7 +16,7 @@ An isolated node stays in Nodes with no recorded assertions. A valid graph with 
 
 ## B4 — Inspect every supporting source
 
-Beside a claim, follow each file-and-line evidence link. Its role identifies implementation, test, selected document, ontology or deployment evidence. Inspect every supporting reference when there is more than one. Links pin the input source commit; check the source path and line range rather than relying on a green structural check alone.
+Beside a claim, follow each file-and-line evidence link. Its role identifies implementation, test, selected document, ontology or deployment evidence. Inspect every supporting reference when there is more than one. Links select source view so the cited lines are available, and pin the input source commit; check the source path and line range rather than relying on a green structural check alone.
 
 ## B5 — Distinguish direct claims and inference
 

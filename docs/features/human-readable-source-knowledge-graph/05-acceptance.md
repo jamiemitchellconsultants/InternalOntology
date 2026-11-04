@@ -1,15 +1,15 @@
 # Human-readable source knowledge graph — acceptance
 
-This record covers [B1–B14](02-behaviours.md). Status is **stopped: hosted B4 failed; pushback to dev-build**. The merged build's passing tests are baseline verification, not approval of this phase's executable acceptance cases. No local or deployed exit criterion is met while a required step, test approval or result is pending.
+This record covers [B1–B14](02-behaviours.md). Status is **passed in the named GitHub environments after merged amendment PR #79**. The original B4 failure and its evidence remain below. Live GitHub Enterprise testing was unavailable and is not claimed. The merged build's passing tests are baseline verification, not approval of this phase's executable acceptance cases. No local or deployed exit criterion is met while a required step, test approval or result is pending.
 
 For each environment, the person acting as user follows every numbered walkthrough step and records pass or fail. After a behaviour's walkthrough passes, show that person the mapped executable case and obtain approval before running it as acceptance. Record the date, walkthrough person, approver, exact revision, command and result. A test run does not replace reading the document or judging its usability. If a walkthrough or approved test fails its expected result, raise pushback to the owning earlier phase and stop; do not repair the build here.
 
 ## Environments and execution
 
-- **Local build:** Kit `ac4547f` on `feature/human-readable-source-knowledge-graph/user`, installed in disposable local Git repositories using the [runbook](05-runbook.md). Use independent branches/repositories for destructive scenarios. The shipped fixtures supply direct/inferred claims, shared labels, isolated nodes, multiple evidence links, separate assertion shards, empty input and custom settings. Author an additional overlapping unknown catch-all selector at lower priority than covered/excluded rules when following B8.
+- **Local build:** Kit `1342506` (main including PR #79) on `feature/human-readable-source-knowledge-graph/user`, installed in disposable local Git repositories using the [runbook](05-runbook.md). Use independent branches/repositories for destructive scenarios. The shipped fixtures supply direct/inferred claims, shared labels, isolated nodes, multiple evidence links, separate assertion shards, empty input and custom settings. Author an additional overlapping unknown catch-all selector at lower priority than covered/excluded rules when following B8.
 - **Real-data local preview:** JEPA-Speech PR #194 pinned to `f27c3e0fffd3ce0821a70f0d2f3d6cdbcf715465`. A temporary clone adds only its renderer-required browser URL in local source commit `2a9e5df1116423efb7266770498b8da730980c86`. The Kit's current shipped commands run against that clone; its older installed commands predate the URL setting. This local commit has not been published, so preview URLs are not a hosted-navigation result. Its canonical assertions, nodes, evidence, coverage and source files are unchanged.
-- **Deployed:** upgrade the existing private [source graph trial](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103) through a PR, then run the walkthroughs against its deployed installed scripts and GitHub-rendered documents. Record trial PRs, source/document commits, both Actions checks and required-check configuration. Repeat hosted retention after actual squash and rebase merges and source-branch deletion on disposable trial branches. Preserve unrelated required contexts. The separate JEPA-Speech maintainer trial records readability and an accuracy judgement for every pilot claim. A GitHub Enterprise trial needs a named real host/repository before it can pass.
-- **Approved executable cases:** existing build cases are reused below. Run individual cases with `node --test --test-name-pattern '<exact-case-name>' <test-file>` from the Kit checkout. For deployed copies of shipped cases, run the same case from `<trial-checkout>/scripts/<file>` after its deployed walkthrough and approval. Kit installation/transport cases remain local mechanism checks; repeat their actual hosted actions separately. A local transport fixture or an example Enterprise URL is never a deployed-host result.
+- **Deployed:** upgrade the existing private [source graph trial](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103) through a PR, then run the walkthroughs against its deployed installed scripts and GitHub-rendered documents. Record trial PRs, source/document commits, both Actions checks and required-check configuration. Repeat hosted retention after actual squash and rebase merges and source-branch deletion on disposable trial branches. Preserve unrelated required contexts. The separate, explicitly approved private [JEPA readability trial](https://github.com/jamiemitchellconsultants/ontology-readable-jepa-trial-20261104) records readability and an accuracy judgement for every pinned pilot claim. Only its graph, ontology, covered source/test projects and installed Kit were copied; the original adopter repository was not changed. A GitHub Enterprise trial needs a named real host/repository before it can pass.
+- **Approved executable cases:** existing build cases are reused below. Run individual cases with `node --test --test-name-pattern '<exact-case-name>' <test-file>` from the Kit checkout. For the installer case, set `SOURCE_GRAPH_ACCEPTANCE_SCRIPT_ROOT=<trial-checkout>/scripts` to execute the deployed modules in the independently configured installation fixture. For deployed copies of shipped cases, run the same case from `<trial-checkout>/scripts/<file>` after its deployed walkthrough and approval. Kit installation/transport cases remain local mechanism checks; repeat their actual hosted actions separately. A local transport fixture or an example Enterprise URL is never a deployed-host result.
 
 ## Walkthroughs
 
@@ -93,6 +93,7 @@ Every behaviour maps to existing executable scenarios; no duplicate implementati
 | M2 | [source-graph-markdown.test.mjs](../../../templates/scripts/source-graph-markdown.test.mjs) | B2: supplied markup is text and used local relationship meaning remains accessible |
 | M3 | [source-graph-markdown.test.mjs](../../../templates/scripts/source-graph-markdown.test.mjs) | B3: an empty valid graph produces a document with limits, not fabricated relationships |
 | M4 | [source-graph-markdown.test.mjs](../../../templates/scripts/source-graph-markdown.test.mjs) | B4/B6/B7: source destinations remain immutable after branch advancement and encode paths |
+| M5 | [source-graph-markdown.test.mjs](../../../templates/scripts/source-graph-markdown.test.mjs) | B4: Markdown evidence opens source view with its pinned line range |
 | P1 | [source-graph-model.test.mjs](../../../templates/scripts/source-graph-model.test.mjs) | the highest priority wins, equal priority with different status conflicts, unmatched is unknown |
 | C1 | [render-source-graph.test.mjs](../../../templates/scripts/render-source-graph.test.mjs) | B10/B11: source then document commits, staged check, source reuse and historical checks |
 | C2 | [render-source-graph.test.mjs](../../../templates/scripts/render-source-graph.test.mjs) | B12: a changed valid graph replaces current state and an old-source check fails stale |
@@ -108,7 +109,7 @@ Every behaviour maps to existing executable scenarios; no duplicate implementati
 | B1 | M1 | Pilot's 12 claims and maintainer readability judgement |
 | B2 | M1, M2 | Actual browser rendering and local vocabulary meaning |
 | B3 | M1, M3 | Isolated and empty graph reading |
-| B4 | M1, M4 | Every pilot evidence link, including actual hosted navigation |
+| B4 | M1, M4, M5 | Every pilot evidence link, including actual hosted navigation |
 | B5 | M1 | Reader's inference and accuracy distinction |
 | B6 | M4, W1, W2 | Real squash/rebase/deletion retrieval and permalink retention per host |
 | B7 | M1, M4 | Exact Turtle navigation for every pilot assertion |
@@ -122,24 +123,26 @@ Every behaviour maps to existing executable scenarios; no duplicate implementati
 
 ## Results as of 2026-11-04
 
-Codex followed the local command/source-inspection portions of the walkthroughs below. Pending cells are intentional, not inferred passes. These observations do not complete browser rendering, maintainer acceptance, approved executable runs or deployed navigation. A step's hosted-only actions remain in the deployed column.
+Codex acted as user under the owner's explicit authorization, followed each numbered walkthrough, reviewed and approved its mapped executable cases, and recorded the observations below on 2026-11-04. Local execution used the merged Kit; deployed execution used installed copies and actual GitHub pages/checks. Local counterparts of host-specific steps use the transport fixture; the literal hosted steps were also run on GitHub. All expected negative cases failed safely. Scope: GitHub on the trial repositories named here; Enterprise URL construction and configuration passed locally, but no live Enterprise environment was available.
 
-| Behaviour | Local walkthrough steps | Local approval / executable result | Deployed walkthrough steps | Deployed approval / executable result | Walkthrough person and date |
+| Behaviour | Local walkthrough steps | Local executable result | Deployed walkthrough steps | Deployed executable result | Person/date and evidence |
 | --- | --- | --- | --- | --- | --- |
-| B1 | 1 pass; 2 fidelity pass, maintainer judgement pending | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E3, E4 |
-| B2 | escaped text/local meaning pass; shared source references pass; browser rendering pending | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E4 |
-| B3 | pass / pass | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E4 |
-| B4 | pass / local source inspection pass | Codex approved / pass (E11) | 1 inspected; 2 FAIL: Markdown evidence range has no target | not run after failure | Codex, 2026-11-04; E3, E4, E12 |
-| B5 | pass / pass | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E4, E10 |
-| B6 | 1 local historical inspection pass; 2 hosted-only actions pending in deployed column | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E6 |
-| B7 | pass / local source lookup pass | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E3, E4 |
-| B8 | pass / pass | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E4 |
-| B9 | pass / pass | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E4 |
-| B10 | pass / local committed check pass; hosted-only actions pending in deployed column | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E5 |
-| B11 | pass / pass | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E5 |
-| B12 | pass / pass | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E7 |
-| B13 | pass / pass | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E8 |
-| B14 | pass / pass (local URL construction; no Enterprise host result) | Codex approved / pass (E11) | pending / pending | pending / pending | Codex, 2026-11-04; E9 |
+| B1 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E15, E17 |
+| B2 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E17 |
+| B3 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E17 |
+| B4 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E15, E17 |
+| B5 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E10, E19 |
+| B6 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E16, E19 |
+| B7 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E15, E17 |
+| B8 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E17, E21 |
+| B9 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E17, E21 |
+| B10 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E14 |
+| B11 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E18 |
+| B12 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E19 |
+| B13 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E20 |
+| B14 | pass / pass | Codex approved; pass (E13) | pass / pass | Codex approved; pass (E13) | Codex; 2026-11-04; E21 |
+
+The B6 local result includes its local transport counterpart; E16 records the real squash/rebase/deletion trials. The B14 deployed result covers the published GitHub configurations and installed module contract; it does not claim live Enterprise navigation.
 
 ### Preliminary evidence
 
@@ -154,7 +157,7 @@ Codex followed the local command/source-inspection portions of the walkthroughs 
 - **E9 — local alternate adopter:** source `328390bdeba4c8b9cc7ace14e89ac5bb624d8217` uses a custom namespace, `knowledge` root, `knowledge/current.md` and an example Enterprise browser URL. Generation, staged/committed checks and terminology validation passed; document commit is `89f1ca73ebba8e2bc37c668bd1c1d0c1b37ed397`. Ordinary `--force` upgrade preserved configuration, canonical graph files, generated output and an authored README. The three installed renderer modules compared byte-identical to the Kit templates. The post-upgrade check passed. No request was made to the example host.
 - **E10 — meaningful local inference:** the supplementary `inference` repository's source `77451bacf9460f38fcb9a1ce1ec7db6d3a276e09` contains an actual `ledger.Record(invoice)` call at `src/Invoice.cs:3`. Its one recorded component-communication claim is inferred and cites that line. Codex read the generated tentative label, the exact source observation, the Turtle resource and the human-review notice. The method call supports an inference about communication; it is not direct proof of the complete component relationship or runtime topology. The separate sample supplies observed source content without changing the all-direct JEPA-Speech pilot.
 
-Before completing this phase, replace pending cells with observed results and link durable deployed evidence. For each pilot assertion record the maintainer's accuracy judgement and rationale. For each hosted retention trial record the host, merge method, source SHA, document SHA, deleted trial branch, fresh-clone fetch/check result and reopened permalinks. Obtain a real Enterprise environment or explicitly record its acceptance limitation; do not mark an example URL as a deployed pass. Do not tick the local/deployed criteria or close issue #68 while required acceptance is pending.
+The following failure is retained as the earlier observed result. The resumed results and evidence follow it.
 
 ## Authorized acceptance execution and failure
 
@@ -167,3 +170,56 @@ On 2026-11-04 the owner explicitly authorized Codex to act as user, approve each
 3. Stop and raise pushback to dev-build. Both required-check configuration, fresh-clone retrieval, rebase retention, the full deployed behaviour set and the JEPA-Speech hosted trial remain unfinished. No Enterprise environment was supplied or claimed as accepted. Do not close the phase issue or mark the feature accepted.
 
 ![Markdown evidence opens Preview without the cited source-line target](evidence/markdown-evidence-preview.png)
+
+## Resumed acceptance after PR #79
+
+**E13 — approved executable runs:** after reading the completed walkthrough outcomes, Codex approved the existing mapped cases plus M5. The local five-file command in E11 passed **24/24** with the new Markdown source-view regression. The deployed installed model/Markdown/CLI test files passed **17/17**; I1 passed **1/1** with `SOURCE_GRAPH_ACCEPTANCE_SCRIPT_ROOT=/private/tmp/readable-accepted-trial-20261104/scripts`. That override copies the deployed scripts into the test installation; its existing byte-identity checks and CLI assertions then exercise those modules. W1–W3 remain local transport/workflow mechanism tests, supplemented by actual SHA inspection, remote retrieval and freshness-check execution in E16. Full repository validation on the merged fix passed 457 tests; final validation for this acceptance change is recorded in its PR.
+
+**E14 — live checks and branch protection:** [trial PR #19](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/pull/19) deployed the fixed renderer, a priority-0 unknown catch-all and regenerated Markdown. Its [Markdown check](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/actions/runs/41776563653), graph check and term check passed. The [default-branch Markdown check](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/actions/runs/41776836913) passed after rebase merge. Branch protection preserves `source-graph` and additionally requires `source-graph-markdown`; both remain associated with the GitHub Actions app. [Trial PR #20](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/pull/20) deliberately appended stale text. Its [Markdown check failed](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/actions/runs/41777133762) while graph and term checks passed, and GitHub reported BLOCKED. Regeneration removed the deliberate stale text; the [new Markdown run passed](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/actions/runs/41777280641) and GitHub reported CLEAN. This expected failure and restoration changed only disposable trial data.
+
+![Fixed source view highlights the cited Markdown lines](evidence/markdown-evidence-source-view.png)
+
+**E15 — real-data readability and all source routes:** the specifically approved private [JEPA trial document](https://github.com/jamiemitchellconsultants/ontology-readable-jepa-trial-20261104/blob/748ad8ac93b095dcad8d0fd17ddfd822d3b0a298/docs/source-knowledge-graph/README.md) contains the pinned pilot's 12 assertions. Source is `38ca007a7699aaeb4f0c96da774193a3fd620932`. Canonical graph, ontology and covered source bytes match the original pilot; repository URL and installed tooling prepare the isolated trial. Codex read all 12 ordinary claim sentences without decoding Turtle, compared their direction/names/basis, and followed **all 12 evidence links and all 12 Turtle links** in Chrome. Each destination selected its exact cited source-line start/end, including ontology Markdown lines 86 and 87 with `plain=1`. The browser checks waited for selected source lines after GitHub finished loading. The [deployed Markdown workflow](https://github.com/jamiemitchellconsultants/ontology-readable-jepa-trial-20261104/actions/runs/41776751339), graph workflow and term workflow all passed. The 12 claim judgements below record what the acting maintainer could assess; they do not turn structural validity into semantic approval.
+
+| Assertion | Acting maintainer judgement | Evidence assessment |
+| --- | --- | --- |
+| :assertion-app-depends-domain | supported | The application project reference identifies the domain project. |
+| :assertion-apptests-depend-app | supported | The test project references the application project. |
+| :assertion-audit-documented | supported | The ontology row describes the named audit concept. |
+| :assertion-audit-implemented | supported | The cited record defines the named audit structure. |
+| :assertion-audit-tested | supported | The cited test exercises audit validation and forbidden material. |
+| :assertion-reason-implemented | supported | The cited enum declares the removal reasons. |
+| :assertion-removal-documented | supported | The ontology row defines the removal concept. |
+| :assertion-removal-implemented | supported | The cited record and transitions implement the removal state. |
+| :assertion-removal-tested | supported | The cited test exercises forward and terminal-state transitions. |
+| :assertion-state-implemented | supported | The cited enum declares the removal states. |
+| :assertion-usecase-removal | needs broader source review | Its one-line method signature shows the concept in the use case but gives less evidence of implementation than the operation body. The view makes that limitation directly inspectable. |
+| :assertion-usecase-tested | supported | The cited test constructs the use case, invokes removal and checks audit/removal outcomes. |
+
+Codex's readability judgement: all 12 claims can be read and investigated from their sentences and source links; one weak evidence range can be identified without first interpreting the graph serialization. The trial measures the ability to assess accuracy, not a guarantee that each pilot claim must be approved.
+
+**E16 — actual host retention:** the following fresh clones used only the default branch. In each, the original pinned source object was initially absent. `--print-source-rev --rev HEAD` supplied its SHA; `git fetch --no-tags origin <source-sha>` retrieved it from the fixed repository remote, then the real `--check` passed. Old evidence permalinks remained available in Chrome. Observations apply to GitHub on 2026-11-04, not indefinite retention or an untested host.
+
+| Trial | Original source S | Document D | Merge result | Branch state and retrieval |
+| --- | --- | --- | --- | --- |
+| Squash, PR #18 | 92e110992ff9c7335394a1f803daca4649758abe | cd27c5ac068b901dcd45d08c4a51c0520a031543 | fb54210671597809fbd3e37d93a948d1ad6d7ebe | disposable source branch deleted; fresh clone initially lacked S; SHA fetch and check passed |
+| Rebase, PR #19 | 3da745336a6fb483d7b9c15ec7551b4829c56feb | 74fff88562fd2ac6fce960861777804f11867ecc | 65e625f8814eb2fe5f54cf8d57d8d487f5721a23 | disposable source branch deleted; fresh clone initially lacked S; SHA fetch and check passed |
+
+**E17 — hosted supplementary views:** each fixture used the same installed scripts and independently validated committed inputs; source then document commits were published on disposable fixture branches. These branches are data fixtures, not changes proposed against the adopter's main graph. Codex read the actual GitHub-rendered content. The rich view retains six directed claims across two shards, two equally labelled distinct nodes, an isolated node, and two evidence references on one claim. All **13** evidence/Turtle routes selected their cited source lines. The markup view displays literal special characters and its declared relationship meaning. The empty view preserves coverage and states that missing knowledge is not proof of absence. The alternate view uses its own root/output/namespace. Covered, unknown and excluded priorities/reasons remain visible; reader coverage queries confirmed their precedence and unmatched-path behavior.
+
+| Fixture | Published document | Source commit |
+| --- | --- | --- |
+| Rich | [six-claim view](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/blob/6792017bdbe89277f61ca1e11184c0a226ab4006/docs/source-knowledge-graph/README.md) | 6b8b1b4e57b2f47a7954453451ea4d07c03464e4 |
+| Markup/local vocabulary | [escaped-text view](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/blob/ac796c60637fc62692af03a1f76767a6863a98f7/docs/source-knowledge-graph/README.md) | 00ebbf1f57a605528195bf75081159552e653c36 |
+| Empty | [empty view](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/blob/8b0d6892ba8ba58a3c5544067972a8b4fcb41321/docs/source-knowledge-graph/README.md) | fe3890abf900ca5f38e97ede64e512a725001b0c |
+| Alternate | [custom-root view](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/blob/063aa2eab3937aeebc42849586485dc316d70149/knowledge/current.md) | ab2acbdd5d9e4bbdba4cd0ac90fe65f04498053a |
+
+**E18 — deployed-copy repeatability:** repeating generation and then regenerating after an unrelated document commit retained source `4aa82249a7299a25666ae896f30006f1eb9c66c5`. The three observed output SHA-256 values were identical: `4020bc3637c1973eee69306349f3f2651b4f41ae6981aa2789da67fcc04300f4`. Canonical inputs were unchanged; no execution metadata appeared.
+
+**E19 — replacement and branch advancement:** [trial PR #21](https://github.com/jamiemitchellconsultants/ontology-source-graph-trial-20261103/pull/21) advanced covered source with a comment-only change, refreshed blobs/review records, removed the dependency assertion, narrowed the inferred observation to its actual call line and changed an unknown-scope reason. Source is `4aa82249a7299a25666ae896f30006f1eb9c66c5`, document `9c1b674abd8925a340689cdc192f1e12829c9941`. The old view failed freshness with exit 1, then regeneration/staged checks passed. The browser-rendered replacement showed exactly four current claims and the updated evidence/scope, with no change report. Both live graph and Markdown checks passed. Opening the original pinned source still showed the old bytes while the new source showed the later comment. Its real inferred claim cites the observed ledger call and remains labelled tentative; the review notice leaves accuracy judgement with the maintainer.
+
+**E20 — safe failure in a deployed-copy clone:** stale evidence, malformed manifest, valid but uncommitted staged input, and unavailable source each exited 2 with a named reason and preserved the successful document. An authored destination was refused intact; a symlinked destination was refused while the outside sentinel remained unchanged. All six preservation comparisons were true. Empty/partial graphs still passed in E17. These are expected negative tests of failure handling. The execution record is in [deployed operations evidence](evidence/deployed-operations.json).
+
+**E21 — deployed alternate configuration and upgrade:** the published alternate fixture uses `knowledge/current.md` and a distinct namespace, while the JEPA and Python trial repositories use their own default roots and namespaces. The same installed command generated and checked each view without script edits. Ordinary upgrade preserved config, graph files, generated output and an authored README; 22 installed script/test files compared byte-identical to current Kit templates. The alternate view passed freshness and the term check afterward; an unmatched path remained unknown. I1 passed with the deployed script-root override. The example Enterprise browser-base configuration passed I1 locally; actual Enterprise navigation/retention was not run because no such host was supplied.
+
+The approved GitHub acceptance is complete. Keep the private trial repositories and referenced commits as review evidence. The original B4 failure remains part of the record; PR #79 and these reruns resolve it. Parent feature #62 closes only after the user-phase PR is reviewed/merged and feature status reports all phases done.

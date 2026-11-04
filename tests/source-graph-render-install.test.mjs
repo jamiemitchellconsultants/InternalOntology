@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { install, buildPlan } from '../bin/install-ontology.mjs';
 import { withScratchRepo, seedRenderRepo } from '../templates/scripts/source-graph-render-test-helpers.mjs';
@@ -31,6 +31,9 @@ test('installed alternate-root/namespace/Enterprise configuration generates, che
   await withScratchRepo(async r => {
     const root = 'knowledge', repositoryUrl = 'https://git.example.test/team/other';
     install({ target: r.dir, projectName: 'Widgets', withSourceGraph: true, sourceGraphRoot: root });
+    if (process.env.SOURCE_GRAPH_ACCEPTANCE_SCRIPT_ROOT) {
+      cpSync(process.env.SOURCE_GRAPH_ACCEPTANCE_SCRIPT_ROOT, join(r.dir, 'scripts'), { recursive: true });
+    }
     const f = seedRenderRepo(r, { root, repositoryUrl, markdownPath: `${root}/current.md`, namespace: 'https://example.test/custom#',
       afterWrite(repo) { repo.write('docs/ontology.md', '# Widgets — Application Ontology\n\n## Entities\n\n| Name | Description |\n| --- | --- |\n| `Invoice` | Invoice |\n'); } });
     for (const name of modules) assert.equal(readFileSync(join(r.dir, `scripts/${name}.mjs`), 'utf8'),
