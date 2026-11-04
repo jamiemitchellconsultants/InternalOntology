@@ -95,14 +95,17 @@ export function buildPlan(options) {
 
   if (options.withSourceGraph) {
     const root = options.sourceGraphRoot ?? "docs/source-knowledge-graph";
-    for (const name of ["source-graph-turtle", "source-graph-git", "source-graph-model", "check-source-graph", "query-source-graph"]) {
+    for (const name of ["source-graph-turtle", "source-graph-git", "source-graph-model", "check-source-graph", "query-source-graph",
+      "source-graph-render-input", "source-graph-markdown", "render-source-graph"]) {
       for (const suffix of [".mjs", ".test.mjs"]) {
         const path = `scripts/${name}${suffix}`;
         plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
       }
     }
     plan.push({ template: "scripts/source-graph-test-helpers.mjs", dest: "scripts/source-graph-test-helpers.mjs", substitute: false, ownedBy: "kit" },
+      { template: "scripts/source-graph-render-test-helpers.mjs", dest: "scripts/source-graph-render-test-helpers.mjs", substitute: false, ownedBy: "kit" },
       { template: "github/workflows/source-graph-check.yml", dest: ".github/workflows/source-graph-check.yml", substitute: true, ownedBy: "kit" },
+      { template: "github/workflows/source-graph-render.yml", dest: ".github/workflows/source-graph-render.yml", substitute: true, ownedBy: "kit" },
       { template: "docs/source-knowledge-graph.md", dest: "docs/source-knowledge-graph.md", substitute: true, ownedBy: "kit" },
       { template: "source-graph/graph-schema.ttl", dest: `${root}/graph-schema.ttl`, substitute: false, ownedBy: "kit" },
       ...["manifest.ttl", "nodes.ttl"].map((name) => ({ template: `source-graph/${name}`, dest: `${root}/${name}`, substitute: true, ownedBy: "adopter" })));
@@ -454,7 +457,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       console.log("Next: run `node scripts/build-ontology.mjs` to create ontology.ttl, then fill it in.");
       console.log("The skills/ontology-setup skill can seed the ontology from this repository's own docs and code.");
       if (result.configNotice) console.log(result.configNotice);
-      if (options.withSourceGraph) console.log("Commit docs/ontology.ttl first (`node scripts/build-ontology.mjs`); the graph check requires it.");
+      if (options.withSourceGraph) {
+        console.log("Commit docs/ontology.ttl first (`node scripts/build-ontology.mjs`); the graph check requires it.");
+        console.log("Set sourceGraph.repositoryUrl in ontology.config.json to this repository's HTTPS browser URL (owner/repository).");
+        console.log("Then commit the canonical source, run `node scripts/render-source-graph.mjs`, review and stage the generated Markdown, and commit it in the same PR. See docs/source-knowledge-graph.md.");
+      }
     }
   } catch (error) {
     console.error(`ontology kit: ${error instanceof Error ? error.message : error}`);

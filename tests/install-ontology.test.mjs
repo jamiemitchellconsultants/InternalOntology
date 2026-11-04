@@ -586,6 +586,9 @@ test("--with-source-graph adds scripts, tests, helper, workflow, schema, runbook
     "scripts/source-graph-turtle.mjs", "scripts/source-graph-git.mjs", "scripts/source-graph-model.mjs",
     "scripts/check-source-graph.mjs", "scripts/query-source-graph.mjs", "scripts/source-graph-test-helpers.mjs",
     "scripts/check-source-graph.test.mjs", "scripts/query-source-graph.test.mjs",
+    "scripts/source-graph-render-input.mjs", "scripts/source-graph-markdown.mjs", "scripts/render-source-graph.mjs",
+    "scripts/source-graph-render-input.test.mjs", "scripts/source-graph-markdown.test.mjs", "scripts/render-source-graph.test.mjs",
+    "scripts/source-graph-render-test-helpers.mjs", ".github/workflows/source-graph-render.yml",
     ".github/workflows/source-graph-check.yml", "docs/source-knowledge-graph.md",
     "docs/source-knowledge-graph/graph-schema.ttl", "docs/source-knowledge-graph/manifest.ttl",
     "docs/source-knowledge-graph/nodes.ttl",
@@ -612,7 +615,8 @@ test("--source-graph-root moves the graph files and rejects an unsafe root", asy
 test("installed graph scripts are byte-identical to the templates and the fresh config validates", async () => {
   await withTempRepo(async (repo) => {
     const result = install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
-    for (const name of ["check-source-graph", "query-source-graph", "source-graph-model", "source-graph-git", "source-graph-turtle"]) {
+    for (const name of ["check-source-graph", "query-source-graph", "source-graph-model", "source-graph-git", "source-graph-turtle",
+      "source-graph-render-input", "source-graph-markdown", "render-source-graph", "source-graph-render-test-helpers"]) {
       const rel = `scripts/${name}.mjs`;
       assert.equal(readFileSync(join(repo.dir, rel), "utf8"),
         readFileSync(fileURLToPath(new URL(`../templates/${rel}`, import.meta.url)), "utf8"));
@@ -683,6 +687,18 @@ test("the workflow is read-only, secretless, full-history and passes the base th
 test("source graph CLI options enable the feature", () => {
   assert.equal(parseCliArgs(["--target", "x", "--with-source-graph"]).withSourceGraph, true);
   assert.equal(parseCliArgs(["--target", "x", "--source-graph-root", "g"]).withSourceGraph, true);
+});
+
+test("source graph installation prints URL configuration and the same-PR authoring sequence", async () => {
+  await withTempRepo(async (repo) => {
+    const stdout = execFileSync("node", [CLI, "--target", repo.dir, "--project-name", "Widgets", "--with-source-graph"], { encoding: "utf8" });
+    assert.match(stdout, /sourceGraph\.repositoryUrl/);
+    assert.match(stdout, /commit.*source.*render-source-graph\.mjs/i);
+    assert.match(stdout, /same PR/);
+    const workflow = readFileSync(join(repo.dir, ".github/workflows/source-graph-render.yml"), "utf8");
+    assert.match(workflow, /branches: \["main"\]/);
+    assert.doesNotMatch(workflow, /\{\{DEFAULT_BRANCH\}\}/);
+  });
 });
 
 test("--reset-content replaces an existing config with the graph-enabled starter", async () => {
