@@ -39,6 +39,7 @@ by rewriting the original.
 | [23](#entry-analyst-behaviours-human-readable-source-knowledge-graph) | 2026-11-03 | [Analyst] Behaviours: human-readable source knowledge graph | product | Define fourteen behaviours for a faithful current-state Markdown document with readable recorded names, accessible evidence at the input snapshot, clear direct or inferred basis, unambiguous references back to Turtle, and explicit… |
 | [24](#entry-architect-structure-human-readable-source-knowledge-graph) | 2026-11-03 | [Architect] Structure: human-readable source knowledge graph | product | Keep generated Markdown with the source PR, defaulting to a README inside the excluded graph root, and use a read-only freshness workflow ([ADR… |
 | [25](#entry-dev-plan-human-readable-source-knowledge-graph) | 2026-11-03 | [Dev] Plan: human-readable source knowledge graph | product | Plan six sequential reviewable tasks using three runtime files inside the existing renderer component. Reuse the graph parser/model/checker and shipped widgets fixtures. |
+| [26](#entry-feat-readable-current-state-source-knowledge-graph) | 2026-11-04 | feat: readable current-state source knowledge graph | product | Implement the accepted current-state Markdown projection in the repository and include it with canonical graph changes in the same PR. |
 
 ---
 
@@ -601,3 +602,23 @@ Plan six sequential reviewable tasks using three runtime files inside the existi
 ## Consequences
 
 Another agent can execute the detailed contracts after this plan PR is reviewed and merged. Native or subagent-driven execution remains an owner choice. Existing fixture namespace changes must refresh covered ontology records before serialization; correctness tests must verify each claim rather than aggregate text occurrence. Human readability trials, real hosted link navigation, GitHub/Enterprise source retention and required-check acceptance remain in the user phase. This PR does not start the build.
+
+---
+
+<a id="entry-feat-readable-current-state-source-knowledge-graph"></a>
+
+## Entry 26 — 2026-11-04 — feat: readable current-state source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The first live source graph use in JEPA-Speech showed that Turtle structure obscures the meaningful claims maintainers need to assess.
+
+## Decision
+
+Implement the accepted current-state Markdown projection in the repository and include it with canonical graph changes in the same PR. Pin every evidence and Turtle link to a validated source commit, and check exact rendering in read-only CI.
+
+## Consequences
+
+Maintainers review readable claims and evidence before merge. Authors commit canonical inputs before generating and committing the view. The renderer remains offline; checkout preparation retrieves a missing retained source snapshot. Structural validation does not establish semantic accuracy.
