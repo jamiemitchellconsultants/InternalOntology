@@ -1,0 +1,190 @@
+{
+  "repeatHashes": [
+    "4020bc3637c1973eee69306349f3f2651b4f41ae6981aa2789da67fcc04300f4",
+    "4020bc3637c1973eee69306349f3f2651b4f41ae6981aa2789da67fcc04300f4",
+    "4020bc3637c1973eee69306349f3f2651b4f41ae6981aa2789da67fcc04300f4"
+  ],
+  "events": [
+    {
+      "command": [
+        "node",
+        "scripts/render-source-graph.mjs"
+      ],
+      "exit": 0,
+      "output": "generated docs/source-knowledge-graph/README.md from source 4aa82249a7299a25666ae896f30006f1eb9c66c5; stage the document before committing"
+    },
+    {
+      "command": [
+        "git",
+        "add",
+        "acceptance-unrelated.md"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--cached",
+        "--name-only"
+      ],
+      "exit": 0,
+      "output": "acceptance-unrelated.md"
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--cached"
+      ],
+      "exit": 0,
+      "output": "diff --git a/acceptance-unrelated.md b/acceptance-unrelated.md\nnew file mode 100644\nindex 0000000..44359f8\n--- /dev/null\n+++ b/acceptance-unrelated.md\n@@ -0,0 +1 @@\n+Unrelated acceptance note."
+    },
+    {
+      "command": [
+        "node",
+        "scripts/check-ontology-terms.mjs"
+      ],
+      "exit": 0,
+      "output": "ontology term check: OK \u2014 6 files checked against 5 canonical terms"
+    },
+    {
+      "command": [
+        "git",
+        "commit",
+        "-qm",
+        "test: unrelated deployed-copy change"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "node",
+        "scripts/render-source-graph.mjs"
+      ],
+      "exit": 0,
+      "output": "generated docs/source-knowledge-graph/README.md from source 4aa82249a7299a25666ae896f30006f1eb9c66c5; stage the document before committing"
+    },
+    {
+      "command": [
+        "git",
+        "add",
+        "src/invoice.py"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "node",
+        "scripts/render-source-graph.mjs"
+      ],
+      "exit": 2,
+      "output": "source graph Markdown: docs/source-knowledge-graph/assertions/invoice.ttl: :evidence-implementation: evidence-blob-mismatch: src/invoice.py expected blob e03f48666c3f8bfcae28dd199f09f44183a8355a, cited 6c86372177161d46737252229e35611311c94073\ndocs/source-knowledge-graph/assertions/invoice.ttl: :evidence-implementation: evidence-range: src/invoice.py has invalid line range 16-19\ndocs/source-knowledge-graph/assertions/invoice.ttl: :evidence-observation: evidence-blob-mismatch: src/invoice.py expected blob e03f48666c3f8bfcae28dd199f09f44183a8355a, cited 6c86372177161d46737252229e35611311c94073\ndocs/source-knowledge-graph/assertions/invoice.ttl: :evidence-observation: evidence-range: src/invoice.py has invalid line range 19-19\ndocs/source-knowledge-graph/manifest.ttl: :refresh-b47ff075cf12: refresh-stale: src/invoice.py requires kit:blobId e03f48666c3f8bfcae28dd199f09f44183a8355a",
+      "preserved": true
+    },
+    {
+      "command": [
+        "git",
+        "restore",
+        "--staged",
+        "--worktree",
+        "--",
+        "src/invoice.py"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "git",
+        "add",
+        "docs/source-knowledge-graph/manifest.ttl"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "node",
+        "scripts/render-source-graph.mjs"
+      ],
+      "exit": 2,
+      "output": "source graph Markdown: docs/source-knowledge-graph: : graph-resource-count: expected one graph resource, got 0\ndocs/source-knowledge-graph: : root-not-excluded: graph root is not excluded\ndocs/source-knowledge-graph/assertions/invoice.ttl: : root-not-excluded: docs/source-knowledge-graph/assertions/invoice.ttl is not excluded\ndocs/source-knowledge-graph/assertions/invoice.ttl: :evidence-dependency: evidence-out-of-coverage: pyproject.toml is outside coverage\ndocs/source-knowledge-graph/assertions/invoice.ttl: :evidence-design: evidence-out-of-coverage: docs/design.md is outside coverage\ndocs/source-knowledge-graph/assertions/invoice.ttl: :evidence-implementation: evidence-out-of-coverage: src/invoice.py is outside coverage\ndocs/source-knowledge-graph/assertions/invoice.ttl: :evidence-observation: evidence-out-of-coverage: src/invoice.py is outside coverage\ndocs/source-knowledge-graph/assertions/invoice.ttl: :evidence-test: evidence-out-of-coverage: tests/test_invoice.py is outside coverage\ndocs/source-knowledge-graph/graph-schema.ttl: : root-not-excluded: docs/source-knowledge-graph/graph-schema.ttl is not excluded\ndocs/source-knowledge-graph/manifest.ttl: : root-not-excluded: docs/source-knowledge-graph/manifest.ttl is not excluded\ndocs/source-knowledge-graph/manifest.ttl: : turtle-syntax: expected default prefix\ndocs/source-knowledge-graph/nodes.ttl: : root-not-excluded: docs/source-knowledge-graph/nodes.ttl is not excluded\ndocs/source-knowledge-graph/README.md: : root-not-excluded: docs/source-knowledge-graph/README.md is not excluded",
+      "preserved": true
+    },
+    {
+      "command": [
+        "git",
+        "restore",
+        "--staged",
+        "--worktree",
+        "--",
+        "docs/source-knowledge-graph/manifest.ttl"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "git",
+        "add",
+        "docs/ontology.md"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "node",
+        "scripts/render-source-graph.mjs"
+      ],
+      "exit": 2,
+      "output": "source graph Markdown: staged source input differs from HEAD. Commit canonical source changes, then run node scripts/render-source-graph.mjs and stage the generated Markdown in the same PR.",
+      "preserved": true
+    },
+    {
+      "command": [
+        "git",
+        "restore",
+        "--staged",
+        "--worktree",
+        "--",
+        "docs/ontology.md"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "node",
+        "scripts/render-source-graph.mjs",
+        "--source-rev",
+        "0000000000000000000000000000000000000000"
+      ],
+      "exit": 2,
+      "output": "source graph Markdown: source snapshot 0000000000000000000000000000000000000000 is unavailable; retrieve it during preparation or use --source-rev HEAD",
+      "preserved": true
+    },
+    {
+      "command": [
+        "node",
+        "scripts/render-source-graph.mjs"
+      ],
+      "exit": 2,
+      "output": "source graph Markdown: preserving unmarked authored file docs/source-knowledge-graph/README.md; select another sourceGraph.markdownPath",
+      "preserved": true
+    },
+    {
+      "command": [
+        "node",
+        "scripts/render-source-graph.mjs"
+      ],
+      "exit": 2,
+      "output": "source graph Markdown: output path traverses a symbolic link: docs/source-knowledge-graph/README.md",
+      "preserved": true
+    }
+  ]
+}

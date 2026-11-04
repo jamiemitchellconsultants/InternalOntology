@@ -48,6 +48,8 @@ Internal components that are ours to build. Named so that specs can describe the
 | `GraphReader` | kit-owned local reader script | Finds nodes, assertions, bounded paths, evidence, and coverage in a `SourceKnowledgeGraph` at a named Git revision. Reports gaps and stale results without creating new assertions. | Reads adopter-owned graph files and local Git objects; produces grounded query results for an agent or downstream consumer. |
 | `GraphChecker` | kit-owned local checker script | Deterministically validates graph structure, evidence locations, declared coverage, and review of covered file changes before a pull request merges. | Reads adopter-owned graph data, `OntologyConfig`, and local base and proposed Git trees; reports failures without judging semantic truth. |
 | `GraphCheckWorkflow` | kit-owned pull-request and default-branch workflow | Runs `GraphChecker` with read-only access to the checked-out Git history and publishes a stable check result. | Reads graph data and Git trees after checkout; has no model, secret, or post-checkout network requirement. |
+| `GraphRenderer` | kit-owned local Markdown generation script | Renders every current graph claim, evidence reference, basis and coverage declaration into a deterministic human-readable document after validating one Git input snapshot. | Reads `SourceKnowledgeGraph`, `OntologyConfig` and local Git objects through the existing graph model and `GraphChecker`; writes only the generated Markdown view or checks its freshness. |
+| `GraphRenderWorkflow` | kit-owned pull-request and default-branch workflow | Regenerates the expected readable graph view and checks that the same revision contains matching Markdown, so maintainers can review it with the source changes. | Runs `GraphRenderer` with read-only repository permission; publishes a freshness result and makes no commits or changes to canonical Turtle. |
 
 ---
 
@@ -57,7 +59,7 @@ Internal components that are ours to build. Named so that specs can describe the
 |------|------------|-------------|
 | `TargetRepository` | `path` | The git repository (must already contain `.git`) the `Installer` writes into. Identity persists across repeated installs and upgrades of the same repository. |
 | `Ontology` | `ontologyPath`, one Markdown table per section | The canonical vocabulary document a `TargetRepository` maintains (`docs/ontology.md` by default). Identity persists as sections and rows are added, renamed, or removed over the repository's life; this file, in this repository, is one instance of it. |
-| `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths`, optional `semanticReview`, optional `sourceGraph` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific settings through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. The `semanticReview` settings are read from the trusted default branch, not an unmerged PR. The optional `sourceGraph` settings locate adopter-owned graph data and select eligible evidence roles. |
+| `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths`, optional `semanticReview`, optional `sourceGraph` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific settings through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. The `semanticReview` settings are read from the trusted default branch, not an unmerged PR. The optional `sourceGraph` settings locate adopter-owned graph data, select eligible evidence roles, and configure a repository browser URL and optional generated Markdown path within the excluded graph root. |
 | `SourceKnowledgeGraph` | source repository, effective Git revision, Turtle resources for assertions, declared coverage, file review records | A reviewable, versioned account of repository facts and clearly marked inferences that extends beyond the canonical vocabulary in `Ontology`. It is stored as Turtle with the source repository; its effective revision is the Git commit containing it, not a hash embedded in its own files. An agent prepares it before a pull request; its assertions ground later agent work and may support downstream views. Missing coverage is explicit. |
 | `GraphNode` | stable identity, kind, label, canonical ontology IRI when kind is concept | A repository concept, source element, dependency, or other subject or object named by a `GraphAssertion`. A concept node links to its canonical `Ontology` IRI instead of reusing the ontology class IRI as a graph node. Its identity remains stable when a label or source location changes. |
 | `GraphAssertion` | stable identity, subject, relationship, object, basis, evidence | One reviewable claim in a `SourceKnowledgeGraph` about a repository fact or relationship. Its basis distinguishes a directly evidenced claim from an inference supported by source observations. Its identity persists when the same claim is refreshed at a later source revision. |
@@ -110,6 +112,7 @@ enum lock test catches.
 | `RefreshSourceKnowledgeGraph` | AI agent, before a pull request | Review changed files within declared `GraphCoverage` and update the proposed `SourceKnowledgeGraph` or record that its existing assertions still hold. |
 | `CheckSourceKnowledgeGraph` | CI, on a pull request | Deterministically check the proposed `SourceKnowledgeGraph` and whether changed files in declared `GraphCoverage` were reviewed before merge; leave semantic truth to maintainers. |
 | `GroundWithSourceKnowledgeGraph` | AI coding agent | Find relevant `GraphAssertion`s for a repository task, inspect their `GraphEvidence`, distinguish inferences from directly evidenced claims, and identify unknown or stale areas instead of inventing facts. |
+| `RenderSourceKnowledgeGraph` | Maintainer, through a Git workflow | Generate a human-readable Markdown document of the current `SourceKnowledgeGraph`, preserving its recorded claims, evidence access, direct or inferred basis, coverage limits, and references for finding the underlying Turtle. The Turtle remains canonical; rendering does not judge semantic accuracy. |
 
 ---
 
@@ -145,6 +148,9 @@ enum lock test catches.
 | `GraphReader` | reads | `SourceKnowledgeGraph` | many → 1 |
 | `GraphChecker` | validates | `SourceKnowledgeGraph` | many → 1 |
 | `GraphCheckWorkflow` | runs | `GraphChecker` | many → 1 |
+| `GraphRenderer` | reads | `SourceKnowledgeGraph` | many → 1 |
+| `GraphRenderer` | delegates validation to | `GraphChecker` | many → 1 |
+| `GraphRenderWorkflow` | runs | `GraphRenderer` | many → 1 |
 | `Installer` | splices | `GraphAgentProtocol` | 1 → 0 or 1 |
 
 ---

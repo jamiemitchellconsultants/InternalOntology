@@ -78,13 +78,11 @@ run also has an active finding.
 
 ## Optional source knowledge graph
 
-The source graph records repository facts, their evidence and declared coverage at a Git revision.
-Install it explicitly with `--with-source-graph`; this adds local reader and checker scripts, an
-agent protocol, a workflow and starter graph files. For an existing Markdown-only ontology, run
-`node scripts/build-ontology.mjs` and commit the resulting Turtle source first. The workflow blocks
-merges only once maintainers require its `source-graph` check in branch protection. A passing check
-shows structural validity and review records for covered changes; maintainers judge whether the
-claims are true. See the [source graph runbook](templates/docs/source-knowledge-graph.md).
+The source graph records repository facts, their evidence and declared coverage at a Git revision. Install it explicitly with `--with-source-graph`; use `--source-graph-root <path>` to choose its location. This adds local reader, checker and Markdown renderer scripts, an agent protocol, read-only workflows and starter graph files. For an existing Markdown-only ontology, run `node scripts/build-ontology.mjs` and commit the resulting Turtle source first.
+
+Read the current graph in the generated Markdown, by default `docs/source-knowledge-graph/README.md`, and follow a claim's evidence link to assess its accuracy. Set `sourceGraph.repositoryUrl` in `ontology.config.json` to the repository's HTTPS browser URL (for example `https://github.com/owner/repository`); GitHub Enterprise hosts are supported. Set `sourceGraph.markdownPath` to override the output with another `.md` file inside the graph root. The operating guide remains separate at `docs/source-knowledge-graph.md`.
+
+Commit the canonical source first, run `node scripts/render-source-graph.mjs`, then review, stage and validate the output with `node scripts/render-source-graph.mjs --check --staged` before committing the document in the same PR. The Markdown describes the whole current state and is never hand-edited. Evidence and Turtle links pin the validated source commit, so advancing the branch cannot change their meaning. CI checks freshness without writing documents. Require both `source-graph` and `source-graph-markdown` in branch protection when adopting this workflow. A passing check shows structural validity and a current rendering; maintainers judge whether claims are true. See the [source graph runbook](templates/docs/source-knowledge-graph.md) for the complete sequence and source-snapshot recovery.
 
 ## Then, consider Narrative
 

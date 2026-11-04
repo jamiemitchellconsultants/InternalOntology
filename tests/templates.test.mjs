@@ -24,6 +24,7 @@ test("every required core template exists", () => {
     "github/workflows/ontology-lint.yml",
     "scripts/check-ontology-terms.mjs",
     "scripts/ontology-config.mjs",
+    "github/workflows/source-graph-render.yml",
   ]) {
     assert.ok(present.has(required), `missing template: ${required}`);
   }

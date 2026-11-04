@@ -35,6 +35,14 @@ by rewriting the original.
 | [19](#entry-plan-symlink-safe-source-graph-command-execution) | 2026-11-03 | Plan symlink-safe source graph command execution | product | Task 10 will repair both command entry-point guards and test execution through linked script paths. Its acceptance tests will assert command output and run the installed test files explicitly. |
 | [20](#entry-plan-final-source-graph-review-repairs) | 2026-11-03 | Plan final source graph review repairs | product | Compare each base covered selector by its literal pattern with proposed coverage declarations. |
 | [21](#entry-build-the-source-knowledge-graph-opt-in) | 2026-11-03 | Build the source knowledge graph opt-in | product | Validate evidence path syntax and line bounds independently. Compare base covered selectors by literal pattern with proposed declarations; retain a removed scope as reasoned unknown or excluded coverage. |
+| [22](#entry-user-source-knowledge-graph-docs-and-acceptance) | 2026-11-03 | [User] Source knowledge graph docs and acceptance | product | Codex acted as user tester and test approver under the owner's instruction. All 15 behaviour walkthroughs and their executable cases passed in the local build and deployed trials. |
+| [23](#entry-po-vision-human-readable-source-knowledge-graph) | 2026-11-03 | [PO] Vision: human-readable source knowledge graph | product | Provide an ordinary generated Markdown document of the current whole graph, produced from canonical Turtle through a Git workflow. |
+| [24](#entry-analyst-behaviours-human-readable-source-knowledge-graph) | 2026-11-03 | [Analyst] Behaviours: human-readable source knowledge graph | product | Define fourteen behaviours for a faithful current-state Markdown document with readable recorded names, accessible evidence at the input snapshot, clear direct or inferred basis, unambiguous references back to Turtle, and explicit… |
+| [25](#entry-architect-structure-human-readable-source-knowledge-graph) | 2026-11-03 | [Architect] Structure: human-readable source knowledge graph | product | Keep generated Markdown with the source PR, defaulting to a README inside the excluded graph root, and use a read-only freshness workflow ([ADR… |
+| [26](#entry-dev-plan-human-readable-source-knowledge-graph) | 2026-11-03 | [Dev] Plan: human-readable source knowledge graph | product | Plan six sequential reviewable tasks using three runtime files inside the existing renderer component. Reuse the graph parser/model/checker and shipped widgets fixtures. |
+| [27](#entry-feat-readable-current-state-source-knowledge-graph) | 2026-11-04 | feat: readable current-state source knowledge graph | product | Implement the accepted current-state Markdown projection in the repository and include it with canonical graph changes in the same PR. |
+| [28](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
+| [29](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
 
 ---
 
@@ -517,3 +525,167 @@ Validate evidence path syntax and line bounds independently. Compare base covere
 ## Consequences
 
 Graph-only scope removal is visible, and a transition PR cannot satisfy its remaining review obligation with a malformed record. Literal selector comparison avoids inferring glob equivalence from a finite file list, so a selector rewrite retains an explicit old-scope marker. Normal installation and force preserve adopter-owned config and graph data; reset discards them together. The checker still validates structure and review records, while maintainers judge semantic truth. GitHub branch-protection integration remains unverified for the user acceptance phase.
+
+---
+
+<a id="entry-user-source-knowledge-graph-docs-and-acceptance"></a>
+
+## Entry 22 — 2026-11-03 — [User] Source knowledge graph docs and acceptance
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The merged source graph build was ready for its User phase. Issue #41 requires a usable runbook and guide, followed by local and deployed acceptance for every behaviour.
+
+## Decision
+
+Codex acted as user tester and test approver under the owner's instruction. All 15 behaviour walkthroughs and their executable cases passed in the local build and deployed trials. The phase records that acceptance result with source and Actions evidence.
+
+## Consequences
+
+The source graph has an auditable user-phase acceptance record and operating guidance. Its structural check can be required on adopter PRs, while maintainers still judge the meaning of graph assertions. This PR completes the User phase for review; the parent feature closes after this PR merges.
+
+---
+
+<a id="entry-po-vision-human-readable-source-knowledge-graph"></a>
+
+## Entry 23 — 2026-11-03 — [PO] Vision: human-readable source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+JEPA-Speech was the first live use of the source knowledge graph introduced by feature #35. Its maintainer found meaningful content embedded in structural Turtle elements and needed a readable document to judge accuracy, much as generated ontology Markdown exposes the ontology's content.
+
+## Decision
+
+Provide an ordinary generated Markdown document of the current whole graph, produced from canonical Turtle through a Git workflow. Preserve readable claims, supporting evidence, direct or inferred basis, coverage limits, and terms or references for finding the corresponding Turtle assertions. Exclude added/changed/removed reports, diagrams, and an interactive browser from this feature.
+
+## Consequences
+
+Maintainers will be able to inspect the graph's current meaning without decoding Turtle. Detailed change investigation remains in Turtle, using terms found in Markdown. The analyst must turn the outcomes into observable behaviors; layout, output path, command, and workflow publishing mechanics remain for later phases. A passing structural check continues to make no claim of semantic accuracy.
+
+---
+
+<a id="entry-analyst-behaviours-human-readable-source-knowledge-graph"></a>
+
+## Entry 24 — 2026-11-03 — [Analyst] Behaviours: human-readable source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted vision addresses the readability problem exposed by JEPA-Speech's first live use: maintainers need to inspect current graph claims to assess accuracy without interpreting Turtle structure. Before architecture, the vision's outcomes need observable scenarios and explicit decisions about evidence presentation, graph limits, traceability, and generation failure.
+
+## Decision
+
+Define fourteen behaviours for a faithful current-state Markdown document with readable recorded names, accessible evidence at the input snapshot, clear direct or inferred basis, unambiguous references back to Turtle, and explicit coverage limits. Repeated generation from identical inputs is byte-identical. Invalid input fails visibly and cannot publish an apparently successful partial replacement; valid empty or partially covered graphs remain renderable. Use one canonical rendering use case, `RenderSourceKnowledgeGraph`.
+
+## Consequences
+
+The architect has a testable behavioural contract. Output location, document layout, snapshot representation, generation command and workflow publishing mechanics remain architecture decisions. The design must preserve stable evidence references without introducing a self-referential generated commit. The JEPA-Speech pilot supplies the initial readability trial, supplemented by inference, ambiguity, coverage, failure and configuration cases. Assertion-change reports, diagrams, extraction and semantic correctness judgement remain out of scope.
+
+---
+
+<a id="entry-architect-structure-human-readable-source-knowledge-graph"></a>
+
+## Entry 25 — 2026-11-03 — [Architect] Structure: human-readable source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+JEPA-Speech's first live use exposed how Turtle structure obscures the claims maintainers need to assess. The accepted behaviours require a faithful readable view with evidence, explicit basis, coverage limits and trustworthy source references. Architecture must provide those outcomes while preserving identical installed scripts and avoiding a self-referential generated commit hash.
+
+## Decision
+
+Keep generated Markdown with the source PR, defaulting to a README inside the excluded graph root, and use a read-only freshness workflow ([ADR 0009](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/human-readable-source-knowledge-graph/architect/docs/adr/0009-source-graph-markdown-in-source-pr.md)). Pin links to an existing source commit, compare its complete input projection with the current candidate, and retrieve missing source objects during checkout/bootstrap after history rewriting ([ADR 0010](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/human-readable-source-knowledge-graph/architect/docs/adr/0010-source-graph-markdown-revision-context.md)). Use one deterministic renderer with the existing parser/model/checker, explicit ordering, escaped readable text and atomic local replacement ([ADR 0011](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/human-readable-source-knowledge-graph/architect/docs/adr/0011-source-graph-markdown-renderer.md)).
+
+## Consequences
+
+Maintainers can review the generated document alongside graph changes. Authors commit canonical changes, generate from that snapshot, then commit the document in the same PR. Rendering requires a configured repository browser URL; the generated path is configurable within the graph root. CI checks source projection equality and exact Markdown bytes with read-only permissions. Squash/rebase source retrieval and links after branch movement need explicit acceptance coverage. Developer planning follows this phase; implementation is not part of this PR.
+
+---
+
+<a id="entry-dev-plan-human-readable-source-knowledge-graph"></a>
+
+## Entry 26 — 2026-11-03 — [Dev] Plan: human-readable source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted vision, behaviours and architecture define how maintainers will read and assess graph claims without interpreting Turtle structure. Developer execution needs precise interfaces and meaningful tests, especially for immutable links, missing source objects after history rewriting, and avoiding misleading or partial output.
+
+## Decision
+
+Plan six sequential reviewable tasks using three runtime files inside the existing renderer component. Reuse the graph parser/model/checker and shipped widgets fixtures. Bind output to validated source/candidate inventories, canonical bounded metadata and exact generated bytes. Specify per-claim tests for directed meaning, basis, associated evidence and Turtle lookup; local transport tests exercise the actual workflow bootstrap. Preserve explicit failure, atomic output, configuration compatibility and identical installed tooling. Each task has a red/green cycle, repository validation, commit and push.
+
+## Consequences
+
+Another agent can execute the detailed contracts after this plan PR is reviewed and merged. Native or subagent-driven execution remains an owner choice. Existing fixture namespace changes must refresh covered ontology records before serialization; correctness tests must verify each claim rather than aggregate text occurrence. Human readability trials, real hosted link navigation, GitHub/Enterprise source retention and required-check acceptance remain in the user phase. This PR does not start the build.
+
+---
+
+<a id="entry-feat-readable-current-state-source-knowledge-graph"></a>
+
+## Entry 27 — 2026-11-04 — feat: readable current-state source knowledge graph
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The first live source graph use in JEPA-Speech showed that Turtle structure obscures the meaningful claims maintainers need to assess.
+
+## Decision
+
+Implement the accepted current-state Markdown projection in the repository and include it with canonical graph changes in the same PR. Pin every evidence and Turtle link to a validated source commit, and check exact rendering in read-only CI.
+
+## Consequences
+
+Maintainers review readable claims and evidence before merge. Authors commit canonical inputs before generating and committing the view. The renderer remains offline; checkout preparation retrieves a missing retained source snapshot. Structural validation does not establish semantic accuracy.
+
+---
+
+<a id="entry-fix-open-graph-evidence-at-cited-source-lines"></a>
+
+## Entry 28 — 2026-11-04 — fix: open graph evidence at cited source lines
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+Hosted acceptance of PR #77 exposed a gap that local link-shape tests and green CI missed: GitHub renders Markdown evidence by default and does not expose its cited source-line range in Preview. User acceptance raised pushback against the build phase for B4.
+
+## Decision
+
+Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. Verify the URL contract locally and the actual selected source lines in the browser.
+
+## Consequences
+
+Maintainers can navigate to Markdown evidence source lines. Existing generated views need regeneration after upgrading the renderer. The full user acceptance phase, including retention and required-check trials, resumes after this amendment is reviewed and merged.
+
+AI-Fingerprint: sha256:a2c5cbeadf6c
+
+---
+
+<a id="entry-docs-accept-readable-source-knowledge-graph-on-github"></a>
+
+## Entry 29 — 2026-11-04 — docs: accept readable source knowledge graph on GitHub
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The user phase found that green structural and Markdown freshness checks did not establish usable hosted evidence navigation. That failure produced the merged build amendment in PR #79 and required acceptance to resume against real hosted views.
+
+## Decision
+
+Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. Preserve the failed trial alongside the correction and successful reruns, and record the untested Enterprise-host boundary explicitly.
+
+## Consequences
+
+Maintainers have a runbook, a user guide and a reproducible acceptance record. The named GitHub deployments demonstrate readable claims, source-line access, retained snapshot retrieval and required-check enforcement. Semantic judgement remains human; host retention observations do not promise indefinite availability. The parent feature can close after this user-phase PR merges and feature status reports all phases done.
+
+AI-Fingerprint: sha256:f269d2797c48
