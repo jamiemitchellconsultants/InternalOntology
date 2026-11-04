@@ -40,23 +40,39 @@ test('B1–B9: all shards, claims, evidence, basis, shared/isolated nodes and sc
       const line = byKey.get(key(id));
       assert.ok(line.startsWith(`**${subject}** ${relationship} **${object}**. **${basis}**.`), id);
       const urls = [...line.matchAll(/\]\((https:[^)]+)\)/g)].map(m => m[1]);
-      const evidenceUrls = evidence.map(([path, start, end]) => `${input.repositoryUrl}/blob/${f.source}/${path}#L${start}` + (start === end ? '' : `-L${end}`));
+      const evidenceUrls = evidence.map(([path, start, end]) => `${input.repositoryUrl}/blob/${f.source}/${path}?plain=1#L${start}` + (start === end ? '' : `-L${end}`));
       const resource = input.graph.resources.get(id);
-      assert.deepEqual(urls, [...evidenceUrls, `${input.repositoryUrl}/blob/${f.source}/${resource.file}#L${resource.line}`], id);
+      assert.deepEqual(urls, [...evidenceUrls, `${input.repositoryUrl}/blob/${f.source}/${resource.file}?plain=1#L${resource.line}`], id);
       assert.ok(md.includes(id.slice(1)), 'source details retain assertion identity');
     }
     for (const evidence of f.spec.evidence) {
       const v = p => evidence.pairs.find(x => x.predicate === p).object;
       const range = v('kit:startLine') === v('kit:endLine') ? `#L${v('kit:startLine')}` : `#L${v('kit:startLine')}-L${v('kit:endLine')}`;
-      assert.ok(md.includes(`${input.repositoryUrl}/blob/${f.source}/${v('kit:path')}${range}`));
+      assert.ok(md.includes(`${input.repositoryUrl}/blob/${f.source}/${v('kit:path')}?plain=1${range}`));
     }
     for (const text of ['Invoice', 'Unconnected', 'Direct', 'Inferred (tentative)',
       'Coverage', 'unknown', 'excluded', '1000', 'not an accepted deployment source',
       'Unmatched paths remain unknown', 'structural validity does not establish semantic accuracy']) assert.ok(md.includes(text), text);
-    assert.ok(md.includes('/assertions/more.ttl#L'));
+    assert.ok(md.includes('/assertions/more.ttl?plain=1#L'));
     assert.doesNotMatch(md, /^## (Added|Changed|Removed|Diagram)/m);
     const shuffled = { ...input, graph: { ...input.graph, byType: type => input.graph.byType(type).reverse() } };
     assert.equal(renderMarkdown(shuffled), md);
+  });
+});
+
+test('B4: Markdown evidence opens source view with its pinned line range', async () => {
+  await withScratchRepo(async r => {
+    const f = seedRenderRepo(r);
+    const input = readRenderInput(treeFromRevision(r.dir, f.source));
+    const md = renderMarkdown(input);
+    const claim = md.split('\n').find(line => line.startsWith('**Invoice** is documented by'));
+    const destination = new URL(/Evidence: \[[^\]]+\]\(([^)]+)\)/.exec(claim)[1]);
+    assert.equal(destination.searchParams.get('plain'), '1', 'GitHub Preview has no source-line targets');
+    assert.equal(destination.pathname, `/example/widgets/blob/${f.source}/docs/design.md`);
+    assert.equal(destination.hash, '#L1-L3');
+    const ontology = new URL(sourceLink(input, 'docs/ontology.md', 7));
+    assert.equal(ontology.search, '?plain=1');
+    assert.equal(ontology.hash, '#L7');
   });
 });
 
@@ -97,11 +113,11 @@ test('B4/B6/B7: source destinations remain immutable after branch advancement an
     const f = seedRenderRepo(r), input = readRenderInput(treeFromRevision(r.dir, f.source));
     const before = r.git('show', `${f.source}:${f.spec.paths.impl}`);
     const link = sourceLink(input, f.spec.paths.impl, 1, 3);
-    assert.equal(link, `${input.repositoryUrl}/blob/${f.source}/${f.spec.paths.impl}#L1-L3`);
-    assert.equal(sourceLink(input, 'src/a #%.cs', 2), `${input.repositoryUrl}/blob/${f.source}/src/a%20%23%25.cs#L2`);
+    assert.equal(link, `${input.repositoryUrl}/blob/${f.source}/${f.spec.paths.impl}?plain=1#L1-L3`);
+    assert.equal(sourceLink(input, 'src/a #%.cs', 2), `${input.repositoryUrl}/blob/${f.source}/src/a%20%23%25.cs?plain=1#L2`);
     for (const path of ['src/Invoice).cs', 'docs/source-knowledge-graph/assertions/(claims.ttl']) {
       const destination = sourceLink(input, path, 1, 3);
-      assert.equal(destination, `${input.repositoryUrl}/blob/${f.source}/${path.replace(')', '%29').replace('(', '%28')}#L1-L3`);
+      assert.equal(destination, `${input.repositoryUrl}/blob/${f.source}/${path.replace(')', '%29').replace('(', '%28')}?plain=1#L1-L3`);
     }
     r.write(f.spec.paths.impl, 'new branch contents\n');
     r.commit('advance the branch after opening Markdown');

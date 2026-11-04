@@ -15,7 +15,7 @@ Set these rendering options inside `sourceGraph` in `ontology.config.json` befor
 - `repositoryUrl`: this repository's HTTPS browser URL, such as `https://github.com/owner/repository` or `https://git.example.com/team/repository`. Use the owner/repository root without credentials, query or fragment. The renderer requires this setting; existing graph-only commands still work without it.
 - `markdownPath`: optional output path, default `<graph-root>/README.md`. It must be a normalized `.md` path strictly inside the graph root, distinct from the ontology files. Choose another path if the default README contains authored content.
 
-Evidence and Turtle links use the full source commit ID and line anchors. They continue to identify the same bytes when the branch advances, provided the Git host retains that source commit. Repeated generation reuses the existing source commit when its inputs still match, keeping the document byte-identical.
+Evidence and Turtle links use the full source commit ID and line anchors. Links explicitly select the host's source view (`?plain=1`), so Markdown evidence opens with source lines rather than a rendered preview. After upgrading the renderer, regenerate and commit the view if the freshness check reports changed output. They continue to identify the same bytes when the branch advances, provided the Git host retains that source commit. Repeated generation reuses the existing source commit when its inputs still match, keeping the document byte-identical.
 
 ## Author and review in one PR
 
