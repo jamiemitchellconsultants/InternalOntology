@@ -41,6 +41,7 @@ by rewriting the original.
 | [25](#entry-dev-plan-human-readable-source-knowledge-graph) | 2026-11-03 | [Dev] Plan: human-readable source knowledge graph | product | Plan six sequential reviewable tasks using three runtime files inside the existing renderer component. Reuse the graph parser/model/checker and shipped widgets fixtures. |
 | [26](#entry-feat-readable-current-state-source-knowledge-graph) | 2026-11-04 | feat: readable current-state source knowledge graph | product | Implement the accepted current-state Markdown projection in the repository and include it with canonical graph changes in the same PR. |
 | [27](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
+| [28](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
 
 ---
 
@@ -645,3 +646,25 @@ Select source view explicitly on generated source-file links using the host's `p
 Maintainers can navigate to Markdown evidence source lines. Existing generated views need regeneration after upgrading the renderer. The full user acceptance phase, including retention and required-check trials, resumes after this amendment is reviewed and merged.
 
 AI-Fingerprint: sha256:a2c5cbeadf6c
+
+---
+
+<a id="entry-docs-accept-readable-source-knowledge-graph-on-github"></a>
+
+## Entry 28 — 2026-11-04 — docs: accept readable source knowledge graph on GitHub
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The user phase found that green structural and Markdown freshness checks did not establish usable hosted evidence navigation. That failure produced the merged build amendment in PR #79 and required acceptance to resume against real hosted views.
+
+## Decision
+
+Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. Preserve the failed trial alongside the correction and successful reruns, and record the untested Enterprise-host boundary explicitly.
+
+## Consequences
+
+Maintainers have a runbook, a user guide and a reproducible acceptance record. The named GitHub deployments demonstrate readable claims, source-line access, retained snapshot retrieval and required-check enforcement. Semantic judgement remains human; host retention observations do not promise indefinite availability. The parent feature can close after this user-phase PR merges and feature status reports all phases done.
+
+AI-Fingerprint: sha256:f269d2797c48
