@@ -43,6 +43,7 @@ by rewriting the original.
 | [27](#entry-feat-readable-current-state-source-knowledge-graph) | 2026-11-04 | feat: readable current-state source knowledge graph | product | Implement the accepted current-state Markdown projection in the repository and include it with canonical graph changes in the same PR. |
 | [28](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
 | [29](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
+| [30](#entry-keep-narrative-proposals-up-to-date) | 2026-11-04 | Keep narrative proposals up to date | product | Install the documented refresh workflow. Refresh after default-branch narrative changes and successful maintenance runs, and allow manual recovery. |
 
 ---
 
@@ -689,3 +690,23 @@ Accept the current-state Markdown view for the tested GitHub deployments based o
 Maintainers have a runbook, a user guide and a reproducible acceptance record. The named GitHub deployments demonstrate readable claims, source-line access, retained snapshot retrieval and required-check enforcement. Semantic judgement remains human; host retention observations do not promise indefinite availability. The parent feature can close after this user-phase PR merges and feature status reports all phases done.
 
 AI-Fingerprint: sha256:f269d2797c48
+
+---
+
+<a id="entry-keep-narrative-proposals-up-to-date"></a>
+
+## Entry 30 — 2026-11-04 — Keep narrative proposals up to date
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+Narrative proposals compile a shared document from separate fragments. When another proposal merges first, an older proposal can conflict and require manual regeneration. A push-triggered refresh alone can also finish before the maintenance workflow creates its proposal.
+
+## Decision
+
+Install the documented refresh workflow. Refresh after default-branch narrative changes and successful maintenance runs, and allow manual recovery. Run from the trusted default branch with write access to contents and read access to pull requests.
+
+## Consequences
+
+Open proposals can be updated and their compiled narrative validated without force-pushing. Conflicts outside generated output remain for human resolution. The workflow must reach the default branch before it can run, and narrative proposals remain subject to review.
