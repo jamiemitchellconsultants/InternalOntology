@@ -40,6 +40,7 @@ by rewriting the original.
 | [24](#entry-architect-structure-human-readable-source-knowledge-graph) | 2026-11-03 | [Architect] Structure: human-readable source knowledge graph | product | Keep generated Markdown with the source PR, defaulting to a README inside the excluded graph root, and use a read-only freshness workflow ([ADR… |
 | [25](#entry-dev-plan-human-readable-source-knowledge-graph) | 2026-11-03 | [Dev] Plan: human-readable source knowledge graph | product | Plan six sequential reviewable tasks using three runtime files inside the existing renderer component. Reuse the graph parser/model/checker and shipped widgets fixtures. |
 | [26](#entry-feat-readable-current-state-source-knowledge-graph) | 2026-11-04 | feat: readable current-state source knowledge graph | product | Implement the accepted current-state Markdown projection in the repository and include it with canonical graph changes in the same PR. |
+| [27](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
 
 ---
 
@@ -622,3 +623,25 @@ Implement the accepted current-state Markdown projection in the repository and i
 ## Consequences
 
 Maintainers review readable claims and evidence before merge. Authors commit canonical inputs before generating and committing the view. The renderer remains offline; checkout preparation retrieves a missing retained source snapshot. Structural validation does not establish semantic accuracy.
+
+---
+
+<a id="entry-fix-open-graph-evidence-at-cited-source-lines"></a>
+
+## Entry 27 — 2026-11-04 — fix: open graph evidence at cited source lines
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+Hosted acceptance of PR #77 exposed a gap that local link-shape tests and green CI missed: GitHub renders Markdown evidence by default and does not expose its cited source-line range in Preview. User acceptance raised pushback against the build phase for B4.
+
+## Decision
+
+Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. Verify the URL contract locally and the actual selected source lines in the browser.
+
+## Consequences
+
+Maintainers can navigate to Markdown evidence source lines. Existing generated views need regeneration after upgrading the renderer. The full user acceptance phase, including retention and required-check trials, resumes after this amendment is reviewed and merged.
+
+AI-Fingerprint: sha256:a2c5cbeadf6c
