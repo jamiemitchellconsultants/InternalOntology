@@ -34,14 +34,15 @@ by rewriting the original.
 | [18](#entry-clarify-source-graph-configuration-reset-behaviour) | 2026-11-02 | Clarify source graph configuration reset behaviour | product | Preserve existing configuration for normal installs and forced upgrades. An explicit content reset restores the graph-enabled starter configuration and discards the prior settings, consistent with the existing reset contract. |
 | [19](#entry-plan-symlink-safe-source-graph-command-execution) | 2026-11-03 | Plan symlink-safe source graph command execution | product | Task 10 will repair both command entry-point guards and test execution through linked script paths. Its acceptance tests will assert command output and run the installed test files explicitly. |
 | [20](#entry-plan-final-source-graph-review-repairs) | 2026-11-03 | Plan final source graph review repairs | product | Compare each base covered selector by its literal pattern with proposed coverage declarations. |
-| [21](#entry-user-source-knowledge-graph-docs-and-acceptance) | 2026-11-03 | [User] Source knowledge graph docs and acceptance | product | Codex acted as user tester and test approver under the owner's instruction. All 15 behaviour walkthroughs and their executable cases passed in the local build and deployed trials. |
-| [22](#entry-po-vision-human-readable-source-knowledge-graph) | 2026-11-03 | [PO] Vision: human-readable source knowledge graph | product | Provide an ordinary generated Markdown document of the current whole graph, produced from canonical Turtle through a Git workflow. |
-| [23](#entry-analyst-behaviours-human-readable-source-knowledge-graph) | 2026-11-03 | [Analyst] Behaviours: human-readable source knowledge graph | product | Define fourteen behaviours for a faithful current-state Markdown document with readable recorded names, accessible evidence at the input snapshot, clear direct or inferred basis, unambiguous references back to Turtle, and explicit… |
-| [24](#entry-architect-structure-human-readable-source-knowledge-graph) | 2026-11-03 | [Architect] Structure: human-readable source knowledge graph | product | Keep generated Markdown with the source PR, defaulting to a README inside the excluded graph root, and use a read-only freshness workflow ([ADR… |
-| [25](#entry-dev-plan-human-readable-source-knowledge-graph) | 2026-11-03 | [Dev] Plan: human-readable source knowledge graph | product | Plan six sequential reviewable tasks using three runtime files inside the existing renderer component. Reuse the graph parser/model/checker and shipped widgets fixtures. |
-| [26](#entry-feat-readable-current-state-source-knowledge-graph) | 2026-11-04 | feat: readable current-state source knowledge graph | product | Implement the accepted current-state Markdown projection in the repository and include it with canonical graph changes in the same PR. |
-| [27](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
-| [28](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
+| [21](#entry-build-the-source-knowledge-graph-opt-in) | 2026-11-03 | Build the source knowledge graph opt-in | product | Validate evidence path syntax and line bounds independently. Compare base covered selectors by literal pattern with proposed declarations; retain a removed scope as reasoned unknown or excluded coverage. |
+| [22](#entry-user-source-knowledge-graph-docs-and-acceptance) | 2026-11-03 | [User] Source knowledge graph docs and acceptance | product | Codex acted as user tester and test approver under the owner's instruction. All 15 behaviour walkthroughs and their executable cases passed in the local build and deployed trials. |
+| [23](#entry-po-vision-human-readable-source-knowledge-graph) | 2026-11-03 | [PO] Vision: human-readable source knowledge graph | product | Provide an ordinary generated Markdown document of the current whole graph, produced from canonical Turtle through a Git workflow. |
+| [24](#entry-analyst-behaviours-human-readable-source-knowledge-graph) | 2026-11-03 | [Analyst] Behaviours: human-readable source knowledge graph | product | Define fourteen behaviours for a faithful current-state Markdown document with readable recorded names, accessible evidence at the input snapshot, clear direct or inferred basis, unambiguous references back to Turtle, and explicit… |
+| [25](#entry-architect-structure-human-readable-source-knowledge-graph) | 2026-11-03 | [Architect] Structure: human-readable source knowledge graph | product | Keep generated Markdown with the source PR, defaulting to a README inside the excluded graph root, and use a read-only freshness workflow ([ADR… |
+| [26](#entry-dev-plan-human-readable-source-knowledge-graph) | 2026-11-03 | [Dev] Plan: human-readable source knowledge graph | product | Plan six sequential reviewable tasks using three runtime files inside the existing renderer component. Reuse the graph parser/model/checker and shipped widgets fixtures. |
+| [27](#entry-feat-readable-current-state-source-knowledge-graph) | 2026-11-04 | feat: readable current-state source knowledge graph | product | Implement the accepted current-state Markdown projection in the repository and include it with canonical graph changes in the same PR. |
+| [28](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
+| [29](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
 
 ---
 
@@ -507,9 +508,29 @@ Coverage removal is visible even without changed source files. Literal pattern c
 
 ---
 
+<a id="entry-build-the-source-knowledge-graph-opt-in"></a>
+
+## Entry 21 — 2026-11-03 — Build the source knowledge graph opt-in
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted architecture requires changed files in either base or proposed covered scope to have valid, reviewable records. Final review found empty evidence paths and line zero could pass, starter graph files could use the wrong namespace beside an existing config, and a covered selector could disappear without a reasoned gap. The independent code review also reproduced malformed or unreferenced records passing when a changed file left coverage, because the head-only exemption skipped record validation.
+
+## Decision
+
+Validate evidence path syntax and line bounds independently. Compare base covered selectors by literal pattern with proposed declarations; retain a removed scope as reasoned unknown or excluded coverage. Use the preserved config's namespace for newly installed starter graph files, while explicit reset replaces config and starters together. Apply full review-record validation to changed paths covered by either the base or proposed graph, including paths that leave coverage in the proposed graph; continue ignoring old records for unchanged paths outside current coverage. Keep all repairs in the one Task 11 commit after the ten pushed task commits.
+
+## Consequences
+
+Graph-only scope removal is visible, and a transition PR cannot satisfy its remaining review obligation with a malformed record. Literal selector comparison avoids inferring glob equivalence from a finite file list, so a selector rewrite retains an explicit old-scope marker. Normal installation and force preserve adopter-owned config and graph data; reset discards them together. The checker still validates structure and review records, while maintainers judge semantic truth. GitHub branch-protection integration remains unverified for the user acceptance phase.
+
+---
+
 <a id="entry-user-source-knowledge-graph-docs-and-acceptance"></a>
 
-## Entry 21 — 2026-11-03 — [User] Source knowledge graph docs and acceptance
+## Entry 22 — 2026-11-03 — [User] Source knowledge graph docs and acceptance
 
 *Kind: product. Status: accepted.*
 
@@ -529,7 +550,7 @@ The source graph has an auditable user-phase acceptance record and operating gui
 
 <a id="entry-po-vision-human-readable-source-knowledge-graph"></a>
 
-## Entry 22 — 2026-11-03 — [PO] Vision: human-readable source knowledge graph
+## Entry 23 — 2026-11-03 — [PO] Vision: human-readable source knowledge graph
 
 *Kind: product. Status: accepted.*
 
@@ -549,7 +570,7 @@ Maintainers will be able to inspect the graph's current meaning without decoding
 
 <a id="entry-analyst-behaviours-human-readable-source-knowledge-graph"></a>
 
-## Entry 23 — 2026-11-03 — [Analyst] Behaviours: human-readable source knowledge graph
+## Entry 24 — 2026-11-03 — [Analyst] Behaviours: human-readable source knowledge graph
 
 *Kind: product. Status: accepted.*
 
@@ -569,7 +590,7 @@ The architect has a testable behavioural contract. Output location, document lay
 
 <a id="entry-architect-structure-human-readable-source-knowledge-graph"></a>
 
-## Entry 24 — 2026-11-03 — [Architect] Structure: human-readable source knowledge graph
+## Entry 25 — 2026-11-03 — [Architect] Structure: human-readable source knowledge graph
 
 *Kind: product. Status: accepted.*
 
@@ -589,7 +610,7 @@ Maintainers can review the generated document alongside graph changes. Authors c
 
 <a id="entry-dev-plan-human-readable-source-knowledge-graph"></a>
 
-## Entry 25 — 2026-11-03 — [Dev] Plan: human-readable source knowledge graph
+## Entry 26 — 2026-11-03 — [Dev] Plan: human-readable source knowledge graph
 
 *Kind: product. Status: accepted.*
 
@@ -609,7 +630,7 @@ Another agent can execute the detailed contracts after this plan PR is reviewed 
 
 <a id="entry-feat-readable-current-state-source-knowledge-graph"></a>
 
-## Entry 26 — 2026-11-04 — feat: readable current-state source knowledge graph
+## Entry 27 — 2026-11-04 — feat: readable current-state source knowledge graph
 
 *Kind: product. Status: accepted.*
 
@@ -629,7 +650,7 @@ Maintainers review readable claims and evidence before merge. Authors commit can
 
 <a id="entry-fix-open-graph-evidence-at-cited-source-lines"></a>
 
-## Entry 27 — 2026-11-04 — fix: open graph evidence at cited source lines
+## Entry 28 — 2026-11-04 — fix: open graph evidence at cited source lines
 
 *Kind: product. Status: accepted.*
 
@@ -651,7 +672,7 @@ AI-Fingerprint: sha256:a2c5cbeadf6c
 
 <a id="entry-docs-accept-readable-source-knowledge-graph-on-github"></a>
 
-## Entry 28 — 2026-11-04 — docs: accept readable source knowledge graph on GitHub
+## Entry 29 — 2026-11-04 — docs: accept readable source knowledge graph on GitHub
 
 *Kind: product. Status: accepted.*
 
