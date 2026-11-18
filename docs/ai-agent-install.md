@@ -45,6 +45,8 @@ Before generating the readable graph, set `sourceGraph.repositoryUrl` to the rep
 
 Commit all canonical inputs first: configuration, ontologies, graph files and covered source. Then run `node scripts/render-source-graph.mjs`, review the readable claims against their evidence links, stage the output, and run `node scripts/render-source-graph.mjs --check --staged` and the ontology term check before committing the document in the same PR. Do not hand-edit the output or generate it after merge. Configure branch protection to require both `source-graph` and `source-graph-markdown`. The installed `docs/source-knowledge-graph.md` explains historical checks, missing-source recovery and preserving existing output on failure.
 
+Add `--with-graph-naming-review` only when the user asks for the graph naming review, and always together with `--with-source-graph`. After installing, follow the copied `docs/graph-naming-review.md` runbook: it is enabled by `sourceGraph.namingReview` in `ontology.config.json` on the default branch and uses the semantic reviewer's protected environment and secrets. Until it is enabled, every pull request gets a successful disabled status.
+
 If this step refuses because of an existing unmarked `## Ontology protocol` section in `AGENTS.md`
 or `CLAUDE.md`, **stop and ask** how the user wants that resolved — removing or marking someone
 else's hand-written section is not a call to make unprompted.

@@ -59,10 +59,13 @@ does, people learn to route around it, and the deterministic check loses credibi
 Its findings appear as one pull request comment, updated in place; only an infrastructure failure
 turns its job red, which is deliberately distinguishable from "reviewed, found nothing."
 
+The optional graph naming review applies the same idea to the source knowledge graph. A model compares the names of graph nodes a pull request adds or changes with the ontology, after a deterministic filter has dropped every name that already contains its canonical term. Its results are settled by people: they hold the merge until someone with write access accepts, rejects or defers them, and an accepted result holds it until the correction is committed. It runs in its own workflows; the source-graph check makes no model call and proves only structural validity, as before.
+
 ## What it does not catch
 
 - Drift in code, unless the enum lock tests are installed — and then only in enums.
 - Unbackticked paraphrase, unless the semantic reviewer is installed.
+- Whether a source graph claim is supported by its evidence. The graph naming review compares names only.
 - An ontology that is simply wrong. The check enforces consistency with the ontology, not the
   ontology's correctness. That remains a human judgement.
 - Anything outside tracked Markdown — a pull request description, for instance, which is why the
