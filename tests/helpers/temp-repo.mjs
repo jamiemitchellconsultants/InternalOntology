@@ -17,7 +17,7 @@ export async function withTempRepo(body) {
     writeFileSync(path, text);
   };
   try {
-    git("init", "-q");
+    git("init", "-q", "-b", "main");
     git("config", "user.email", "test@example.com");
     git("config", "user.name", "Ontology Kit Test");
     // Isolate from the host's global/system git config: downstream tests commit inside this
