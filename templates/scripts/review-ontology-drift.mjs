@@ -17,6 +17,9 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { loadConfig } from "./ontology-config.mjs";
+import { createModelAuth, authorizedFetch } from "./llm-auth.mjs";
+
+const defaultAuth = createModelAuth({ env: process.env, staticKeyVar: "ONTOLOGY_LLM_API_KEY" });
 
 export const COMMENT_MARKER = "<!-- ontology-drift-review -->";
 export const NO_DRIFT_TOKEN = "NO_DRIFT";
@@ -253,8 +256,9 @@ export function requireEnv(name) {
 }
 
 /**
- * Talks only to the model endpoint, authenticated with ONTOLOGY_LLM_API_KEY. Never pass a GitHub
- * token here — githubJson below is the sole GitHub-authenticated path.
+ * Talks only to the model endpoint, authenticated through llm-auth.mjs: an OIDC token when
+ * ONTOLOGY_OIDC_TOKEN_URL, _CLIENT_ID and _CLIENT_SECRET are all set, else ONTOLOGY_LLM_API_KEY.
+ * Never pass a GitHub token here — githubJson below is the sole GitHub-authenticated path.
  *
  * The timeout is sized to match reviewBatch's max_tokens: a reasoning model spends part of its
  * budget before emitting any content, so raise the two together or not at all.
@@ -262,15 +266,14 @@ export function requireEnv(name) {
  * @param {RequestInit} [init]
  * @param {typeof fetch} [fetchImpl]
  * @param {number} [timeoutMs]
+ * @param {ReturnType<typeof createModelAuth>} [auth]
  */
-export async function modelJson(url, init, fetchImpl = fetch, timeoutMs = 300_000) {
-  const apiKey = process.env.ONTOLOGY_LLM_API_KEY;
-  const response = await fetchImpl(url, {
+export async function modelJson(url, init, fetchImpl = fetch, timeoutMs = 300_000, auth = defaultAuth) {
+  const response = await authorizedFetch(auth, fetchImpl, url, {
     ...init,
     signal: AbortSignal.timeout(timeoutMs),
     headers: {
       "Content-Type": "application/json",
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       ...init?.headers,
     },
   });
