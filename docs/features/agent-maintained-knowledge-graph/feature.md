@@ -371,6 +371,10 @@ Executable tests: `tests/agent-maintained-graph-acceptance.test.mjs` (`node --te
 
 | Environment | Layer | Result | Date | By |
 | --- | --- | --- | --- | --- |
-| Local build | Executable tests (29 tests) | pass; full `npm test` 667/667 | 2026-11-18 | run by the agent; not yet approved by the person acting as user |
-| Local build | Walkthroughs L1–L4 | pending | - | - |
+| Local build | Walkthrough L1 (B1–B5, B8, B10–B14, B17–B19, B26, B37, B45) | pass, every step | 2026-11-18 | Jamie Mitchell |
+| Local build | Walkthrough L2 (B6, B7, B15, B16) | pass, every step | 2026-11-18 | Jamie Mitchell |
+| Local build | Walkthrough L3 (B9) | pass, every step | 2026-11-18 | Jamie Mitchell |
+| Local build | Walkthrough L4 (B20–B25) | pass, every step | 2026-11-18 | Jamie Mitchell |
+| Local build | Executable tests (29 tests) | approved and run on the person's Mac: 29/29 pass; full `npm test` 667/667 | 2026-11-18 | Jamie Mitchell |
+| Local build | Walkthroughs for B27–B44 | none locally: they need GitHub, so they are run in the deployed trial (D5, D6) | - | - |
 | Deployed | Walkthroughs D1–D6 and executable tests | not run: needs the build pull request merged and JEPA-Speech reinstalled | - | - |
