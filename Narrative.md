@@ -44,6 +44,7 @@ by rewriting the original.
 | [28](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
 | [29](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
 | [30](#entry-keep-narrative-proposals-up-to-date) | 2026-11-04 | Keep narrative proposals up to date | product | Install the documented refresh workflow. Refresh after default-branch narrative changes and successful maintenance runs, and allow manual recovery. |
+| [31](#entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow) | 2026-11-18 | fix: reviewer tests on Node 20/22 and a kit test workflow | product | Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. |
 
 ---
 
@@ -710,3 +711,23 @@ Install the documented refresh workflow. Refresh after default-branch narrative 
 ## Consequences
 
 Open proposals can be updated and their compiled narrative validated without force-pushing. Conflicts outside generated output remain for human resolution. The workflow must reach the default branch before it can run, and narrative proposals remain subject to review.
+
+---
+
+<a id="entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow"></a>
+
+## Entry 31 — 2026-11-18 — fix: reviewer tests on Node 20/22 and a kit test workflow
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The kit's reviewer tests were cancelled on Node 20 and 22, which adopters' `deterministic-preparation` jobs use, and the kit ran no test job in CI, so nobody saw it until JEPA-Speech#205.
+
+## Decision
+
+Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. Make temp repositories independent of the host's default branch. Rejected: changing `AbortSignal.timeout` use in `modelJson` (not the defect), and adding the check to branch protection in this PR (done by the maintainer after it has run once on `main`).
+
+## Consequences
+
+Test regressions on the supported Node versions now fail the pull request. The workflow's check names (`test (20)`, `test (22)`, `test (24)`) can be made required once it has run. Adopters need `--force` to receive the corrected test file.
