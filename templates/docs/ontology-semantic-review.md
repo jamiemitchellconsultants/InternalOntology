@@ -32,7 +32,7 @@ current write access. It does not execute PR code or apply corrections.
    }
    ```
 
-   For the home lab gateway use `"model": "ontology-review"` and
+   For a gateway that exposes the alias `ontology-review`, use `"model": "ontology-review"` and
    `"baseUrl": "https://gateway.tqaentry.com/v1"`. The endpoint must provide OpenAI-compatible `POST /chat/completions`. Keep credentials out of
    this file. A PR's proposed config never controls the model, endpoint, or secret used to review
    that PR.
@@ -50,9 +50,15 @@ revision supersedes an earlier failure; the earlier comment remains visible as h
 ## Request budget
 
 Each model request holds the instructions, the ontology projection and a piece of the changed file.
-Requests are planned against a character budget: **200,000 characters by default** (about 50,000 to
-67,000 tokens, so at most about half of a 131,072-token context window). Two optional repository
-variables change it without editing a script; the drift reviewer reads the same ones.
+Requests are planned against a character budget: **200,000 characters by default**, a default sized for
+a model with a large context window and not a statement about any particular model. Two optional
+repository variables change it without editing a script; the drift reviewer reads the same ones.
+
+Set `ONTOLOGY_MAX_REQUEST_CHARS` from the context window of whatever model your alias currently points
+at. Text is about 3 to 4 characters per token, so a request of N characters is roughly N/4 to N/3
+tokens; keep it well inside the window and leave headroom for the answer, since a model that spends
+tokens thinking before it answers needs room for those tokens too. Set `ONTOLOGY_MODEL_TIMEOUT_MS` from
+how quickly that model answers a prompt of that size, and revisit both when the alias is repointed.
 
 | Setting | Where | Default | Meaning |
 |---|---|---|---|
