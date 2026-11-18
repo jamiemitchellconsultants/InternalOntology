@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { loadConfig } from "./ontology-config.mjs";
 import { createGitHubClient, resolvePulls, isEligiblePull, collectReviewInput } from "./semantic-review-github.mjs";
 import { reviewFiles } from "./semantic-review-model.mjs";
+import { createModelAuth, AuthConfigError } from "./llm-auth.mjs";
 import { publishPending, publishRun, readLatestRun, reconcileStatus } from "./semantic-review-ledger.mjs";
 import { readDismissals, handleDismissal } from "./semantic-review-dismissal.mjs";
 
@@ -20,7 +21,7 @@ function newerRun(left, right) {
     (a[0] > b[0] || a[0] === b[0] && (a[1] ?? 0) > (b[1] ?? 0));
 }
 
-export async function runSemanticReview({ client, pull, config, modelFetch = fetch, secret, deps = {} }) {
+export async function runSemanticReview({ client, pull, config, modelFetch = fetch, auth, deps = {} }) {
   const api = { isEligiblePull, collectReviewInput, reviewFiles, publishPending, publishRun, readDismissals, ...deps };
   const run = newRun(pull, deps.triggerRunId ?? Number(process.env.ONTOLOGY_TRIGGER_RUN_ID ?? 0));
   if (!deps.skipPending) await api.publishPending(client, pull, run);
@@ -67,7 +68,15 @@ export async function runSemanticReview({ client, pull, config, modelFetch = fet
     run.outcome = "no-eligible";
     return finish();
   }
-  if (!secret) {
+  let authMode;
+  try {
+    authMode = auth.mode();
+  } catch (error) {
+    if (!(error instanceof AuthConfigError)) throw error;
+    run.unreviewed.push({ path: "<model>", reason: "semantic model credential is misconfigured" });
+    return finish();
+  }
+  if (authMode === "None") {
     run.unreviewed.push({ path: "<model>", reason: "semantic model credential is unavailable" });
     return finish();
   }
@@ -75,7 +84,7 @@ export async function runSemanticReview({ client, pull, config, modelFetch = fet
   try {
     result = await api.reviewFiles({ files: input.files, ontologyText: input.ontologyText,
       sections: config.sections, model: config.semanticReview.model, baseUrl: config.semanticReview.baseUrl,
-      apiKey: secret, headSha: pull.head.sha, fetchImpl: modelFetch });
+      auth, headSha: pull.head.sha, fetchImpl: modelFetch });
   } catch {
     run.unreviewed.push({ path: "<model>", reason: "semantic model could not assess the selected files" });
     return finish();
@@ -97,7 +106,7 @@ export async function finalizeSemanticReview({ client, pull, triggerRunId, confi
     return latest;
   }
   if (config !== undefined) {
-    return runSemanticReview({ client, pull, config, secret: "", deps: { ...deps, triggerRunId } });
+    return runSemanticReview({ client, pull, config, auth: createModelAuth({ env: {}, staticKeyVar: "ONTOLOGY_SEMANTIC_LLM_API_KEY" }), deps: { ...deps, triggerRunId } });
   }
   const run = newRun(pull, triggerRunId);
   run.unreviewed.push({ path: "<model job>", reason: "trusted model job did not publish a result" });
@@ -155,7 +164,7 @@ async function main() {
       if (latest && newerRun(latest.triggerRunId, triggerRunId)) return;
       let config = null;
       try { config = loadConfig(); } catch { /* A visible unavailable run will be published. */ }
-      await runSemanticReview({ client, pull, config, secret: process.env.ONTOLOGY_SEMANTIC_LLM_API_KEY,
+      await runSemanticReview({ client, pull, config, auth: createModelAuth({ env: process.env, staticKeyVar: "ONTOLOGY_SEMANTIC_LLM_API_KEY" }),
         deps: { triggerRunId } });
     }
   } else if (mode === "dismiss") {

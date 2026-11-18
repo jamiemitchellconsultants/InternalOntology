@@ -91,6 +91,19 @@ test("semantic review opt-in installs scripts, tests, workflows and runbook", ()
   assert.equal(buildPlan({}).some((entry) => entry.dest.includes("semantic-review")), false);
 });
 
+test("llm-auth is planned exactly once for each reviewer flag and both together", () => {
+  for (const options of [{ withDriftReview: true }, { withSemanticReview: true },
+    { withDriftReview: true, withSemanticReview: true }]) {
+    const plan = buildPlan(options);
+    for (const dest of ["scripts/llm-auth.mjs", "scripts/llm-auth.test.mjs"]) {
+      const hits = plan.filter((entry) => entry.dest === dest);
+      assert.equal(hits.length, 1, `${dest} for ${JSON.stringify(options)}`);
+      assert.equal(hits[0].ownedBy, "kit");
+    }
+  }
+  assert.equal(buildPlan({}).some((entry) => entry.dest.includes("llm-auth")), false);
+});
+
 test("the old advisory install remains a separate option", () => {
   const destinations = buildPlan({ withDriftReview: true }).map((entry) => entry.dest);
   assert.ok(destinations.includes("scripts/review-ontology-drift.mjs"));

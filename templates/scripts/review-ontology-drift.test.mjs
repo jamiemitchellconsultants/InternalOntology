@@ -3,6 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createModelAuth } from "./llm-auth.mjs";
 
 import {
   buildBatches,
@@ -193,6 +194,30 @@ test("modelJson authenticates with ONTOLOGY_LLM_API_KEY, never GITHUB_TOKEN", as
     delete process.env.ONTOLOGY_LLM_API_KEY;
     delete process.env.GITHUB_TOKEN;
   }
+});
+
+test("modelJson authenticates with an OIDC token and retries once after a 401", async () => {
+  const env = { ONTOLOGY_OIDC_TOKEN_URL: "https://kc.example/token", ONTOLOGY_OIDC_CLIENT_ID: "cid",
+    ONTOLOGY_OIDC_CLIENT_SECRET: "s3cr3t" };
+  let issued = 0;
+  const tokenFetch = async () => Response.json({ access_token: `tok${++issued}`, expires_in: 300 });
+  const auth = createModelAuth({ env, staticKeyVar: "ONTOLOGY_LLM_API_KEY", fetchImpl: tokenFetch });
+  const seen = [];
+  const fakeFetch = async (_url, init) => {
+    seen.push(init.headers.Authorization);
+    return seen.length === 1 ? new Response("", { status: 401 }) : Response.json({ ok: true });
+  };
+  const out = await modelJson("http://endpoint/chat/completions", { method: "POST" }, fakeFetch, 300_000, auth);
+  assert.deepEqual(out, { ok: true });
+  assert.deepEqual(seen, ["Bearer tok1", "Bearer tok2"]);
+});
+
+test("modelJson reports partial OIDC configuration without echoing values", async () => {
+  const auth = createModelAuth({ env: { ONTOLOGY_OIDC_CLIENT_SECRET: "hush-value" }, staticKeyVar: "K" });
+  await assert.rejects(
+    modelJson("http://endpoint/x", { method: "POST" }, async () => new Response("{}"), 1000, auth),
+    (e) => /ONTOLOGY_OIDC_TOKEN_URL/.test(e.message) && !e.message.includes("hush-value"),
+  );
 });
 
 test("modelJson throws a typed HttpError carrying status and body", async () => {

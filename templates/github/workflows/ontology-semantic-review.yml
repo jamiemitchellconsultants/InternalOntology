@@ -61,6 +61,9 @@ jobs:
           ONTOLOGY_EXPECTED_HEAD: ${{ matrix.headSha }}
           ONTOLOGY_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}:${{ github.event.workflow_run.run_attempt }}
           ONTOLOGY_SEMANTIC_LLM_API_KEY: ${{ secrets.ONTOLOGY_SEMANTIC_LLM_API_KEY }}
+          ONTOLOGY_OIDC_TOKEN_URL: ${{ vars.ONTOLOGY_OIDC_TOKEN_URL }}
+          ONTOLOGY_OIDC_CLIENT_ID: ${{ vars.ONTOLOGY_OIDC_CLIENT_ID }}
+          ONTOLOGY_OIDC_CLIENT_SECRET: ${{ secrets.KEYCLOAK_CLIENT_SECRET }}
         run: node scripts/semantic-review-worker.mjs review
 
   finalize:

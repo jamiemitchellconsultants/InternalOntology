@@ -20,9 +20,11 @@ This adds the reviewer, its tests, its workflow and `docs/ontology-drift-review.
 
 ## Configure
 
-Three settings on the repository, described in the installed runbook: `ONTOLOGY_LLM_BASE_URL` and
-`ONTOLOGY_MODEL` as variables, `ONTOLOGY_LLM_API_KEY` as a secret. The workflow fails visibly if a
-variable is unset, rather than running and silently reviewing nothing.
+Described in the installed runbook: `ONTOLOGY_LLM_BASE_URL` and `ONTOLOGY_MODEL` as variables, plus
+a credential in one of two modes — the OIDC variables `ONTOLOGY_OIDC_TOKEN_URL` and
+`ONTOLOGY_OIDC_CLIENT_ID` with the `KEYCLOAK_CLIENT_SECRET` secret (short-lived tokens), or the
+legacy `ONTOLOGY_LLM_API_KEY` secret. The workflow fails visibly if a setting is missing, rather
+than running and silently reviewing nothing.
 
 ## Two properties worth preserving
 

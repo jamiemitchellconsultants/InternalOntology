@@ -7,6 +7,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { install } from "../bin/install-ontology.mjs";
 import { withTempRepo } from "./helpers/temp-repo.mjs";
+import { createModelAuth } from "../templates/scripts/llm-auth.mjs";
+
+const authFor = (key) => createModelAuth({ env: key ? { K: key } : {}, staticKeyVar: "K" });
 
 function run(dir, command, args) {
   try {
@@ -151,7 +154,7 @@ test("installed disabled, finding, and later unavailable runs map to the expecte
     let modelCalls = 0;
     const baseDeps = { isEligiblePull: async () => true, publishPending: async () => {},
       publishRun: async () => {}, readDismissals: async () => [] };
-    const disabled = await worker.runSemanticReview({ client: {}, pull, config, secret: "",
+    const disabled = await worker.runSemanticReview({ client: {}, pull, config, auth: authFor(""),
       modelFetch: async () => { modelCalls++; throw new Error("must not call"); }, deps: baseDeps });
     assert.equal(disabled.outcome, "disabled");
     assert.equal(modelCalls, 0);
@@ -159,11 +162,11 @@ test("installed disabled, finding, and later unavailable runs map to the expecte
     const input = { files: [{ path: "docs/a.md", text: "wrong term" }], ontologyText: "## Entities\n| Name | Description |\n| --- | --- |\n| `Invoice` | bill |", unreviewed: [] };
     const finding = { id: "f".repeat(64), path: "docs/a.md", quote: "wrong term",
       evidenceKey: "Entities:Invoice", reason: "wrong", suggestion: "use Invoice" };
-    const blocked = await worker.runSemanticReview({ client: {}, pull, config, secret: "test",
+    const blocked = await worker.runSemanticReview({ client: {}, pull, config, auth: authFor("test"),
       deps: { ...baseDeps, collectReviewInput: async () => input,
         reviewFiles: async () => ({ reviewed: ["docs/a.md"], unreviewed: [], findings: [finding] }) } });
     assert.equal(ledger.statusFor(blocked, []).state, "failure");
-    const unavailable = await worker.runSemanticReview({ client: {}, pull, config, secret: "test",
+    const unavailable = await worker.runSemanticReview({ client: {}, pull, config, auth: authFor("test"),
       deps: { ...baseDeps, collectReviewInput: async () => input,
         reviewFiles: async () => { throw new Error("model offline"); } } });
     assert.equal(unavailable.outcome, "unavailable");

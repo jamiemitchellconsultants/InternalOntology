@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { planSemanticReviews, runSemanticReview, finalizeSemanticReview } from "./semantic-review-worker.mjs";
+import { createModelAuth } from "./llm-auth.mjs";
 import { publishRun } from "./semantic-review-ledger.mjs";
 
+const authFor = (key) => createModelAuth({ env: key ? { K: key } : {}, staticKeyVar: "K" });
 const pull = { number: 7, head: { sha: "a".repeat(40), repo: { id: 1 } },
   base: { repo: { id: 1 } }, merge_commit_sha: "b".repeat(40), user: { login: "author" } };
 const config = { ontologyPath: "docs/ontology.md", ignorePaths: [], sections: { required: ["Entities"], optional: [] },
@@ -21,7 +23,7 @@ function deps(extra = {}) {
 test("disabled review emits a visible result without invoking the model", async () => {
   const support = deps();
   let calls = 0;
-  const result = await runSemanticReview({ client: {}, pull, config, secret: "",
+  const result = await runSemanticReview({ client: {}, pull, config, auth: authFor(""),
     modelFetch: async () => { calls++; throw new Error("must not call model"); }, deps: support.value });
   assert.equal(result.outcome, "disabled");
   assert.equal(calls, 0);
@@ -72,10 +74,10 @@ test("older identification cannot publish after a newer finding while planning o
 test("ineligible author and missing config do not call the model", async () => {
   let calls = 0;
   const modelFetch = async () => { calls++; throw new Error("must not call model"); };
-  const out = await runSemanticReview({ client: {}, pull, config, secret: "secret", modelFetch,
+  const out = await runSemanticReview({ client: {}, pull, config, auth: authFor("secret"), modelFetch,
     deps: deps({ isEligiblePull: async () => false }).value });
   assert.equal(out.outcome, "out-of-scope");
-  const missing = await runSemanticReview({ client: {}, pull, config: null, secret: "secret", modelFetch,
+  const missing = await runSemanticReview({ client: {}, pull, config: null, auth: authFor("secret"), modelFetch,
     deps: deps().value });
   assert.equal(missing.outcome, "unavailable");
   assert.equal(calls, 0);
@@ -83,7 +85,7 @@ test("ineligible author and missing config do not call the model", async () => {
 
 test("ambiguous workflow association is unavailable without model access", async () => {
   const result = await runSemanticReview({ client: {}, pull: { ...pull, semanticAssociationAmbiguous: true },
-    config, secret: "secret", modelFetch: async () => { throw new Error("must not call"); }, deps: deps().value });
+    config, auth: authFor("secret"), modelFetch: async () => { throw new Error("must not call"); }, deps: deps().value });
   assert.equal(result.outcome, "unavailable");
 });
 
@@ -91,7 +93,7 @@ test("no selected files passes with no eligible outcome", async () => {
   const support = deps({ collectReviewInput: async () => ({ ...input, files: [] }) });
   const result = await runSemanticReview({ client: {}, pull,
     config: { ...config, semanticReview: { enabled: true, model: "m", baseUrl: "https://model.example/v1" } },
-    secret: "secret", modelFetch: async () => { throw new Error("must not call"); }, deps: support.value });
+    auth: authFor("secret"), modelFetch: async () => { throw new Error("must not call"); }, deps: support.value });
   assert.equal(result.outcome, "no-eligible");
 });
 
@@ -100,15 +102,15 @@ test("a finding blocks and a partial review keeps that finding", async () => {
   const finding = { id: "f".repeat(64), path: "docs/a.md", quote: "wrong term",
     evidenceKey: "Entities:Invoice", reason: "wrong", suggestion: "use Invoice" };
   const support = deps({ reviewFiles: async () => ({ reviewed: ["docs/a.md"], unreviewed: [], findings: [finding] }) });
-  const reviewed = await runSemanticReview({ client: {}, pull, config: enabled, secret: "secret", deps: support.value });
+  const reviewed = await runSemanticReview({ client: {}, pull, config: enabled, auth: authFor("secret"), deps: support.value });
   assert.equal(reviewed.outcome, "reviewed");
   assert.equal(reviewed.findings.length, 1);
-  const partial = await runSemanticReview({ client: {}, pull, config: enabled, secret: "secret",
+  const partial = await runSemanticReview({ client: {}, pull, config: enabled, auth: authFor("secret"),
     deps: deps({ collectReviewInput: async () => ({ ...input, unreviewed: [{ path: "docs/b.md", reason: "blob unavailable" }] }),
       reviewFiles: async () => ({ reviewed: ["docs/a.md"], unreviewed: [], findings: [finding] }) }).value });
   assert.equal(partial.outcome, "partial");
   assert.equal(partial.findings.length, 1);
-  const withoutFinding = await runSemanticReview({ client: {}, pull, config: enabled, secret: "secret",
+  const withoutFinding = await runSemanticReview({ client: {}, pull, config: enabled, auth: authFor("secret"),
     deps: deps({ collectReviewInput: async () => ({ ...input, unreviewed: [{ path: "docs/b.md", reason: "blob unavailable" }] }),
       reviewFiles: async () => ({ reviewed: ["docs/a.md"], unreviewed: [], findings: [] }) }).value });
   assert.equal(withoutFinding.outcome, "partial");
@@ -117,7 +119,7 @@ test("a finding blocks and a partial review keeps that finding", async () => {
 
 test("model failure permits merge with explicit unavailable coverage", async () => {
   const enabled = { ...config, semanticReview: { enabled: true, model: "m", baseUrl: "https://model.example/v1" } };
-  const result = await runSemanticReview({ client: {}, pull, config: enabled, secret: "secret",
+  const result = await runSemanticReview({ client: {}, pull, config: enabled, auth: authFor("secret"),
     deps: deps({ reviewFiles: async () => { throw new Error("model offline"); } }).value });
   assert.equal(result.outcome, "unavailable");
   assert.deepEqual(result.findings, []);
@@ -132,7 +134,7 @@ test("the proposed ontology and current revision go to the model", async () => {
     assert.equal(args.headSha, newer.head.sha);
     return { reviewed: ["docs/a.md"], unreviewed: [], findings: [] };
   } });
-  const result = await runSemanticReview({ client: {}, pull: newer, config: enabled, secret: "secret", deps: support.value });
+  const result = await runSemanticReview({ client: {}, pull: newer, config: enabled, auth: authFor("secret"), deps: support.value });
   assert.equal(result.headSha, newer.head.sha);
   assert.equal(result.outcome, "reviewed");
 });
@@ -187,4 +189,15 @@ test("serialized finalizer publishes no-eligible and permission-unavailable outc
     deps: deps({ publishPending: async () => {}, isEligiblePull: async () => { throw new Error("offline"); } }).value });
   assert.equal(unavailable.outcome, "unavailable");
   assert.match(unavailable.unreviewed[0].reason, /permission/i);
+});
+
+test("a partial OIDC configuration makes the credential misconfigured, without echoing values", async () => {
+  const auth = createModelAuth({ env: { ONTOLOGY_OIDC_CLIENT_SECRET: "hush-value" }, staticKeyVar: "K" });
+  const support = deps();
+  const result = await runSemanticReview({ client: {}, pull, config: { ...config,
+    semanticReview: { enabled: true, model: "m", baseUrl: "https://model.example/v1" } },
+    auth, modelFetch: async () => { throw new Error("must not call"); }, deps: support.value });
+  assert.equal(result.outcome, "unavailable");
+  assert.match(JSON.stringify(result), /semantic model credential is misconfigured/);
+  assert.doesNotMatch(JSON.stringify(result), /hush-value/);
 });

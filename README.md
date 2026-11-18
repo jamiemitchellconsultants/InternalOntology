@@ -28,7 +28,7 @@ node bin/install-ontology.mjs --target /path/to/repo
 | `--project-name <name>` | Name used in the ontology's title. Defaults to the target directory's name. |
 | `--ontology-path <path>` | Where the ontology file goes. Defaults to `docs/ontology.md`. Must be repository-relative, with no `..` segment. |
 | `--default-branch <name>` | Branch the lint workflow's `push` trigger fires on. Defaults to the target's current branch (detected via `git`), falling back to `main` if that can't be detected. |
-| `--with-drift-review` | Also install the advisory semantic reviewer, its tests, workflow and runbook. |
+| `--with-drift-review` | Also install the advisory semantic reviewer, its tests, workflow and runbook. It authenticates with a short-lived Keycloak token (OIDC client credentials) or a legacy static key; see the installed runbook. |
 | `--with-semantic-review` | Install the opt-in blocking semantic reviewer, its trusted workflows, tests and [setup runbook](templates/docs/ontology-semantic-review.md). The shipped config stays disabled until maintainers activate it. |
 | `--with-source-graph` | Install the opt-in source graph checker, reader, workflow and [runbook](templates/docs/source-knowledge-graph.md). |
 | `--source-graph-root <path>` | Select the graph root and enable source graph installation. |
@@ -70,8 +70,9 @@ rows that do not apply, update `sections` in `ontology.config.json` to match, th
 
 After seeding the ontology, install the pilot with `--with-semantic-review` and follow its
 [runbook](templates/docs/ontology-semantic-review.md). The model and endpoint are configured in the
-adopter-owned `ontology.config.json` on the default branch; the model credential is an Actions
-environment secret restricted to that branch. The reviewer runs from trusted default-branch code
+adopter-owned `ontology.config.json` on the default branch; the model credential (a Keycloak client secret for
+short-lived OIDC tokens, or a legacy static key) is an Actions environment secret restricted to
+that branch. The reviewer runs from trusted default-branch code
 and assesses complete changed Markdown files. Findings can block merge through the fixed
 `ontology/semantic-match` status. Missing coverage is visible and permits merge unless the current
 run also has an active finding.

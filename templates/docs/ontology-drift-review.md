@@ -35,14 +35,39 @@ nothing."
 
 | Setting | Where | Example |
 |---|---|---|
-| `ONTOLOGY_LLM_BASE_URL` | repository variable | `https://api.example.com/v1` |
-| `ONTOLOGY_MODEL` | repository variable | `qwen3-27b` |
-| `ONTOLOGY_LLM_API_KEY` | repository secret | the endpoint's bearer token |
+| `ONTOLOGY_LLM_BASE_URL` | repository variable | `https://gateway.tqaentry.com/v1` |
+| `ONTOLOGY_MODEL` | repository variable | `ontology-review` |
 
-Any OpenAI-compatible chat-completions endpoint works. If yours is not reachable from a GitHub
-hosted runner — a self-hosted model on a private network, say — either run the job on a self-hosted
-runner, or add your own network step at the marked point in
-`.github/workflows/ontology-drift-review.yml`.
+Any OpenAI-compatible chat-completions endpoint works. The endpoint must be reachable from a
+GitHub hosted runner; otherwise run the job on a self-hosted runner.
+
+### Authentication
+
+`scripts/llm-auth.mjs` supplies the bearer for every model request. Set one of two modes.
+
+**OIDC client credentials (preferred; short-lived tokens).**
+
+| Setting | Where | Example |
+|---|---|---|
+| `ONTOLOGY_OIDC_TOKEN_URL` | repository variable | `https://auth.tqaentry.com/realms/homelab/protocol/openid-connect/token` |
+| `ONTOLOGY_OIDC_CLIENT_ID` | repository variable | `litellm-ci` |
+| `KEYCLOAK_CLIENT_SECRET` | repository secret | the client's secret |
+
+The workflow maps the `KEYCLOAK_CLIENT_SECRET` secret into the `ONTOLOGY_OIDC_CLIENT_SECRET`
+environment variable the script reads, so a repository that already holds that secret sets nothing
+new. All three values must be present; a partial set fails with an error naming the missing
+variable names (never their values) and does not fall back to a static key. The script requests a
+token with the client-credentials grant (the secret goes in an HTTP Basic header), caches it until
+about 60 seconds before it expires (gateway tokens last 300 seconds), fetches a new one after that,
+and fetches once more and repeats the request if the model endpoint answers 401. The secret, the
+token and the token endpoint's response body are never logged or placed in an error.
+
+**Static key (legacy; still works).** Leave the OIDC settings unset and add
+`ONTOLOGY_LLM_API_KEY` as a repository secret holding the endpoint's bearer token. If both modes
+are configured, OIDC wins.
+
+The workflow's configuration check passes when either mode is complete and fails, naming what is
+missing, when neither is.
 
 ## Running it locally
 
@@ -52,7 +77,8 @@ BASE_REF=origin/main DRY_RUN=1 node scripts/review-ontology-drift.mjs docs/spec.
 
 `DRY_RUN` prints the batching plan and the approximate request size without calling the model or
 GitHub. Drop it, and supply `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `PR_NUMBER` and
-`ONTOLOGY_LLM_BASE_URL`, to do a real run.
+`ONTOLOGY_LLM_BASE_URL`, plus either `ONTOLOGY_LLM_API_KEY` or the three `ONTOLOGY_OIDC_*` values,
+to do a real run.
 
 ## Tuning
 
