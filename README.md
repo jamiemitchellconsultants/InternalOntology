@@ -28,7 +28,7 @@ node bin/install-ontology.mjs --target /path/to/repo
 | `--project-name <name>` | Name used in the ontology's title. Defaults to the target directory's name. |
 | `--ontology-path <path>` | Where the ontology file goes. Defaults to `docs/ontology.md`. Must be repository-relative, with no `..` segment. |
 | `--default-branch <name>` | Branch the lint workflow's `push` trigger fires on. Defaults to the target's current branch (detected via `git`), falling back to `main` if that can't be detected. |
-| `--with-drift-review` | Also install the advisory semantic reviewer, its tests, workflow and runbook. It authenticates with a short-lived Keycloak token (OIDC client credentials) or a legacy static key; see the installed runbook. |
+| `--with-drift-review` | Also install the advisory semantic reviewer, its tests, workflow and runbook. It authenticates with a short-lived Keycloak token (OIDC client credentials) or a legacy static key; see the installed runbook. Requests are budgeted at 200,000 characters by default; set the repository variable ONTOLOGY_MAX_REQUEST_CHARS to change it. |
 | `--with-semantic-review` | Install the opt-in blocking semantic reviewer, its trusted workflows, tests and [setup runbook](templates/docs/ontology-semantic-review.md). The shipped config stays disabled until maintainers activate it. |
 | `--with-source-graph` | Install the opt-in source graph checker, reader, workflow and [runbook](templates/docs/source-knowledge-graph.md). |
 | `--source-graph-root <path>` | Select the graph root and enable source graph installation. |
