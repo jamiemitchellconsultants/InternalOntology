@@ -48,7 +48,8 @@ by rewriting the original.
 | [32](#entry-docs-plan-oidc-token-provider-for-model-reviewers-92) | 2026-11-18 | docs: plan OIDC token provider for model reviewers (#92) | product | Seven tasks: shared `llm-auth.mjs` with full test contract, drift reviewer, semantic reviewer, installer entries (the installer lists scripts explicitly), workflow templates, docs, wrap-up. |
 | [33](#entry-feat-oidc-token-provider-for-the-model-reviewers-92) | 2026-11-18 | feat: OIDC token provider for the model reviewers (#92) | product | One shared `ModelAuthProvider` used by both reviewers, with retry-once on 401 and static-key fallback ([ADR 0012](docs/adr/0012-shared-model-auth-provider.md)); workflows map the existing `KEYCLOAK_CLIENT_SECRET` so consumers re-set… |
 | [34](#entry-docs-design-configurable-drift-request-budget-100) | 2026-11-18 | docs: design configurable drift request budget (#100) | product | Raise the default to 200,000 characters (about 50,000 to 67,000 tokens, at most half of a 131,072-token window), make the budget and the model timeout environment settings fed from repository variables with strict validation ([ADR… |
-| [35](#entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow) | 2026-11-18 | fix: reviewer tests on Node 20/22 and a kit test workflow | product | Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. |
+| [35](#entry-docs-plan-configurable-drift-request-budget-100) | 2026-11-18 | docs: plan configurable drift request budget (#100) | product | Seven tasks in an order that keeps every commit green: setting parser and default, typed budget error, timeout and skip path in `main`, workflow variables, docs, a large-ontology acceptance test run first against the old code to prove it… |
+| [36](#entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow) | 2026-11-18 | fix: reviewer tests on Node 20/22 and a kit test workflow | product | Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. |
 
 ---
 
@@ -798,9 +799,29 @@ Large-ontology adopters work after a reinstall; larger requests cost more and th
 
 ---
 
+<a id="entry-docs-plan-configurable-drift-request-budget-100"></a>
+
+## Entry 35 — 2026-11-18 — docs: plan configurable drift request budget (#100)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The design is merged; the plan turns it into reviewable, test-first tasks before any code exists.
+
+## Decision
+
+Seven tasks in an order that keeps every commit green: setting parser and default, typed budget error, timeout and skip path in `main`, workflow variables, docs, a large-ontology acceptance test run first against the old code to prove it reproduces the gap, then wrap-up. The plan also tells the builder to check `npm test`'s exit status explicitly. Rejected: one large commit, and testing `main` only through unit tests.
+
+## Consequences
+
+The build cannot start until this plan is reviewed and merged. The existing assertions for the old error messages are preserved by keeping the message prefixes.
+
+---
+
 <a id="entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow"></a>
 
-## Entry 35 — 2026-11-18 — fix: reviewer tests on Node 20/22 and a kit test workflow
+## Entry 36 — 2026-11-18 — fix: reviewer tests on Node 20/22 and a kit test workflow
 
 *Kind: product. Status: accepted.*
 
