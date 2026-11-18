@@ -220,3 +220,101 @@ test("the configured timeout aborts a hung request", async () => {
   assert.match(result.unreviewed[0].reason, /timed out/);
   assert.equal(result.unreviewed[0].code, undefined);
 });
+
+// The reply below is the verbatim content the live gateway returned for the JEPA-Speech trial
+// (JEPA-Speech#208): fenced JSON, and singular "Enum:" evidence keys although the ontology section is "Enums".
+const LIVE_REPLY = "```json\n" + JSON.stringify({ findings: [
+  { quote: "pending, running, done and failed", evidenceKey: "Enum:SessionRemovalState",
+    reason: "The file uses informal state names that conflict with the enum's defined values Requested, Removing, Removed, and Failed.",
+    suggestion: "Requested, Removing, Removed and Failed" },
+  { quote: "tester left, test run, bad take or miscellaneous", evidenceKey: "Enum:RemovalReason",
+    reason: "The file uses informal reason labels that conflict with the enum's defined values TesterWithdrew, TestRecording, BadRecording, and Other.",
+    suggestion: "tester withdrew, test recording, bad recording or other" },
+] }, null, 2) + "\n```";
+
+const ENUM_ONTOLOGY = ["## Enums", "", "| Name | Values |", "| --- | --- |",
+  "| `SessionRemovalState` | `Requested`, `Removing`, `Removed`, `Failed` |",
+  "| `RemovalReason` | `TesterWithdrew`, `TestRecording`, `BadRecording`, `Other` |", ""].join("\n");
+const ENUM_FILE = "Removal states are pending, running, done and failed.\nReasons are tester left, test run, bad take or miscellaneous.\n";
+
+const liveOptions = (reply, extra = {}) => ({ files: [{ path: "docs/removal.md", text: ENUM_FILE }],
+  ontologyText: ENUM_ONTOLOGY, sections: { required: ["Enums"], optional: [] }, model: "ontology-review",
+  baseUrl: "https://model.example/v1", auth: createModelAuth({ env: { K: "k" }, staticKeyVar: "K" }),
+  headSha: "a".repeat(40), fetchImpl: async () => completion(reply), ...extra });
+
+test("the live fenced reply with singular section keys is accepted and grounded to the catalog keys", async () => {
+  const result = await reviewFiles(liveOptions(LIVE_REPLY));
+  assert.deepEqual(result.reviewed, ["docs/removal.md"]);
+  assert.deepEqual(result.unreviewed, []);
+  assert.deepEqual(result.findings.map((item) => item.evidenceKey),
+    ["Enums:SessionRemovalState", "Enums:RemovalReason"]);
+  assert.equal(result.findings[0].quote, "pending, running, done and failed");
+});
+
+test("the same findings are accepted unfenced and with other fence shapes", async () => {
+  const bare = LIVE_REPLY.replace(/^```json\n/, "").replace(/\n```$/, "");
+  const variants = [bare, "```\n" + bare + "\n```", "```JSON\n" + bare + "\n```", "  \n```json\n" + bare + "\n```\n  ",
+    "```json" + bare + "```"];
+  for (const reply of variants) {
+    const result = await reviewFiles(liveOptions(reply));
+    assert.equal(result.findings.length, 2, JSON.stringify(reply.slice(0, 20)));
+  }
+});
+
+test("exact catalog keys, wrong-section keys with a unique name and singular or plural prefixes resolve", async () => {
+  const reply = (key) => JSON.stringify({ findings: [{ quote: "pending, running, done and failed", evidenceKey: key,
+    reason: "r", suggestion: "s" }] });
+  for (const key of ["Enums:SessionRemovalState", "Enum:SessionRemovalState", "enums:SessionRemovalState",
+    "Entities:SessionRemovalState", "SessionRemovalState"]) {
+    const result = await reviewFiles(liveOptions(reply(key)));
+    assert.equal(result.findings[0]?.evidenceKey, "Enums:SessionRemovalState", key);
+  }
+});
+
+test("each unusable reply gets its own fixed reason and no model content", async () => {
+  const leak = "SECRET-MODEL-TEXT";
+  const reasons = async (reply) => (await reviewFiles(liveOptions(reply))).unreviewed[0].reason;
+  const finding = (patch) => JSON.stringify({ findings: [{ quote: "pending, running, done and failed",
+    evidenceKey: "Enums:SessionRemovalState", reason: "r", suggestion: "s", ...patch }] });
+  const cases = [
+    ["", /model reply was empty/],
+    ["   \n", /model reply was empty/],
+    ["```json\n```", /model reply was empty/],
+    [`not json ${leak}`, /model reply was not valid JSON/],
+    [`\`\`\`json\n{"findings": [${leak}\n\`\`\``, /model reply was not valid JSON/],
+    [JSON.stringify({ result: leak }), /model reply had no findings list/],
+    [finding({ reason: "" }), /model finding was incomplete/],
+    [finding({ quote: `${leak} not in file` }), /finding quote not found in the file/],
+    [finding({ evidenceKey: "Enums:NoSuchName" }), /finding cites an unknown evidence key/],
+  ];
+  for (const [reply, pattern] of cases) {
+    const reason = await reasons(reply);
+    assert.match(reason, pattern, reply.slice(0, 30));
+    assert.doesNotMatch(reason, new RegExp(leak));
+  }
+});
+
+test("a name present in two sections is ambiguous unless the prefix picks one", async () => {
+  const ontologyText = ["## Entities", "", "| Name | Description |", "| --- | --- |", "| `Session` | a session |", "",
+    "## Enums", "", "| Name | Values |", "| --- | --- |", "| `Session` | `A`, `B` |", ""].join("\n");
+  const reply = (key) => JSON.stringify({ findings: [{ quote: "pending, running, done and failed", evidenceKey: key,
+    reason: "r", suggestion: "s" }] });
+  const run = (key) => reviewFiles({ ...liveOptions(reply(key)), ontologyText,
+    sections: { required: ["Entities", "Enums"], optional: [] } });
+  assert.match((await run("Session")).unreviewed[0].reason, /finding cites an ambiguous evidence key/);
+  assert.match((await run("Thing:Session")).unreviewed[0].reason, /finding cites an ambiguous evidence key/);
+  assert.equal((await run("Enum:Session")).findings[0].evidenceKey, "Enums:Session");
+  assert.equal((await run("Entities:Session")).findings[0].evidenceKey, "Entities:Session");
+});
+
+test("the system prompt lists the exact evidence keys and the request budget counts them", async () => {
+  let system;
+  await reviewFiles(liveOptions(LIVE_REPLY, { fetchImpl: async (_url, request) => {
+    system = JSON.parse(request.body).messages[0].content;
+    return completion(LIVE_REPLY);
+  } }));
+  assert.match(system, /Enums:SessionRemovalState/);
+  assert.match(system, /Enums:RemovalReason/);
+  const catalog = catalogOntology(ENUM_ONTOLOGY, { required: ["Enums"], optional: [] });
+  assert.ok(catalog.projection.includes("Enums:RemovalReason"), "keys are part of the projection the budget counts");
+});

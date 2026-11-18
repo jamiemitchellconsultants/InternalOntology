@@ -175,6 +175,10 @@ enum lock test catches.
 - **`PlanEntry`** — a `Kit`-owned entry is replaced wholesale by `--force`; an `Adopter`-owned entry
   is replaced only by the separate, deliberately destructive `--reset-content`. Plain `--force` must
   never touch adopter content — that is what makes it the safe, routine upgrade path.
+- **`SemanticFinding`** — is grounded only when its quote is an exact substring of the reviewed file and its
+  evidence names a real ontology item; a wrong or singular section prefix is resolved to the unique item
+  with that name and the finding carries the canonical key. A reply that cannot be read, or a finding that
+  cannot be grounded, leaves the file not reviewed with a fixed reason that never contains model output.
 - **`SemanticReviewWorker`** — never reports an ontology that outgrew the `RequestBudget` as a service or
   configuration outage, and never passes it without saying so: a too-large ontology is stated as such in
   the status description and the pull request record.
