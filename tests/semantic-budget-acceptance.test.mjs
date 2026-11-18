@@ -164,3 +164,111 @@ test("B6 B16 the installed workflow and runbook carry the variables", async () =
     }
   });
 });
+
+function stubWorkerRun(worker, auth, env, reviewFilesStub) {
+  const client = fakeClient();
+  const config = { ontologyPath: "docs/ontology.md", ignorePaths: [], sections,
+    semanticReview: { enabled: true, model: "m", baseUrl: "http://127.0.0.1:1/v1" } };
+  const promise = worker.runSemanticReview({ client, pull, config, auth, env,
+    deps: { isEligiblePull: async () => true, triggerRunId: "81:1",
+      collectReviewInput: async () => ({ files: [{ path: "docs/a.md", text: "A plain sentence." }],
+        ontologyText: largeOntology(5), unreviewed: [] }),
+      reviewFiles: reviewFilesStub } });
+  return { client, promise };
+}
+
+test("B3 B4 B12 the installed worker passes the override, or the defaults, to the model module", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSemanticReview: true });
+    const { worker, auth } = await load(repo);
+    let seen;
+    const stub = async (arguments_) => { seen = arguments_; return { reviewed: ["docs/a.md"], unreviewed: [], findings: [] }; };
+    await stubWorkerRun(worker, auth, { ONTOLOGY_MAX_REQUEST_CHARS: "90000", ONTOLOGY_MODEL_TIMEOUT_MS: "45000" }, stub).promise;
+    assert.deepEqual([seen.maxRequestChars, seen.timeoutMs], [90_000, 45_000]);
+    for (const blank of ["", "   "]) {
+      await stubWorkerRun(worker, auth, { ONTOLOGY_MAX_REQUEST_CHARS: blank, ONTOLOGY_MODEL_TIMEOUT_MS: blank }, stub).promise;
+      assert.deepEqual([seen.maxRequestChars, seen.timeoutMs], [200_000, 300_000]);
+    }
+  });
+});
+
+test("B2 the installed planner uses the budget down to one character of capacity", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSemanticReview: true });
+    const { model } = await load(repo);
+    const catalog = model.catalogOntology(largeOntology(600), sections);
+    const file = { path: "a.md", text: "prose" };
+    const exact = model.REQUEST_OVERHEAD + catalog.projection.length + file.path.length;
+    assert.equal(model.chunkFiles([file], catalog, exact + file.text.length).chunks.length, 1);
+    assert.equal(model.chunkFiles([file], catalog, exact + 1).chunks.length, file.text.length);
+    const none = model.chunkFiles([file], catalog, exact);
+    assert.equal(none.chunks.length, 0);
+    assert.equal(none.unreviewed[0].code, "too-large");
+  });
+});
+
+test("B9 B10 a persistent 413 is coded too-large; a 413 on a larger chunk is split and retried", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSemanticReview: true });
+    const { model, auth } = await load(repo);
+    const ok = { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ findings: [] }) } }] }) };
+    const persistent = await model.reviewFiles({ files: [{ path: "docs/a.md", text: "x" }],
+      ontologyText: largeOntology(5), sections, model: "m", baseUrl: "http://x/v1", auth, headSha: head,
+      fetchImpl: async () => ({ ok: false, status: 413 }) });
+    assert.equal(persistent.unreviewed[0].code, "too-large");
+    assert.match(persistent.unreviewed[0].reason, /ontology too large/);
+    const sizes = [];
+    const split = await model.reviewFiles({ files: [{ path: "docs/a.md", text: "x".repeat(400) }],
+      ontologyText: largeOntology(5), sections, model: "m", baseUrl: "http://x/v1", auth, headSha: head,
+      fetchImpl: async (_url, request) => {
+        const text = JSON.parse(request.body).messages[1].content;
+        sizes.push(text.length);
+        return sizes.length === 1 ? { ok: false, status: 413 } : ok;
+      } });
+    assert.deepEqual(split.reviewed, ["docs/a.md"]);
+    assert.ok(sizes.length >= 3, `expected a split and retry, saw ${sizes.length} requests`);
+  });
+});
+
+test("B11 a finding still blocks, and other unreviewed causes keep their outcome", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSemanticReview: true });
+    const { worker, auth } = await load(repo);
+    const finding = { id: "f".repeat(64), path: "docs/a.md", quote: "q", evidenceKey: "Entities:Entity0", reason: "r", suggestion: "s" };
+    const blocked = stubWorkerRun(worker, auth, {}, async () => ({ reviewed: ["docs/a.md"], unreviewed: [], findings: [finding] }));
+    assert.equal((await blocked.promise).outcome, "reviewed");
+    assert.equal(blocked.client.statuses.at(-1).state, "failure");
+    const offline = stubWorkerRun(worker, auth, {}, async () => ({ reviewed: [], findings: [],
+      unreviewed: [{ path: "docs/a.md", reason: "model timed out" }] }));
+    assert.equal((await offline.promise).outcome, "unavailable");
+    assert.match(offline.client.statuses.at(-1).description, /service or configuration unavailable/);
+  });
+});
+
+test("B12 the installed model module aborts a hung request at the configured timeout", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSemanticReview: true });
+    const { model, auth } = await load(repo);
+    const hang = (_url, request) => new Promise((_resolve, reject) => {
+      const keepAlive = setTimeout(() => {}, 60_000);
+      request.signal.addEventListener("abort", () => {
+        clearTimeout(keepAlive);
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      });
+    });
+    const result = await model.reviewFiles({ files: [{ path: "docs/a.md", text: "x" }], ontologyText: largeOntology(5),
+      sections, model: "m", baseUrl: "http://x/v1", auth, headSha: head, fetchImpl: hang, timeoutMs: 20 });
+    assert.match(result.unreviewed[0].reason, /timed out/);
+  });
+});
+
+test("B13 B16 the installed runbook states the timeout default and caveat and the unmeasured figure", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSemanticReview: true });
+    const doc = readFileSync(join(repo.dir, "docs/ontology-semantic-review.md"), "utf8");
+    for (const expected of ["300,000 ms", "has not been measured", "no output cap", "permits merge", "ONTOLOGY_MODEL_TIMEOUT_MS"]) {
+      assert.ok(doc.includes(expected), `runbook lacks ${expected}`);
+    }
+    assert.match(readFileSync(join(KIT, "README.md"), "utf8"), /ONTOLOGY_MAX_REQUEST_CHARS/);
+  });
+});
