@@ -416,11 +416,11 @@ async function installedReview(options, body) {
       const client = createGitHubClient({ token: "t", repository: "owner/widgets", fetchImpl: gh.fetchImpl });
       const keyed = createModelAuth({ env: { K: "k" }, staticKeyVar: "K" });
       let trigger = 80;
-      const review = ({ namingReview = ENABLED(stand), env = {}, auth = keyed } = {}) => worker.runGraphNamingReview({ client, pull: gh.state.pull, auth, env,
-        config: { ontologyPath: "docs/ontology.md", sections: { required: ["Entities"], optional: [] }, sourceGraph: { enabled: true, root: "g", evidence: {}, namingReview } },
-        deps: { triggerRunId: `${++trigger}:1` } });
+      const review = ({ namingReview = ENABLED(stand), env = {}, auth = keyed,
+        config = { ontologyPath: "docs/ontology.md", sections: { required: ["Entities"], optional: [] }, sourceGraph: { enabled: true, root: "g", evidence: {}, namingReview } } } = {}) =>
+        worker.runGraphNamingReview({ client, pull: gh.state.pull, auth, env, config, deps: { triggerRunId: `${++trigger}:1` } });
       const settle = (text, login = "reviewer") => worker.handleSettlementEvent({ client, event: { action: "created", issue: { number: 7, pull_request: {} }, comment: gh.comment(text, login) } });
-      await body({ gh, h, review, settle, stand, createModelAuth });
+      await body({ gh, h, review, settle, stand, createModelAuth, repo });
     });
   } finally { stand.close(); }
 }
@@ -516,10 +516,11 @@ test("B33: a review that cannot run permits merge and says why", async () => {
     assert.match(gh.summary(), /- `:node-job` — model returned HTTP 500/);
     assert.deepEqual([gh.statusOn(HEAD2).state, gh.statusOn(HEAD2).description], ["success", "Partial graph naming review; 2 node(s) not reviewed"]);
     gh.pushHead(HEAD3);
-    const tooLarge = await review({ env: { ONTOLOGY_MAX_REQUEST_CHARS: "50" } });
-    assert.equal(tooLarge.results.length, 0);
-    assert.equal(gh.statusOn(HEAD3).state, "success");
+    assert.equal((await review({ env: { ONTOLOGY_MAX_REQUEST_CHARS: "50" } })).outcome, "too-large");
+    assert.deepEqual([gh.statusOn(HEAD3).state, gh.statusOn(HEAD3).description],
+      ["success", "Graph naming not reviewed: ontology too large for the configured budget (raise ONTOLOGY_MAX_REQUEST_CHARS)"]);
     assert.match(gh.summary(), /- `:node-job` — ontology too large for the configured budget \(projection \d+ characters, budget 50\)/);
+    assert.match(gh.summary(), /Raise the ONTOLOGY_MAX_REQUEST_CHARS repository variable/);
   });
 });
 
@@ -530,12 +531,18 @@ test("B34: without the install flag nothing is installed, and a repository that 
     assert.equal(existsSync(join(repo.dir, ".github/workflows/ontology-graph-naming-review.yml")), false);
     assert.equal(existsSync(join(repo.dir, "docs/graph-naming-review.md")), false);
   });
-  for (const namingReview of [{ enabled: false, model: "", baseUrl: "" }, null]) {
-    await installedReview(async ({ gh, review, stand }) => {
-      await review({ namingReview });
-      assert.equal(stand.requests.length, 0);
-      assert.deepEqual([gh.statusOn(HEAD).state, gh.statusOn(HEAD).description], ["success", "Graph naming review disabled; not reviewed"], JSON.stringify(namingReview));
-      assert.deepEqual(gh.state.comments.map((c) => c.body.split("\n")[0]), [], JSON.stringify(namingReview));
+  for (const setting of [{ enabled: false, model: "", baseUrl: "" }, undefined]) {
+    await installedReview(async ({ gh, review, stand, repo }) => {
+      const config = JSON.parse(read(repo, "ontology.config.json"));
+      config.sourceGraph = { enabled: true, root: "g", evidence: {}, ...(setting ? { namingReview: setting } : {}) };
+      repo.write("ontology.config.json", JSON.stringify(config, null, 2) + "\n");
+      const { loadConfig } = await load(repo, "ontology-config.mjs");
+      await review({ config: loadConfig({ cwd: repo.dir }) });
+      const label = setting ? "enabled false" : "setting absent";
+      assert.equal(stand.requests.length, 0, label);
+      assert.deepEqual([gh.statusOn(HEAD).state, gh.statusOn(HEAD).description], ["success", "Graph naming review disabled; not reviewed"], label);
+      assert.equal(gh.statusOn(MERGE).state, "success", label);
+      assert.deepEqual(gh.state.comments.map((c) => c.body.split("\n")[0]), [], label);
     });
   }
 });
