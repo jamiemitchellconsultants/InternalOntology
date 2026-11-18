@@ -275,4 +275,5 @@ reviewer in dry-run, plus installed-module checks. Nothing calls any model or Gi
 | --- | --- | --- | --- | --- |
 | Local build | Executable tests (11 tests) | pass; full `npm test` exits 0 | 2026-11-18 | run by the agent; not yet approved by the person acting as user |
 | Local build | Scripted walkthroughs | pending, not yet followed by a person | - | - |
-| Deployed (consumer Actions run, user-driven) | Walkthroughs and executable layer | not run: needs the user to reinstall in JEPA-Speech or Grooveloom and open a pull request; no live call has been made | - | - |
+| Deployed (JEPA-Speech#205, GitHub Actions, merged) | Live run of the drift reviewer with the 200,000-character default | pass: the 58 KB ontology (58,094-character projection) planned batches, the model call returned no drift in about 18 s, and all 10 pull request checks passed after #108 fixed the Node 20 and 22 test bug | see JEPA-Speech#205 | the user's consumer run; not a person-run walkthrough |
+| Deployed | Not verified live | the skipped-comment GitHub API path; the 300,000 ms timeout with a prompt near the budget (the 58 KB run took about 18 s); the person-run walkthroughs, which were not approved by the user | - | - |
