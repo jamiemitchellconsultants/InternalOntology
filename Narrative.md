@@ -44,6 +44,7 @@ by rewriting the original.
 | [28](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
 | [29](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
 | [30](#entry-keep-narrative-proposals-up-to-date) | 2026-11-04 | Keep narrative proposals up to date | product | Install the documented refresh workflow. Refresh after default-branch narrative changes and successful maintenance runs, and allow manual recovery. |
+| [31](#entry-feat-oidc-token-provider-for-the-model-reviewers-92) | 2026-11-18 | feat: OIDC token provider for the model reviewers (#92) | product | One shared `ModelAuthProvider` used by both reviewers, with retry-once on 401 and static-key fallback ([ADR 0012](docs/adr/0012-shared-model-auth-provider.md)); workflows map the existing `KEYCLOAK_CLIENT_SECRET` so consumers re-set… |
 
 ---
 
@@ -710,3 +711,23 @@ Install the documented refresh workflow. Refresh after default-branch narrative 
 ## Consequences
 
 Open proposals can be updated and their compiled narrative validated without force-pushing. Conflicts outside generated output remain for human resolution. The workflow must reach the default branch before it can run, and narrative proposals remain subject to review.
+
+---
+
+<a id="entry-feat-oidc-token-provider-for-the-model-reviewers-92"></a>
+
+## Entry 31 — 2026-11-18 — feat: OIDC token provider for the model reviewers (#92)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The home lab gateway is now public and accepts only short-lived Keycloak JWTs, so the reviewers' static bearer key no longer works there. Installed scripts must stay byte-identical across adopters, so the change belongs in the kit templates. Design and plan were reviewed in PRs #93 and #95.
+
+## Decision
+
+One shared `ModelAuthProvider` used by both reviewers, with retry-once on 401 and static-key fallback ([ADR 0012](docs/adr/0012-shared-model-auth-provider.md)); workflows map the existing `KEYCLOAK_CLIENT_SECRET` so consumers re-set nothing ([ADR 0013](docs/adr/0013-reuse-keycloak-client-secret.md)). Rejected: duplicating the logic per reviewer, pre-fetching the token in the workflow, renaming the secret. The Narrative fragment is left to the post-merge automation, as for earlier PRs.
+
+## Consequences
+
+Static-key adopters keep working; OIDC wins when both are set. Consumers must reinstall with `--force`, set variables and, for semantic review, add the secret to its environment. Function signatures of `reviewFiles` and `runSemanticReview` changed (`auth` replaces `apiKey` and `secret`). Token-type checks, JWT validation and other grants stay out of scope. Live-gateway behaviour is open until a consumer runs it.
