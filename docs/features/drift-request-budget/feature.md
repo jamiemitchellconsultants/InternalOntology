@@ -140,3 +140,64 @@ a repository variable of the same name. "Fit" means the system prompt plus proje
 | U6 | Change `max_tokens`? | No, deferred as out of scope; the runbook says to raise it with the timeout. |
 | U7 | Split the ontology projection across requests? | Deferred as out of scope (vision). |
 | U8 | Is 200,000 right for the live gateway? | Cannot be decided here; unverified until a large-ontology consumer runs it. |
+
+## Architect: structure
+
+### Components
+
+| Component | Responsibility | Serves |
+| --- | --- | --- |
+| Setting parser in `review-ontology-drift.mjs` (`readPositiveInteger`, `resolveRequestBudget`) | Reads `ONTOLOGY_MAX_REQUEST_CHARS` and `ONTOLOGY_MODEL_TIMEOUT_MS` into a `RequestBudget`; defaults 200,000 and 300,000; rejects junk with an error naming variable and value | B1, B3, B4, B5, B11 |
+| `buildBatches` | Plans batches against the budget; throws BudgetExceededError when under 500 characters remain | B1, B2, B7 |
+| `reviewResilient` and `reviewBatch` | Unchanged 413 split; throws BudgetExceededError when one line still hits the limit; `reviewBatch` passes the timeout to `modelJson` | B8, B9, B11 |
+| `main` | Resolves the budget first (red on junk), reports the skipped outcome through the marker comment, a notice line and exit 0, and in dry-run prints it | B5, B7, B8, B10 |
+| Drift-review workflow template | Passes the two variables to the review step | B6 |
+| Runbook, README | State default, override, skipped outcome, timeout caveat | B12, B14 |
+| Tests: unit tests beside the script and `tests/` acceptance | Executable form of B1-B13 including a roughly 60 KB fixture ontology | B1-B13 |
+| `Installer` and byte-identity | No change; script stays identical | B15 |
+
+### Structure
+
+```mermaid
+flowchart LR
+  V[Repository variables] --> W[Workflow review step]
+  W --> M[main]
+  M --> P[Setting parser]
+  P --> B[buildBatches]
+  B -->|BudgetExceededError| S[Skipped comment, notice, exit 0]
+  B --> R[reviewResilient]
+  R -->|413 split| R
+  R -->|one line still too large| S
+  R --> G[Gateway]
+```
+
+### Deployment and runtime
+
+No new component or service. The change ships in the installed script, workflow and runbook;
+each consumer picks it up by re-running the installer with `--force` and may set the two optional
+repository variables. Nothing is required: defaults apply when they are unset.
+
+### Traceability
+
+| Behaviour | Components |
+| --- | --- |
+| B1 | setting parser, `buildBatches` |
+| B2 | `buildBatches` |
+| B3 | setting parser, `buildBatches` |
+| B4 | setting parser |
+| B5 | setting parser, `main` |
+| B6 | workflow template |
+| B7 | `buildBatches`, `main` |
+| B8 | `reviewResilient`, `main` |
+| B9 | `reviewResilient` |
+| B10 | `main` |
+| B11 | setting parser, `reviewBatch` |
+| B12 | runbook |
+| B13 | acceptance tests |
+| B14 | runbook, README |
+| B15 | `Installer` |
+
+### Decisions
+
+- [ADR 0014: configurable budget, default 200,000 characters](../../adr/0014-configurable-request-budget.md)
+- [ADR 0015: neutral skipped outcome for an oversized ontology](../../adr/0015-skipped-outcome-for-oversized-ontology.md)
