@@ -58,6 +58,7 @@ by rewriting the original.
 | [42](#entry-docs-design-for-agent-maintained-knowledge-graph-122) | 2026-11-18 | docs: design for agent-maintained knowledge graph (#122) | product | This is a correction of `docs-feature-behaviours-for-source-knowledge-graph`: a model may now produce semantic results about the graph, and a result takes effect only when a person with write access accepts it. |
 | [43](#entry-docs-plan-agent-maintained-knowledge-graph-122) | 2026-11-18 | docs: plan agent-maintained knowledge graph (#122) | product | There are 13 test-first tasks. Tasks 1–3 are the agent half: the `GraphReader` `concept` command, the stronger `GraphAgentProtocol`, and "Authoring graph entries" in the installed runbook. |
 | [44](#entry-feat-agent-maintained-knowledge-graph-and-graph-naming-review-122) | 2026-11-18 | feat: agent-maintained knowledge graph and graph naming review (#122) | product | The build follows the plan, with two rulings. - The existing installer option test now expects the new `withGraphNamingReview: false` default. |
+| [45](#entry-fix-and-acceptance-agent-maintained-knowledge-graph-user-step-122) | 2026-11-18 | fix and acceptance: agent-maintained knowledge graph user step (#122) | product | - A disabled run publishes only the status, on head and merge, and posts no comment. A run that cannot read the trusted configuration at all stays `unavailable`. |
 
 ---
 
@@ -1032,5 +1033,29 @@ The final review was a self-review by the implementer; no independent reviewer a
 ## Consequences
 
 Adopters can upgrade with `--force` to get the stronger protocol and the `concept` lookup. The naming review stays off until `sourceGraph.namingReview` is enabled on the default branch, and until then every pull request gets a successful disabled status. `GraphChecker` and the renderer are unchanged. Adopters who install the naming review without the semantic reviewer also get `semantic-review-github` and `semantic-review-model` with their tests.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-fix-and-acceptance-agent-maintained-knowledge-graph-user-step-122"></a>
+
+## Entry 45 — 2026-11-18 — fix and acceptance: agent-maintained knowledge graph user step (#122)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The user phase's acceptance tests found that an installed but not-opted-in naming review still posted a summary comment on every pull request. B34 and the installed runbook say only a disabled status is posted. The tests also found that the outcome was `partial` instead of `too-large` when the ontology exceeded the budget, so the status did not name the variable to raise. The pushback also claimed that an absent setting reported `unavailable`. That was wrong: `loadConfig` already turns an absent `sourceGraph.namingReview` into `enabled: false`.
+
+## Decision
+
+- A disabled run publishes only the status, on head and merge, and posts no comment. A run that cannot read the trusted configuration at all stays `unavailable`.
+- When every name bound for the model was too large for the budget and no model call succeeded, the outcome is `too-large`. Names settled without the model, because they contain their canonical term or are of a skipped kind, no longer make it `partial`.
+- The review half is accepted locally through executable tests only. A walkthrough run by hand would need GitHub, so those behaviours are walked through in the JEPA-Speech trial.
+
+## Consequences
+
+Repositories that install `--with-graph-naming-review` and never opt in see no comments from it. If a repository disables the review partway through a pull request, the summary comment from the earlier enabled run stays as it was, while the status turns to a disabled success. The runbook's Outcomes table now matches what a run reports. The deployed acceptance in JEPA-Speech, and the JEPA-Speech reinstall it needs, wait for this merge.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
