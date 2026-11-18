@@ -103,3 +103,69 @@ test("B15 the installed reviewer is byte-identical to the template", async () =>
       readFileSync(join(KIT, "templates/scripts/review-ontology-drift.mjs"), "utf8"));
   });
 });
+
+import { pathToFileURL } from "node:url";
+const installedDrift = async (repo) =>
+  import(pathToFileURL(join(repo.dir, "scripts/review-ontology-drift.mjs")).href);
+
+test("B2 the installed planner accepts a projection up to the 500-character floor and skips beyond it", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withDriftReview: true });
+    const { buildBatches, SYSTEM_PROMPT, BudgetExceededError, MAX_REQUEST_CHARS } = await installedDrift(repo);
+    const files = [{ file: "a.md", lines: [{ line: 1, text: "prose" }] }];
+    const room = MAX_REQUEST_CHARS - SYSTEM_PROMPT.length - 16;
+    assert.equal(buildBatches(files, "x".repeat(room - 500)).length, 1);
+    assert.throws(() => buildBatches(files, "x".repeat(room - 499)), BudgetExceededError);
+  });
+});
+
+test("B4 an empty or whitespace budget variable uses the default", async () => {
+  await withLargeOntologyRepo(async (repo) => {
+    for (const value of ["", "   "]) {
+      const result = runDrift(repo, { ONTOLOGY_MAX_REQUEST_CHARS: value, ONTOLOGY_MODEL_TIMEOUT_MS: value });
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /budget: 200000 chars/);
+    }
+  });
+});
+
+test("B8 B9 the installed splitter still halves on a token limit and ends in the typed skip", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withDriftReview: true });
+    const { reviewResilient, HttpError, BudgetExceededError } = await installedDrift(repo);
+    const lines = [1, 2, 3, 4].map((line) => ({ line, text: "t" }));
+    const sizes = [];
+    await reviewResilient([{ file: "a.md", lines }], async (batch) => {
+      sizes.push(batch[0].lines.length);
+      if (batch[0].lines.length > 2) throw new HttpError(413, "", "too big");
+      return "NO_DRIFT";
+    });
+    assert.deepEqual(sizes, [4, 2, 2]);
+    await assert.rejects(
+      reviewResilient([{ file: "a.md", lines: [{ line: 1, text: "t" }] }],
+        async () => { throw new HttpError(413, "context_length_exceeded", "too big"); }),
+      (error) => error instanceof BudgetExceededError);
+  });
+});
+
+test("B6 the installed workflow passes both variables and bakes in no value", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withDriftReview: true });
+    const yaml = readFileSync(join(repo.dir, ".github/workflows/ontology-drift-review.yml"), "utf8");
+    assert.match(yaml, /ONTOLOGY_MAX_REQUEST_CHARS: \$\{\{ vars\.ONTOLOGY_MAX_REQUEST_CHARS \}\}/);
+    assert.match(yaml, /ONTOLOGY_MODEL_TIMEOUT_MS: \$\{\{ vars\.ONTOLOGY_MODEL_TIMEOUT_MS \}\}/);
+    assert.equal(/ONTOLOGY_(MAX_REQUEST_CHARS|MODEL_TIMEOUT_MS): ["']?\d/.test(yaml), false);
+  });
+});
+
+test("B12 B14 the installed runbook states the budget, the skip and the timeout caveat", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withDriftReview: true });
+    const doc = readFileSync(join(repo.dir, "docs/ontology-drift-review.md"), "utf8");
+    for (const expected of ["200,000 characters", "ONTOLOGY_MAX_REQUEST_CHARS", "ONTOLOGY_MODEL_TIMEOUT_MS",
+      "Skipped: ontology too large for the configured budget", "has not been measured", "max_tokens"]) {
+      assert.ok(doc.includes(expected), `runbook lacks ${expected}`);
+    }
+    assert.match(readFileSync(join(KIT, "README.md"), "utf8"), /ONTOLOGY_MAX_REQUEST_CHARS/);
+  });
+});
