@@ -92,6 +92,13 @@ test("both reviewer workflows map the OIDC settings and the shared client secret
   }
 });
 
+test("the drift workflow passes the request budget variables without baking in a value", () => {
+  const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-drift-review.yml"), "utf8");
+  assert.match(yaml, /ONTOLOGY_MAX_REQUEST_CHARS: \$\{\{ vars\.ONTOLOGY_MAX_REQUEST_CHARS \}\}/);
+  assert.match(yaml, /ONTOLOGY_MODEL_TIMEOUT_MS: \$\{\{ vars\.ONTOLOGY_MODEL_TIMEOUT_MS \}\}/);
+  assert.equal(/ONTOLOGY_(MAX_REQUEST_CHARS|MODEL_TIMEOUT_MS): ["']?\d/.test(yaml), false);
+});
+
 test("the drift configuration check accepts either authentication mode", () => {
   const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-drift-review.yml"), "utf8");
   assert.match(yaml, /ONTOLOGY_LLM_API_KEY/);

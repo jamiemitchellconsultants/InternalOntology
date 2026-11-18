@@ -44,7 +44,8 @@ by rewriting the original.
 | [28](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
 | [29](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
 | [30](#entry-keep-narrative-proposals-up-to-date) | 2026-11-04 | Keep narrative proposals up to date | product | Install the documented refresh workflow. Refresh after default-branch narrative changes and successful maintenance runs, and allow manual recovery. |
-| [31](#entry-docs-design-configurable-drift-request-budget-100) | 2026-11-18 | docs: design configurable drift request budget (#100) | product | Raise the default to 200,000 characters (about 50,000 to 67,000 tokens, at most half of a 131,072-token window), make the budget and the model timeout environment settings fed from repository variables with strict validation ([ADR… |
+| [31](#entry-docs-design-oidc-token-provider-for-model-reviewers-92) | 2026-11-18 | docs: design OIDC token provider for model reviewers (#92) | product | Add one shared `ModelAuthProvider` (client-credentials token, Basic auth, cache until 60s before expiry, one retry on 401, static-key fallback, partial config rejected) used by both reviewers ([ADR… |
+| [32](#entry-docs-design-configurable-drift-request-budget-100) | 2026-11-18 | docs: design configurable drift request budget (#100) | product | Raise the default to 200,000 characters (about 50,000 to 67,000 tokens, at most half of a 131,072-token window), make the budget and the model timeout environment settings fed from repository variables with strict validation ([ADR… |
 
 ---
 
@@ -714,9 +715,29 @@ Open proposals can be updated and their compiled narrative validated without for
 
 ---
 
+<a id="entry-docs-design-oidc-token-provider-for-model-reviewers-92"></a>
+
+## Entry 31 — 2026-11-18 — docs: design OIDC token provider for model reviewers (#92)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The home lab gateway is public at https://gateway.tqaentry.com/v1 and accepts only short-lived Keycloak JWTs, so the model-backed reviewers' static bearer key no longer works there. Installed scripts must stay byte-identical across adopters, so the change has to live in the kit templates.
+
+## Decision
+
+Add one shared `ModelAuthProvider` (client-credentials token, Basic auth, cache until 60s before expiry, one retry on 401, static-key fallback, partial config rejected) used by both reviewers ([ADR 0012](docs/adr/0012-shared-model-auth-provider.md)). Workflows map the existing `KEYCLOAK_CLIENT_SECRET` to `ONTOLOGY_OIDC_CLIENT_SECRET` so consumers re-set nothing ([ADR 0013](docs/adr/0013-reuse-keycloak-client-secret.md)). Rejected: duplicating logic per reviewer, pre-fetching the token in the workflow, renaming the secret.
+
+## Consequences
+
+Static-key adopters keep working. The semantic reviewer needs the secret added to its `ontology-semantic-review` environment in each consumer. Reviewer function signatures change. Token_type checks, JWT validation and other grants stay out of scope.
+
+---
+
 <a id="entry-docs-design-configurable-drift-request-budget-100"></a>
 
-## Entry 31 — 2026-11-18 — docs: design configurable drift request budget (#100)
+## Entry 32 — 2026-11-18 — docs: design configurable drift request budget (#100)
 
 *Kind: product. Status: accepted.*
 
