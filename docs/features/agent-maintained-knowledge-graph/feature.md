@@ -173,7 +173,8 @@ a stronger `GraphAgentProtocol`, and add four use cases: `AuthorGraphEntry`,
 `FindConceptImplementations`, `ReviewGraphNaming` and `SettleGraphNamingResult`. "The agent" is any
 agent following the `AgentInstructionFile` of a `TargetRepository` with the source graph enabled,
 in a pencils-down run or through the persona skills and superpowers. "A permitted reviewer" is a
-person with owner, admin or maintain role on the repository, as decided in U5. The [#35
+person with write access to the repository (write, maintain, admin or owner role), as decided in
+U5. The [#35
 behaviours](../source-knowledge-graph/02-behaviours.md) B1–B15 still hold except where B25 below
 widens B11.
 
@@ -379,9 +380,10 @@ widens B11.
 - **B41 Changing a settlement.** Given a result was settled, when a permitted reviewer settles it
   again on the open pull request, then the latest settlement applies. A deferral issue is never
   deleted; when its result is later accepted or rejected, the issue gets a comment saying so.
-- **B42 Unpermitted settlement.** Given a person without a permitted role (including a write-role
-  author) attempts to settle a result, then nothing is recorded and the status is unchanged. A
-  permitted reviewer may settle results on their own pull request.
+- **B42 Who may settle.** Given a person with write access to the repository, when they settle any
+  result on any pull request, including their own, then the settlement is recorded. Given a person
+  without write access (read or triage role, or no role) attempts to settle a result, then nothing
+  is recorded and the status is unchanged.
 - **B43 Settling a result that has gone.** Given a reviewer settles a result that the latest run no
   longer reports, then nothing is recorded for it and the summary says it is no longer current.
 - **B44 Nothing in the graph.** Given results are accepted, rejected or deferred, then no settlement
@@ -396,7 +398,7 @@ widens B11.
 | U2 | How does a reviewer accept, reject or defer in a step or two? | One action per result or for all unsettled results, with no copied identifier (B36). The GitHub mechanism (task-list checkboxes in the summary, a short command using R labels, or a review) is deferred to the architect within B36's constraints. GitHub suggestions for proposed fixes are not required by any behaviour; the architect may add them. |
 | U3 | What does a deferral issue contain, how does it link back, and what happens on the next push? | B39 for the contents and links, B40 for later pushes: the settlement survives while the result's identity is unchanged, and no second issue is made. |
 | U4 | Does a settled result leave a mark in the graph or its generated README? | No (B44). Settlements are review records on GitHub; the graph holds source-backed facts only, and the renderer stays deterministic. |
-| U5 | Who may accept, reject or defer? | Owner, admin or maintain role, the same rule as `FindingDismissal`, including on their own pull request (B42), because in a single-maintainer repository such as JEPA-Speech every pull request is the maintainer's. Write-role reviewers who are not maintainers cannot settle. Agents never settle (B26). |
+| U5 | Who may accept, reject or defer? | Anyone with write access, on any result and any pull request, including their own (B42); the owner's decision. This is wider than the maintainer-only rule for `FindingDismissal`. Agents never settle (B26). |
 | U6 | What exactly does the naming check compare, and on which changes? | B27–B28, on added or changed nodes and nodes affected by an ontology rename or removal (B31). A sweep of the whole graph is deferred as a follow-up. |
 | U7 | When does the agent record a `kit:source-symbol` node rather than a file-level `kit:implements`? | B7, with B8 for existing entries. |
 | U8 | How does the concept-first lookup treat both link shapes? | B20–B21: both, grouped, one hop only. |

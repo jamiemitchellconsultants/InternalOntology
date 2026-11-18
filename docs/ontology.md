@@ -124,7 +124,7 @@ enum lock test catches.
 | `AuthorGraphEntry` | AI agent, on a developer's request | Add or refine a `GraphNode` or `GraphAssertion` by choosing its label, kind, concept link and `GraphEvidence` by the authoring guidance, keeping identity on refinement, and reporting the choices made. |
 | `FindConceptImplementations` | AI agent or developer | Start from an `Ontology` concept and list, through the `GraphReader`, the `GraphNode`s that denote it and the `kit:implements` assertions that link source elements to them, with evidence, basis and staleness. |
 | `ReviewGraphNaming` | CI, for an eligible pull request | The opt-in, model-assisted `GraphNamingRun` over a pull request's graph names, reporting `GraphNamingResult`s that hold the merge until settled. |
-| `SettleGraphNamingResult` | Maintainer | Accept, reject with a reason, or defer to a new issue one or all unsettled `GraphNamingResult`s on a pull request in a single action, recording a `NamingSettlement`. |
+| `SettleGraphNamingResult` | Reviewer with write access | Accept, reject with a reason, or defer to a new issue one or all unsettled `GraphNamingResult`s on a pull request in a single action, recording a `NamingSettlement`. |
 | `RenderSourceKnowledgeGraph` | Maintainer, through a Git workflow | Generate a human-readable Markdown document of the current `SourceKnowledgeGraph`, preserving its recorded claims, evidence access, direct or inferred basis, coverage limits, and references for finding the underlying Turtle. The Turtle remains canonical; rendering does not judge semantic accuracy. |
 
 ---
@@ -233,7 +233,8 @@ enum lock test catches.
 - **`GraphNamingResult`** — has no effect on merge or on the `SourceKnowledgeGraph` unless a
   permitted reviewer accepts it; no settlement is ever written into the graph or its generated
   Markdown.
-- **`NamingSettlement`** — is recorded only for a person with owner, admin or maintain role; an AI
-  agent never records one, under any identity.
+- **`NamingSettlement`** — is recorded only for a person with write access to the repository (write,
+  maintain, admin or owner role), on any pull request including their own; an AI agent never
+  records one, under any identity.
 - **`GraphChecker`** — makes no model call and needs no secret or network access after checkout;
   model-assisted naming review runs separately in `ReviewGraphNaming`.
