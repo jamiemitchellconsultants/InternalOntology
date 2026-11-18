@@ -548,6 +548,7 @@ test("parseCliArgs reads every supported option", () => {
       defaultBranch: "trunk",
       withDriftReview: true,
       withSemanticReview: true,
+      withGraphNamingReview: false,
       withEnumTests: "python",
       force: true,
       resetContent: true,
@@ -791,5 +792,37 @@ test("invalid preserved config fails before graph starter writes", async () => {
     writeFileSync(join(repo.dir, "ontology.config.json"), "{invalid json");
     assert.throws(() => install({ target: repo.dir, withSourceGraph: true }), /ontology\.config\.json|JSON/);
     assert.equal(existsSync(join(repo.dir, "docs/source-knowledge-graph/manifest.ttl")), false);
+  });
+});
+
+const NAMING_MODULES = ["select", "model", "commands", "github", "ledger", "worker"];
+
+test("--with-graph-naming-review adds its scripts, tests, workflows, runbook and shared reviewer modules once", () => {
+  const dests = buildPlan({ withSourceGraph: true, withGraphNamingReview: true }).map((e) => e.dest);
+  for (const name of NAMING_MODULES) for (const suffix of [".mjs", ".test.mjs"]) assert.ok(dests.includes(`scripts/graph-naming-${name}${suffix}`), name + suffix);
+  for (const path of ["scripts/graph-naming-test-helpers.mjs", ".github/workflows/ontology-graph-naming-request.yml",
+    ".github/workflows/ontology-graph-naming-review.yml", ".github/workflows/ontology-graph-naming-settle.yml", "docs/graph-naming-review.md",
+    "scripts/llm-auth.mjs", "scripts/request-budget.mjs", "scripts/semantic-review-github.mjs", "scripts/semantic-review-model.mjs",
+    "scripts/semantic-review-github.test.mjs", "scripts/semantic-review-model.test.mjs"]) assert.ok(dests.includes(path), path);
+  assert.equal(dests.some((d) => /ontology-semantic-|semantic-review-(ledger|dismissal|worker)/.test(d)), false);
+  const both = buildPlan({ withSourceGraph: true, withGraphNamingReview: true, withSemanticReview: true, withDriftReview: true }).map((e) => e.dest);
+  assert.equal(both.length, new Set(both).size);
+  assert.equal(buildPlan({ withSourceGraph: true }).some((e) => /graph-naming/.test(e.dest)), false);
+});
+
+test("--with-graph-naming-review requires the source graph and writes nothing without it", async () => {
+  await withTempRepo(async (repo) => {
+    assert.throws(() => install({ target: repo.dir, projectName: "Widgets", withGraphNamingReview: true }), /--with-graph-naming-review requires --with-source-graph/);
+    assert.equal(existsSync(join(repo.dir, "scripts")), false);
+  });
+  assert.equal(parseCliArgs(["--target", "x", "--with-source-graph", "--with-graph-naming-review"]).withGraphNamingReview, true);
+  assert.equal(parseCliArgs(["--target", "x"]).withGraphNamingReview, false);
+});
+
+test("an installed graph naming review passes its shipped tests alone", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true, withGraphNamingReview: true });
+    execFileSync(process.execPath, ["--test", ...NAMING_MODULES.map((n) => `scripts/graph-naming-${n}.test.mjs`)], { cwd: repo.dir, stdio: "pipe" });
+    assert.match(readFileSync(join(repo.dir, "docs/graph-naming-review.md"), "utf8"), /\/graph-naming accept/);
   });
 });
