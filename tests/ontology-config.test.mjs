@@ -41,7 +41,7 @@ test("a minimal config is filled in with empty defaults", () => {
     bannedAliases: [],
     ignorePaths: [],
     semanticReview: { enabled: false, model: "", baseUrl: "" },
-    sourceGraph: { enabled: false, root: "docs/source-knowledge-graph", evidence: {}, markdownPath: "docs/source-knowledge-graph/README.md", repositoryUrl: "" },
+    sourceGraph: { enabled: false, root: "docs/source-knowledge-graph", evidence: {}, markdownPath: "docs/source-knowledge-graph/README.md", repositoryUrl: "", namingReview: { enabled: false, model: "", baseUrl: "" } },
   });
 });
 
@@ -345,7 +345,7 @@ const ok = { ontologyExists: () => true };
 
 test("source graph is disabled with defaults when the section is absent", () => {
   assert.deepEqual(validateConfig(minimal, ok).sourceGraph,
-    { enabled: false, root: "docs/source-knowledge-graph", evidence: {}, markdownPath: "docs/source-knowledge-graph/README.md", repositoryUrl: "" });
+    { enabled: false, root: "docs/source-knowledge-graph", evidence: {}, markdownPath: "docs/source-knowledge-graph/README.md", repositoryUrl: "", namingReview: { enabled: false, model: "", baseUrl: "" } });
 });
 
 test("an enabled source graph keeps its root and per-role selectors", () => {
@@ -353,7 +353,7 @@ test("an enabled source graph keeps its root and per-role selectors", () => {
     root: "./graph", evidence: { deployment: ["**/*.tf"], test: ["tests/**"] },
   }), ok);
   assert.deepEqual(value.sourceGraph,
-    { enabled: true, root: "graph", evidence: { deployment: ["**/*.tf"], test: ["tests/**"] }, markdownPath: "graph/README.md", repositoryUrl: "" });
+    { enabled: true, root: "graph", evidence: { deployment: ["**/*.tf"], test: ["tests/**"] }, markdownPath: "graph/README.md", repositoryUrl: "", namingReview: { enabled: false, model: "", baseUrl: "" } });
 });
 
 test("source graph rejects null, unknown keys, bad roots and bad selectors", () => {
@@ -418,4 +418,29 @@ test('renderer browser URLs reject credentials, non-HTTPS and ambiguous bases', 
     'https://host/team/repo/extra', 'https://host/team%2frepo/name', 'https://host/team/../repo']) {
     assert.throws(() => validateConfig(renderConfig({ repositoryUrl }), renderDeps), /repositoryUrl/);
   }
+});
+
+const naming = (namingReview, enabled = true) => ({ ...minimal, sourceGraph: { enabled, namingReview } });
+
+test("B34: namingReview defaults to disabled and normalises like semanticReview", () => {
+  assert.deepEqual(validateConfig(naming(undefined), ok).sourceGraph.namingReview, { enabled: false, model: "", baseUrl: "" });
+  assert.deepEqual(validateConfig(naming({ enabled: true, model: " m ", baseUrl: "https://model.example/v1/" }), ok).sourceGraph.namingReview,
+    { enabled: true, model: "m", baseUrl: "https://model.example/v1" });
+});
+
+test("B34: namingReview rejects malformed values with its own key in the message", () => {
+  for (const [value, pattern] of [
+    [null, /sourceGraph\.namingReview must be an object/],
+    [{ enabled: "yes" }, /sourceGraph\.namingReview\.enabled must be a boolean/],
+    [{ enabled: true, model: "", baseUrl: "https://m.example" }, /sourceGraph\.namingReview\.model must be a non-empty string when enabled/],
+    [{ enabled: true, model: "m", baseUrl: "ftp://m.example" }, /sourceGraph\.namingReview\.baseUrl must use HTTP\(S\)/],
+    [{ enabled: true, model: "m", baseUrl: "https://u:p@m.example" }, /sourceGraph\.namingReview\.baseUrl must not contain a credential/],
+    [{ enabled: false, endpoint: "x" }, /unknown key "sourceGraph\.namingReview\.endpoint"/],
+  ]) assert.throws(() => validateConfig(naming(value), ok), pattern);
+});
+
+test("B34: an enabled namingReview needs the source graph enabled", () => {
+  assert.throws(() => validateConfig(naming({ enabled: true, model: "m", baseUrl: "https://m.example" }, false), ok),
+    /sourceGraph\.namingReview requires sourceGraph\.enabled/);
+  assert.equal(validateConfig(naming({ enabled: false }, false), ok).sourceGraph.namingReview.enabled, false);
 });
