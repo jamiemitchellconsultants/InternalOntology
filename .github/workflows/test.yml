@@ -1,0 +1,38 @@
+# Runs the kit's own test suite on the Node versions adopters use. Needs no secrets or network.
+#
+# Two views of the same tests, because adopters see the second one: `npm test` runs everything from
+# the repository root, while the consumer step runs one shipped test file alone from the shipped
+# scripts directory, the way an adopting repository's `deterministic-preparation` job does.
+# Add `test (20)`, `test (22)` and `test (24)` to branch protection once this has run on main.
+
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+      - name: Shipped reviewer tests, run alone as an adopter runs them
+        working-directory: templates/scripts
+        run: |
+          node --test review-ontology-drift.test.mjs
+          node --test llm-auth.test.mjs
+          node --test semantic-review-model.test.mjs
+          node --test semantic-review-worker.test.mjs

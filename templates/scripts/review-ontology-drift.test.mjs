@@ -12,6 +12,19 @@ import {
   renderChunk,
 } from "./review-ontology-drift.mjs";
 
+// AbortSignal.timeout's timer does not keep the event loop alive on Node 20 and 22, so a promise
+// that only the timeout can settle leaves the loop empty and the test runner cancels the rest of
+// the file. A real fetch is kept alive by its socket; the simulation holds a ref'd timer instead.
+function hangUntilAborted(signal) {
+  return new Promise((_resolve, reject) => {
+    const keepAlive = setTimeout(() => {}, 60_000);
+    signal.addEventListener("abort", () => {
+      clearTimeout(keepAlive);
+      reject(new Error("aborted"));
+    });
+  });
+}
+
 const SECTIONS = {
   required: ["Entities", "Enums", "Business Rules & Invariants"],
   optional: ["External Systems"],
@@ -229,10 +242,7 @@ test("modelJson throws a typed HttpError carrying status and body", async () => 
 });
 
 test("modelJson aborts a hanging request instead of waiting indefinitely", async () => {
-  const hangingFetch = (_url, init) =>
-    new Promise((_resolve, reject) => {
-      init.signal.addEventListener("abort", () => reject(new Error("aborted")));
-    });
+  const hangingFetch = (_url, init) => hangUntilAborted(init.signal);
   await assert.rejects(
     modelJson("http://endpoint/chat/completions", { method: "POST" }, hangingFetch, 10),
     /aborted/i,
@@ -368,9 +378,10 @@ test("skippedBody explains the skip, names the variable and keeps the marker", (
 
 test("reviewBatch hands the configured timeout to the model call", async () => {
   let aborted = false;
-  const hanging = (_url, init) => new Promise((_resolve, reject) => {
-    init.signal.addEventListener("abort", () => { aborted = true; reject(new Error("aborted")); });
-  });
+  const hanging = (_url, init) => {
+    init.signal.addEventListener("abort", () => { aborted = true; });
+    return hangUntilAborted(init.signal);
+  };
   await assert.rejects(
     reviewBatch("http://x", "m", "p", [{ file: "a.md", lines: [{ line: 1, text: "t" }] }], hanging, 10),
   );
