@@ -46,7 +46,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `SemanticStatusPublisher` | kit-owned status and PR-comment logic | Publishes the latest `SemanticReviewRun` outcome as a fixed commit status and preserves each run's visible PR record. | Reads `SemanticFinding`s and `FindingDismissal`s; writes GitHub statuses and comments. |
 | `SemanticDismissalHandler` | kit-owned issue-comment workflow and script | Verifies a maintainer's reasoned dismissal of one current `SemanticFinding` and recomputes the current status. | Reads PR comments and repository permissions; does not invoke the model. |
 | `OntologySetupSkill` | `skills/ontology-setup` | The agent skill that installs the mechanism, then supplies the judgement the mechanism cannot: which sections apply, and the real seeded content of an adopting repository's `Ontology`. | Drives `Installer`, then edits `Ontology` and `OntologyConfig` directly. |
-| `GraphReader` | kit-owned local reader script | Finds nodes, assertions, bounded paths, evidence, and coverage in a `SourceKnowledgeGraph` at a named Git revision. Reports gaps and stale results without creating new assertions. | Reads adopter-owned graph files and local Git objects; produces grounded query results for an agent or downstream consumer. |
+| `GraphReader` | kit-owned local reader script | Finds nodes, assertions, bounded paths, evidence, and coverage in a `SourceKnowledgeGraph` at a named Git revision, including the nodes that denote or implement a named `Ontology` concept. Reports gaps and stale results without creating new assertions. | Reads adopter-owned graph files and local Git objects; produces grounded query results for an agent or downstream consumer. |
 | `GraphChecker` | kit-owned local checker script | Deterministically validates graph structure, evidence locations, declared coverage, and review of covered file changes before a pull request merges. | Reads adopter-owned graph data, `OntologyConfig`, and local base and proposed Git trees; reports failures without judging semantic truth. |
 | `GraphCheckWorkflow` | kit-owned pull-request and default-branch workflow | Runs `GraphChecker` with read-only access to the checked-out Git history and publishes a stable check result. | Reads graph data and Git trees after checkout; has no model, secret, or post-checkout network requirement. |
 | `GraphRenderer` | kit-owned local Markdown generation script | Renders every current graph claim, evidence reference, basis and coverage declaration into a deterministic human-readable document after validating one Git input snapshot. | Reads `SourceKnowledgeGraph`, `OntologyConfig` and local Git objects through the existing graph model and `GraphChecker`; writes only the generated Markdown view or checks its freshness. |
@@ -66,6 +66,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `GraphAssertion` | stable identity, subject, relationship, object, basis, evidence | One reviewable claim in a `SourceKnowledgeGraph` about a repository fact or relationship. Its basis distinguishes a directly evidenced claim from an inference supported by source observations. Its identity persists when the same claim is refreshed at a later source revision. |
 | `AgentInstructionFile` | one of `AGENTS.md`, `CLAUDE.md` | Whichever file a `TargetRepository` already treats as authoritative for agent instructions (`AGENTS.md` preferred, `CLAUDE.md` otherwise, `AGENTS.md` created if neither exists). Carries the spliced `OntologyProtocol` and optionally `GraphAgentProtocol`. |
 | `SemanticReviewRun` | pull request, revision, eligible files, reviewed files, outcome | One attempt to assess changed Markdown against the ontology. Its outcome controls the current semantic check; a later run supersedes it even when that later run cannot review. |
+| `GraphNamingRun` | pull request, revision, eligible graph nodes, reviewed nodes, outcome | One model-assisted comparison of the names of a pull request revision's added or changed `GraphNode`s, and of nodes whose denoted ontology item the revision renames or removes, with its proposed `Ontology`. Separate from `GraphChecker`, which it never changes; a run that cannot review permits merge. |
 
 ---
 
@@ -77,7 +78,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `AllowlistEntry` | `term`, `reason` | One term excused from the unknown-term check, with the written reason a reviewer would need to accept it. |
 | `BannedAlias` | `phrase`, `nameInstead` | One paraphrase of a named `External System` that prose must not use, and the canonical name(s) to use instead. |
 | `OntologyProtocol` | Markdown body between `<!-- ontology-protocol:start -->` / `<!-- ontology-protocol:end -->` | The instructions bound into an `AgentInstructionFile`: read `Ontology` before writing anything domain-touching, use its exact names, add a missing concept there first, update it in the same commit as the code change. Replaced wholesale on every install — re-running is what keeps it current, not an edit history of its own. |
-| `GraphAgentProtocol` | marked Markdown body in an `AgentInstructionFile` | Optional instructions to read the graph with its evidence and gaps, review covered source changes before a pull request, and update assertions or record no fact change. Replaced as a Kit-owned block on install or upgrade. |
+| `GraphAgentProtocol` | marked Markdown body in an `AgentInstructionFile` | Optional instructions to read the graph with its evidence and gaps, look up the `Ontology` and graph before naming code, record implemented components and symbols with their concept links in the same change as the code, propose wider `GraphCoverage` for new code in unknown scope, author entries on request, review covered source changes before a pull request, and update assertions or record no fact change. Replaced as a Kit-owned block on install or upgrade. |
 | `GraphEvidence` | source path, line range, Git blob ID, role, effective Git revision | A source reference supporting one `GraphAssertion`, whether the source is code, a test, a selected design document, the `Ontology`, or an eligible deployment file. For an inferred assertion it identifies the observations behind the inference, not direct proof of the relationship. Its effective revision comes from the containing graph commit. |
 | `GraphCoverage` | repository-relative selector, status, priority, reason | The portion of a `TargetRepository` that a `SourceKnowledgeGraph` declares covered, unknown, or excluded. The highest matching priority wins; unmatched paths remain unknown. Missing coverage remains visible rather than being inferred from absent assertions. |
 | `GraphVocabulary` | schema version, core kind and relationship IRIs, defined local extensions | The shared meanings allowed for `GraphNode` kinds and `GraphAssertion` relationships. The Kit versions a small core of `kit:` IRIs; an adopter may declare additional IRIs in its own namespace with definitions in its Turtle manifest. |
@@ -87,6 +88,8 @@ Internal components that are ours to build. Named so that specs can describe the
 | `Violation` | `file`, `line`, `column`, `message` | One flagged occurrence the `TermChecker` reports: an unknown backticked term, or a banned-alias paraphrase. |
 | `SemanticFinding` | revision, file, passage, ontology evidence, suggested correction | A claim made by a `SemanticReviewRun` that changed Markdown conflicts with the ontology. Its identity is stable across reruns of the same revision and is reconsidered on a new revision. |
 | `FindingDismissal` | `SemanticFinding`, revision, maintainer, reason | A maintainer's recorded decision to disregard one `SemanticFinding` for one PR revision. It survives reruns of that revision and expires when the PR changes. |
+| `GraphNamingResult` | graph node, compared values, ontology item, reason, suggested correction | A likely mismatch a `GraphNamingRun` reports between a `GraphNode`'s label, `kit:denotes` target or implemented concept and the `Ontology`. Its identity derives from the node, the compared values and the ontology item, not the revision or the model's wording, so the same mismatch on a later revision is the same result. It takes effect only when a permitted reviewer accepts it. |
+| `NamingSettlement` | `GraphNamingResult`, pull request, `SettlementDecision`, reviewer, reason, deferral issue | A permitted reviewer's decision on one `GraphNamingResult` for one pull request. It survives later revisions that produce the same result; the latest settlement on the pull request applies. A rejection carries a reason; a deferral links the new issue that records the result. |
 
 ---
 
@@ -99,6 +102,7 @@ enum lock test catches.
 |------|--------|-------------|
 | `Ownership` | `Kit`, `Adopter` | Who owns a `PlanEntry`'s destination file. `Kit`-owned files (the scripts, the CI workflow) are replaced wholesale by `--force`; `Adopter`-owned files (`OntologyConfig`, `Ontology`, the enum test) survive `--force` and are discarded only by the separate `--reset-content`. Spelled `"kit"` / `"adopter"` in code. |
 | `SemanticOutcome` | `reviewed`, `partial`, `unavailable`, `disabled`, `out-of-scope`, `no-eligible`, `too-large` | The outcome of one `SemanticReviewRun`, which controls the fixed status. `too-large` is non-blocking like `unavailable`, but records that the `RequestBudget` left no room for the ontology projection, so the status and the pull request record name the budget instead of an outage. |
+| `SettlementDecision` | `accepted`, `rejected`, `deferred` | The decision a `NamingSettlement` records. `accepted` makes the `GraphNamingResult` a required correction that holds the merge until a revision no longer reports it; `rejected` and `deferred` let the pull request proceed. |
 | `AuthMode` | `Oidc`, `Static`, `None` | Which credential a `ModelAuthProvider` resolved: a complete `OidcClientConfig`, the static key variable, or nothing. `Oidc` wins over `Static`; a partial `OidcClientConfig` is an error, not `Static`. |
 
 ---
@@ -114,9 +118,13 @@ enum lock test catches.
 | `CheckOntologyTerms` | CI, or Adopter locally | Running the `TermChecker` against a `TargetRepository`'s tracked Markdown (plus any `--also` paths) and reporting every `Violation`. |
 | `ReviewOntologyDrift` | CI, when `DriftReviewer` is installed | The optional advisory pass for paraphrase drift the `TermChecker` cannot see. |
 | `ReviewSemanticMatch` | CI, for an eligible pull request | The blocking semantic assessment of each changed, eligible Markdown file in full, with an explicitly nonblocking result when review cannot run. |
-| `RefreshSourceKnowledgeGraph` | AI agent, before a pull request | Review changed files within declared `GraphCoverage` and update the proposed `SourceKnowledgeGraph` or record that its existing assertions still hold. |
+| `RefreshSourceKnowledgeGraph` | AI agent, before a pull request | Review changed files within declared `GraphCoverage` and update the proposed `SourceKnowledgeGraph` or record that its existing assertions still hold, including the nodes, `kit:implements` links and `GraphEvidence` for implemented components and symbols, and a proposed widening of `GraphCoverage` when new code for a concept lies in unknown scope. |
 | `CheckSourceKnowledgeGraph` | CI, on a pull request | Deterministically check the proposed `SourceKnowledgeGraph` and whether changed files in declared `GraphCoverage` were reviewed before merge; leave semantic truth to maintainers. |
 | `GroundWithSourceKnowledgeGraph` | AI coding agent | Find relevant `GraphAssertion`s for a repository task, inspect their `GraphEvidence`, distinguish inferences from directly evidenced claims, and identify unknown or stale areas instead of inventing facts. |
+| `AuthorGraphEntry` | AI agent, on a developer's request | Add or refine a `GraphNode` or `GraphAssertion` by choosing its label, kind, concept link and `GraphEvidence` by the authoring guidance, keeping identity on refinement, and reporting the choices made. |
+| `FindConceptImplementations` | AI agent or developer | Start from an `Ontology` concept and list, through the `GraphReader`, the `GraphNode`s that denote it and the `kit:implements` assertions that link source elements to them, with evidence, basis and staleness. |
+| `ReviewGraphNaming` | CI, for an eligible pull request | The opt-in, model-assisted `GraphNamingRun` over a pull request's graph names, reporting `GraphNamingResult`s that hold the merge until settled. |
+| `SettleGraphNamingResult` | Maintainer | Accept, reject with a reason, or defer to a new issue one or all unsettled `GraphNamingResult`s on a pull request in a single action, recording a `NamingSettlement`. |
 | `RenderSourceKnowledgeGraph` | Maintainer, through a Git workflow | Generate a human-readable Markdown document of the current `SourceKnowledgeGraph`, preserving its recorded claims, evidence access, direct or inferred basis, coverage limits, and references for finding the underlying Turtle. The Turtle remains canonical; rendering does not judge semantic accuracy. |
 
 ---
@@ -143,6 +151,9 @@ enum lock test catches.
 | `SemanticReviewWorker` | reads | `Ontology` | many → 1 |
 | `SemanticStatusPublisher` | publishes | `SemanticReviewRun` | 1 → many |
 | `SemanticDismissalHandler` | records | `FindingDismissal` | 1 → many |
+| `GraphNamingRun` | reports | `GraphNamingResult` | 1 → many |
+| `GraphNamingRun` | reads | `SourceKnowledgeGraph` | many → 1 |
+| `GraphNamingResult` | may have | `NamingSettlement` | 1 → 0 or 1 per pull request |
 | `SourceKnowledgeGraph` | contains | `GraphAssertion` | 1 → 0 or many |
 | `SourceKnowledgeGraph` | contains | `GraphNode` | 1 → 0 or many |
 | `SourceKnowledgeGraph` | declares | `GraphCoverage` | 1 → many |
@@ -215,3 +226,14 @@ enum lock test catches.
 - **`OntologyConfig`** — a pull request cannot disable or relocate an enabled source graph check.
 - **`GraphEvidence`** — its source path lies in declared covered scope, matches its eligible role,
   and resolves to the cited blob and line range in the graph's effective Git revision.
+- **`GraphNamingResult`** — is reported only when it names a `GraphNode` in the proposed graph,
+  quotes that node's current label or `kit:denotes` target exactly, and cites a real `Ontology`
+  item. A label that contains the implemented concept's canonical name as a whole word sequence is
+  never reported as a mismatch for that concept.
+- **`GraphNamingResult`** — has no effect on merge or on the `SourceKnowledgeGraph` unless a
+  permitted reviewer accepts it; no settlement is ever written into the graph or its generated
+  Markdown.
+- **`NamingSettlement`** — is recorded only for a person with owner, admin or maintain role; an AI
+  agent never records one, under any identity.
+- **`GraphChecker`** — makes no model call and needs no secret or network access after checkout;
+  model-assisted naming review runs separately in `ReviewGraphNaming`.
