@@ -82,7 +82,7 @@ export async function isEligiblePull(client, pull) {
   }
 }
 
-function decodeBlob(data) {
+export function decodeBlob(data) {
   if (data?.encoding !== "base64" || typeof data.content !== "string") throw new Error("blob is not base64 text");
   const encoded = data.content.replace(/\s/g, "");
   if (!encoded || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
