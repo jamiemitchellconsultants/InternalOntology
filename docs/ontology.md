@@ -226,15 +226,7 @@ enum lock test catches.
 - **`OntologyConfig`** — a pull request cannot disable or relocate an enabled source graph check.
 - **`GraphEvidence`** — its source path lies in declared covered scope, matches its eligible role,
   and resolves to the cited blob and line range in the graph's effective Git revision.
-- **`GraphNamingResult`** — is reported only when it names a `GraphNode` in the proposed graph,
-  quotes that node's current label or `kit:denotes` target exactly, and cites a real `Ontology`
-  item. A label that contains the implemented concept's canonical name as a whole word sequence is
-  never reported as a mismatch for that concept.
-- **`GraphNamingResult`** — has no effect on merge or on the `SourceKnowledgeGraph` unless a
-  permitted reviewer accepts it; no settlement is ever written into the graph or its generated
-  Markdown.
-- **`NamingSettlement`** — is recorded only for a person with write access to the repository (write,
-  maintain, admin or owner role), on any pull request including their own; an AI agent never
-  records one, under any identity.
-- **`GraphChecker`** — makes no model call and needs no secret or network access after checkout;
-  model-assisted naming review runs separately in `ReviewGraphNaming`.
+- **`GraphNamingResult`** — is reported only when it names a `GraphNode` in the proposed graph, quotes that node's current label or `kit:denotes` target exactly, and cites a real `Ontology` item. A label that contains the implemented concept's canonical name as a whole word sequence is never reported as a mismatch for that concept.
+- **`GraphNamingResult`** — has no effect on merge or on the `SourceKnowledgeGraph` unless a permitted reviewer accepts it; no settlement is ever written into the graph or its generated Markdown.
+- **`NamingSettlement`** — is recorded only for a person with write access to the repository (write, maintain, admin or owner role), on any pull request including their own; an AI agent never records one, under any identity.
+- **`GraphChecker`** — makes no model call and needs no secret or network access after checkout; model-assisted naming review runs separately in `ReviewGraphNaming`.
