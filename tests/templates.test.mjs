@@ -185,3 +185,11 @@ test("how-it-works states what the mechanism does not catch", () => {
   const doc = readFileSync(fileURLToPath(new URL("../docs/how-it-works.md", import.meta.url)), "utf8");
   assert.match(doc, /What it does not catch/);
 });
+
+test("the semantic runbook documents the request budget, the too-large result and the timeout", () => {
+  const text = readFileSync(join(TEMPLATES, "docs/ontology-semantic-review.md"), "utf8");
+  for (const expected of ["200,000 characters", "ONTOLOGY_MAX_REQUEST_CHARS", "ONTOLOGY_MODEL_TIMEOUT_MS",
+    "ontology too large for the configured budget", "permits merge", "has not been measured", "was 30,000 ms"]) {
+    assert.ok(text.includes(expected), `semantic runbook lacks ${expected}`);
+  }
+});
