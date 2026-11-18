@@ -72,9 +72,15 @@ missing, when neither is.
 ## Request budget
 
 Each model request holds the system prompt, the ontology projection and a batch of added lines. The
-reviewer plans batches against a character budget: **200,000 characters by default** (about 50,000
-to 67,000 tokens, so at most about half of a 131,072-token context window, leaving room for a
-reasoning model's thinking and its 8,192-token output cap).
+reviewer plans batches against a character budget: **200,000 characters by default**. That default is
+sized for a model with a large context window; it is not a statement about any particular model.
+
+Set `ONTOLOGY_MAX_REQUEST_CHARS` from the context window of whatever model your alias currently points
+at. As a rule of thumb, text is about 3 to 4 characters per token, so a request of N characters is
+roughly N/4 to N/3 tokens. Keep the request well inside the window, and leave headroom for the answer:
+a model that spends tokens thinking before it answers needs room for those tokens as well as for the
+reply. Set `ONTOLOGY_MODEL_TIMEOUT_MS` from how quickly that model answers a prompt of that size. When
+the alias is repointed at a different model, revisit both.
 
 | Setting | Where | Default | Meaning |
 |---|---|---|---|
@@ -83,7 +89,7 @@ reasoning model's thinking and its 8,192-token output cap).
 
 The semantic reviewer reads the same two variables (see its runbook). Both are optional and must be positive integers (digits only); an unset variable uses the default and
 anything else fails the job with an error naming the variable and the value. Raise the budget when
-you move to a model with a larger window; lower it for a smaller one.
+the model behind your alias has a larger window; lower it for a smaller one.
 
 If the system prompt plus the ontology projection leave almost no room at the configured budget, the
 review is **skipped, not failed**: the job stays green, a notice is logged, and the pull request gets
@@ -115,8 +121,8 @@ limit — an oversized request is handled authoritatively by recursive splitting
 the cost of recovering from a single timeout, so change it with measurements rather than as a side
 effect of changing models.
 
-`max_tokens` in `reviewBatch` covers any reasoning tokens as well as the visible answer, so it is
-the binding constraint on a reasoning model. Raise it and `modelJson`'s timeout together, or
+`max_tokens` in `reviewBatch` covers any thinking tokens as well as the visible answer, so for a model
+that thinks before answering it is the binding constraint. Raise it and `modelJson`'s timeout together, or
 neither.
 
 The script sends no sampling parameters. Configure temperature and related values where the model
