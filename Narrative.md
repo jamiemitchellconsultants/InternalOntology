@@ -53,6 +53,7 @@ by rewriting the original.
 | [37](#entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow) | 2026-11-18 | fix: reviewer tests on Node 20/22 and a kit test workflow | product | Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. |
 | [38](#entry-docs-design-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | docs: design configurable semantic reviewer request budget (#111) | product | Raise the default to 200,000 characters and make budget and timeout configurable with the #100 variables and validation, through one shared module ([ADR 0018](docs/adr/0018-shared-request-budget-module-and-timeout-default.md), which also… |
 | [39](#entry-docs-plan-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | docs: plan configurable semantic reviewer request budget (#111) | product | Eight tasks ordered so every commit leaves the suite green: the shared settings module with its installer entries first (a script must never import a file the installer does not copy, the mistake that left an earlier commit red in #92)… |
+| [40](#entry-feat-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | feat: configurable semantic reviewer request budget (#111) | product | One shared settings module with the #100 defaults and conventions ([ADR 0018](docs/adr/0018-shared-request-budget-module-and-timeout-default.md)); a distinct non-blocking `too-large` outcome rather than a failing status or a re-worded… |
 
 ---
 
@@ -899,3 +900,23 @@ Eight tasks ordered so every commit leaves the suite green: the shared settings 
 ## Consequences
 
 The build cannot start until this plan is reviewed and merged. Existing drift tests keep working through the re-exports. The semantic request timeout default change from 30,000 ms to 300,000 ms is carried into the docs and the per-consumer notes.
+
+---
+
+<a id="entry-feat-configurable-semantic-reviewer-request-budget-111"></a>
+
+## Entry 40 — 2026-11-18 — feat: configurable semantic reviewer request budget (#111)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The semantic reviewer kept a fixed 24,000-character budget, so for ontologies as large as JEPA-Speech's and Grooveloom's it never called the model and published a success status blaming the service or configuration. Feature #100 had fixed only the advisory drift reviewer.
+
+## Decision
+
+One shared settings module with the #100 defaults and conventions ([ADR 0018](docs/adr/0018-shared-request-budget-module-and-timeout-default.md)); a distinct non-blocking `too-large` outcome rather than a failing status or a re-worded outage ([ADR 0016](docs/adr/0016-too-large-ontology-outcome.md)); an invalid setting is published with its cause, then fails the job ([ADR 0017](docs/adr/0017-invalid-budget-setting-status.md)). Rejected: a failing status (contradicts ADR 0002), semantic-only variable names, keeping the 30,000 ms timeout.
+
+## Consequences
+
+Large-ontology adopters can run the semantic pilot after a reinstall with `--force`. A hung semantic model call can now hold a request for up to five minutes. A too-large ontology passes the status with a clear message instead of blocking; a repository that wants a hard stop must add its own check. Splitting the projection and capping semantic output stay out of scope.
