@@ -17,6 +17,8 @@ export function catalogOntology(markdown, sections) {
   const content = new Map();
   const evidenceKeys = new Set();
   const entries = [];
+  const rows = new Map();
+  let invariantKey = null;
   const output = ["# Canonical ontology evidence"];
   let current = null;
   let headerSeen = false;
@@ -43,17 +45,20 @@ export function catalogOntology(markdown, sections) {
         if (name) {
           evidenceKeys.add(`${current}:${name}`);
           entries.push({ section: current, name });
+          rows.set(`${current}:${name}`, line);
           content.set(current, (content.get(current) ?? 0) + 1);
         }
       }
     } else if (line.startsWith("- **")) {
       output.push(line);
       const name = /^- \*\*(.+?)\*\*/.exec(line)?.[1]?.replace(/^`|`$/g, "");
-      if (name) { evidenceKeys.add(`${current}:${name}`); entries.push({ section: current, name }); }
+      invariantKey = name ? `${current}:${name}` : null;
+      if (name) { evidenceKeys.add(invariantKey); entries.push({ section: current, name }); rows.set(invariantKey, line); }
       content.set(current, (content.get(current) ?? 0) + 1);
       inInvariant = true;
     } else if (inInvariant && /^\s{2,}\S/.test(line)) {
       output.push(line);
+      if (invariantKey) rows.set(invariantKey, `${rows.get(invariantKey)}\n${line}`);
     } else if (line.trim()) {
       inInvariant = false;
     }
@@ -67,7 +72,7 @@ export function catalogOntology(markdown, sections) {
   }
   // The valid keys are part of the projection, so the request budget counts them.
   output.push("", "## Evidence keys", "", ...[...evidenceKeys].map((key) => `- ${key}`));
-  return { projection: output.join("\n"), evidenceKeys, entries };
+  return { projection: output.join("\n"), evidenceKeys, entries, rows };
 }
 
 function chunkEnd(text, start, capacity) {
@@ -110,9 +115,9 @@ export function chunkFiles(files, catalog, maxRequestChars = MAX_REQUEST_CHARS) 
 }
 
 // Fixed reasons only: model content must never reach CI logs, comments or status text.
-class ReplyError extends Error {}
+export class ReplyError extends Error {}
 
-function stripFence(content) {
+export function stripFence(content) {
   const fenced = /^```[A-Za-z0-9_-]*[ \t]*\r?\n?([\s\S]*?)\r?\n?```$/.exec(content.trim());
   return fenced ? fenced[1].trim() : content.trim();
 }
@@ -121,7 +126,7 @@ const sectionKey = (value) => value.toLowerCase().replace(/[^a-z]/g, "").replace
 
 // Resolve what the model cited to the unique catalog key with the same item name. The prefix may be
 // wrong, singular or plural; the name must match exactly (ADR 0019).
-function resolveEvidenceKey(cited, catalog) {
+export function resolveEvidenceKey(cited, catalog) {
   if (catalog.evidenceKeys.has(cited)) return cited;
   const separator = cited.indexOf(":");
   const prefix = separator === -1 ? "" : cited.slice(0, separator);

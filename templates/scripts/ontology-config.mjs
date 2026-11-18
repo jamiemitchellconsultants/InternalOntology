@@ -38,7 +38,8 @@ const KNOWN_SECTION_KEYS = new Set(["required", "optional"]);
  *             allowlist: AllowlistEntry[], bannedAliases: BannedAlias[], ignorePaths: string[],
  *             semanticReview: { enabled: boolean, model: string, baseUrl: string },
  *             sourceGraph: { enabled: boolean, root: string, evidence: Record<string, string[]>,
- *                            markdownPath: string, repositoryUrl: string } }} OntologyConfig
+ *                            markdownPath: string, repositoryUrl: string,
+ *                            namingReview: { enabled: boolean, model: string, baseUrl: string } } }} OntologyConfig
  */
 
 /**
@@ -84,39 +85,39 @@ function requireEntryArray(value, label) {
   return value;
 }
 
-function validateSemanticReview(value) {
+function validateModelReview(value, label) {
   if (value === undefined) return { enabled: false, model: "", baseUrl: "" };
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${CONFIG_FILENAME}: semanticReview must be an object`);
+    throw new Error(`${CONFIG_FILENAME}: ${label} must be an object`);
   }
   for (const key of Object.keys(value)) {
     if (!["enabled", "model", "baseUrl"].includes(key)) {
-      throw new Error(`${CONFIG_FILENAME}: unknown key "semanticReview.${key}"`);
+      throw new Error(`${CONFIG_FILENAME}: unknown key "${label}.${key}"`);
     }
   }
   if (typeof value.enabled !== "boolean") {
-    throw new Error(`${CONFIG_FILENAME}: semanticReview.enabled must be a boolean`);
+    throw new Error(`${CONFIG_FILENAME}: ${label}.enabled must be a boolean`);
   }
   const model = value.model === undefined ? "" : value.model;
   const baseUrl = value.baseUrl === undefined ? "" : value.baseUrl;
   if (typeof model !== "string" || (value.enabled && !model.trim())) {
-    throw new Error(`${CONFIG_FILENAME}: semanticReview.model must be a non-empty string when enabled`);
+    throw new Error(`${CONFIG_FILENAME}: ${label}.model must be a non-empty string when enabled`);
   }
   if (typeof baseUrl !== "string" || (value.enabled && !baseUrl.trim())) {
-    throw new Error(`${CONFIG_FILENAME}: semanticReview.baseUrl must be a non-empty URL when enabled`);
+    throw new Error(`${CONFIG_FILENAME}: ${label}.baseUrl must be a non-empty URL when enabled`);
   }
   if (baseUrl.trim()) {
     let parsed;
     try {
       parsed = new URL(baseUrl.trim());
     } catch {
-      throw new Error(`${CONFIG_FILENAME}: semanticReview.baseUrl must be a valid HTTP(S) URL`);
+      throw new Error(`${CONFIG_FILENAME}: ${label}.baseUrl must be a valid HTTP(S) URL`);
     }
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      throw new Error(`${CONFIG_FILENAME}: semanticReview.baseUrl must use HTTP(S)`);
+      throw new Error(`${CONFIG_FILENAME}: ${label}.baseUrl must use HTTP(S)`);
     }
     if (parsed.username || parsed.password) {
-      throw new Error(`${CONFIG_FILENAME}: semanticReview.baseUrl must not contain a credential`);
+      throw new Error(`${CONFIG_FILENAME}: ${label}.baseUrl must not contain a credential`);
     }
   }
   return { enabled: value.enabled, model: model.trim(), baseUrl: baseUrl.trim().replace(/\/+$/, "") };
@@ -129,7 +130,7 @@ function validateSourceGraph(value, ontologyPath) {
     throw new Error(`${CONFIG_FILENAME}: sourceGraph must be an object`);
   }
   for (const key of Object.keys(value)) {
-    if (!["enabled", "root", "evidence", "markdownPath", "repositoryUrl"].includes(key)) {
+    if (!["enabled", "root", "evidence", "markdownPath", "repositoryUrl", "namingReview"].includes(key)) {
       throw new Error(`${CONFIG_FILENAME}: unknown key "sourceGraph.${key}"`);
     }
   }
@@ -172,7 +173,11 @@ function validateSourceGraph(value, ontologyPath) {
     throw new Error(`${outputLabel} must be a distinct .md file strictly inside the graph root`);
   }
   const repositoryUrl = validateRepositoryUrl(value.repositoryUrl);
-  return { enabled: value.enabled, root: normalizedRoot, evidence, markdownPath, repositoryUrl };
+  const namingReview = validateModelReview(value.namingReview, "sourceGraph.namingReview");
+  if (namingReview.enabled && !value.enabled) {
+    throw new Error(`${CONFIG_FILENAME}: sourceGraph.namingReview requires sourceGraph.enabled`);
+  }
+  return { enabled: value.enabled, root: normalizedRoot, evidence, markdownPath, repositoryUrl, namingReview };
 }
 
 function validateRepositoryUrl(value) {
@@ -293,7 +298,7 @@ export function validateConfig(raw, deps = {}) {
     allowlist,
     bannedAliases,
     ignorePaths: requireStringArray(input.ignorePaths, "ignorePaths"),
-    semanticReview: validateSemanticReview(input.semanticReview),
+    semanticReview: validateModelReview(input.semanticReview, "semanticReview"),
     sourceGraph: validateSourceGraph(input.sourceGraph, ontologyPath),
   };
 }

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { treeFromRevision } from "./source-graph-git.mjs";
 import { loadCheckConfig } from "./check-source-graph.mjs";
 import { loadGraph, resolveCoverage } from "./source-graph-model.mjs";
+import { parseTurtle } from "./owl-ontology.mjs";
 
 const val = (r, p) => r?.first(p)?.object;
 const idFor = (id) => id.startsWith(":") || id.startsWith("kit:") ? id : `:${id}`;
@@ -43,6 +44,24 @@ export function findPaths(graph, from, to, { maxDepth = 4 } = {}) {
   visit(start, new Set([start]), []);
   return { paths, maxDepth };
 }
+const LOCAL_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+const ontologyTurtlePath = (config) => config.ontologyPath.replace(/\.md$/, ".ttl");
+export function resolveTerm(tree, config, input) {
+  if (typeof input !== "string") return null;
+  const name = input.startsWith(config.namespaceUri) ? input.slice(config.namespaceUri.length) : input.startsWith(":") ? input.slice(1) : input;
+  if (!LOCAL_NAME.test(name)) return null;
+  const subjects = new Set(parseTurtle(tree.text(ontologyTurtlePath(config))).map((t) => t.subject));
+  return subjects.has(`:${name}`) ? { iri: `:${name}`, name } : null;
+}
+export function conceptImplementations(graph, iri) {
+  const byIri = (a, b) => (a.iri < b.iri ? -1 : a.iri > b.iri ? 1 : 0);
+  const denoting = graph.byType("kit:GraphNode").filter((n) => val(n, "kit:denotes") === iri).sort(byIri);
+  const targets = new Set(denoting.map((n) => n.iri));
+  const implementing = graph.byType("kit:GraphAssertion").filter((a) => val(a, "kit:relationship") === "kit:implements" && targets.has(val(a, "kit:object")))
+    .map((a) => assertionView(graph, a))
+    .sort((a, b) => byIri({ iri: a.subject?.iri ?? "" }, { iri: b.subject?.iri ?? "" }) || byIri(a, b));
+  return { term: { iri, name: iri.slice(1) }, denotes: denoting.map(nodeView), implements: implementing };
+}
 export function coverageReport(graph, paths = []) {
   const inventory = graph.byType("kit:GraphCoverage").map((r) => ({ iri: r.iri, selector: val(r, "kit:pathSelector"), status: val(r, "kit:status"), priority: val(r, "kit:priority"), reason: val(r, "kit:reason") }));
   const files = paths.map((path) => { const result = resolveCoverage(graph, path); return { path, status: result.status, reason: result.reason }; });
@@ -53,6 +72,7 @@ export function annotate(result, { graphTree, workingTree }) {
   let stale = graphTree.id !== workingTree.id;
   const mark = (a) => { for (const e of a.evidence || []) { e.status = !workingTree.has(e.path) ? "missing" : workingTree.blobId(e.path) === e.blobId ? "current" : "changed"; if (e.status !== "current") stale = true; } };
   for (const e of copy.edges || []) mark(e);
+  for (const e of copy.implements || []) mark(e);
   for (const m of copy.matches || []) for (const e of m.assertions) mark(e);
   for (const path of copy.paths || []) for (const e of path) mark(e);
   return { ...copy, graphRevision: graphTree.id, workingRevision: workingTree.id, stale };
@@ -67,9 +87,14 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
       else if (arg.startsWith("--")) throw new Error(`unknown option ${arg}`);
       else args.push(arg);
     }
-    const [command, ...values] = args, { graph, tree } = openGraph(cwd, opts.rev), workingTree = treeFromRevision(cwd, opts.working);
+    const [command, ...values] = args, { graph, tree, config } = openGraph(cwd, opts.rev), workingTree = treeFromRevision(cwd, opts.working);
     let result;
-    if (command === "search" && values.length) result = search(graph, values);
+    if (command === "concept" && values.length === 1) {
+      const term = resolveTerm(tree, config, values[0]);
+      if (!term) throw new Error(`${values[0]} is not a term in ${ontologyTurtlePath(config)}; try: node scripts/query-source-graph.mjs search ${values[0]}`);
+      result = conceptImplementations(graph, term.iri);
+    }
+    else if (command === "search" && values.length) result = search(graph, values);
     else if ((command === "neighbors" || command === "node") && values.length === 1) result = neighbors(graph, values[0]);
     else if (command === "path" && values.length === 2 && Number.isInteger(opts.maxDepth) && opts.maxDepth >= 0) result = findPaths(graph, values[0], values[1], { maxDepth: opts.maxDepth });
     else if (command === "coverage") result = {};
@@ -82,6 +107,17 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
       stdout.write(`${a.iri} basis: ${a.basis?.replace("kit:", "")}${a.tentative ? " (tentative)" : ""}\n${a.subject?.iri} ${a.relationship} ${a.object?.iri}\n`);
       for (const e of a.evidence) stdout.write(`${e.path}:${e.startLine}-${e.endLine} ${e.role} ${e.blobId} ${e.status}\n`);
     };
+    if (result.term) {
+      stdout.write(`concept ${result.term.iri}\ndenotes\n`);
+      for (const n of result.denotes) stdout.write(`${n.iri} ${n.label}\n`);
+      stdout.write("implements\n");
+      result.implements.forEach(print);
+      const gap = !result.denotes.length ? `No graph node denotes ${result.term.iri}` : !result.implements.length ? `No kit:implements assertion links a source element to ${result.term.iri}` : null;
+      if (gap) {
+        stdout.write(`${gap}; that does not mean the concept is unimplemented.\n`);
+        for (const c of result.coverage.inventory) stdout.write(`${c.selector}: ${c.status}${c.reason ? ` — ${c.reason}` : ""}\n`);
+      }
+    }
     for (const m of result.matches || []) { stdout.write(`${m.node.iri} ${m.node.label}\n`); m.assertions.forEach(print); }
     if (result.node) stdout.write(`${result.node.iri} ${result.node.label} ${result.node.denotes || ""}\n`);
     (result.edges || []).forEach(print);

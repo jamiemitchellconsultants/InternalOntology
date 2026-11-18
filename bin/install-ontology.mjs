@@ -10,6 +10,7 @@
 //                                 [--ontology-path <path>] [--default-branch <name>]
 //                                 [--with-drift-review]
 //                                 [--with-semantic-review]
+//                                 [--with-graph-naming-review]
 //                                 [--with-enum-tests csharp|typescript|python]
 //   node bin/install-ontology.mjs --help
 
@@ -69,7 +70,7 @@ export function buildPlan(options) {
     { template: "github/workflows/ontology-lint.yml", dest: ".github/workflows/ontology-lint.yml", substitute: true, ownedBy: "kit" },
   ];
 
-  if (options.withDriftReview || options.withSemanticReview) {
+  if (options.withDriftReview || options.withSemanticReview || options.withGraphNamingReview) {
     for (const path of ["scripts/llm-auth.mjs", "scripts/llm-auth.test.mjs",
       "scripts/request-budget.mjs", "scripts/request-budget.test.mjs"]) {
       plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
@@ -98,6 +99,22 @@ export function buildPlan(options) {
     }
     plan.push({ template: "docs/ontology-semantic-review.md", dest: "docs/ontology-semantic-review.md",
       substitute: false, ownedBy: "kit" });
+  }
+
+  if (options.withGraphNamingReview) {
+    const kit = (path) => plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
+    if (!options.withSemanticReview) {
+      for (const name of ["github", "model"]) for (const suffix of [".mjs", ".test.mjs"]) kit(`scripts/semantic-review-${name}${suffix}`);
+    }
+    for (const name of ["select", "model", "commands", "github", "ledger", "worker"]) {
+      for (const suffix of [".mjs", ".test.mjs"]) kit(`scripts/graph-naming-${name}${suffix}`);
+    }
+    kit("scripts/graph-naming-test-helpers.mjs");
+    for (const name of ["request", "review", "settle"]) {
+      plan.push({ template: `github/workflows/ontology-graph-naming-${name}.yml`,
+        dest: `.github/workflows/ontology-graph-naming-${name}.yml`, substitute: false, ownedBy: "kit" });
+    }
+    kit("docs/graph-naming-review.md");
   }
 
   if (options.withSourceGraph) {
@@ -273,6 +290,7 @@ export function install(options) {
   const withSourceGraph = options.withSourceGraph || options.sourceGraphRoot !== undefined;
   const sourceGraphRoot = options.sourceGraphRoot === undefined ? "docs/source-knowledge-graph" : normaliseRepoRelativePath(options.sourceGraphRoot, "--source-graph-root");
   if (!sourceGraphRoot) throw new Error("--source-graph-root must be non-empty");
+  if (options.withGraphNamingReview && !withSourceGraph) throw new Error("--with-graph-naming-review requires --with-source-graph");
   const configExists = existsSync(join(target, "ontology.config.json"));
 
   const agentFile = detectAgentFile(target);
@@ -363,6 +381,7 @@ const FLAG_OPTIONS = {
   "--with-drift-review": "withDriftReview",
   "--with-semantic-review": "withSemanticReview",
   "--with-source-graph": "withSourceGraph",
+  "--with-graph-naming-review": "withGraphNamingReview",
   "--force": "force",
   "--reset-content": "resetContent",
   "--dry-run": "dryRun",
@@ -371,7 +390,7 @@ const FLAG_OPTIONS = {
 const USAGE =
   "usage: node bin/install-ontology.mjs --target <repo> [--project-name <name>]\n" +
   "         [--ontology-path <path>] [--default-branch <name>] [--with-drift-review]\n" +
-  "         [--with-semantic-review]\n" +
+  "         [--with-semantic-review] [--with-source-graph] [--with-graph-naming-review]\n" +
   "         [--with-enum-tests csharp|typescript|python] [--force] [--reset-content] [--dry-run]\n" +
   "\n" +
   "Installs the ontology kit's scripts, CI workflow, starter config and ontology document into\n" +
@@ -387,6 +406,7 @@ const USAGE =
   "  --with-semantic-review   Install the opt-in blocking semantic reviewer and its setup runbook.\n" +
   "  --with-source-graph      Install the opt-in source graph and its workflow.\n" +
   "  --source-graph-root <path> Set the graph root and enable source graph installation.\n" +
+  "  --with-graph-naming-review  Install the opt-in model-assisted graph naming review; needs --with-source-graph.\n" +
   "  --with-enum-tests <lang> Also install a worked-example enum lock test: csharp, typescript, or python.\n" +
   "  --force                  Overwrite existing kit-owned files (the scripts and CI workflows).\n" +
   "                           Never overwrites adopter-owned files (ontology.config.json, the ontology\n" +
@@ -404,7 +424,7 @@ export function parseCliArgs(argv) {
   if (argv.includes("--help") || argv.includes("-h")) {
     return { help: true };
   }
-  const options = { withDriftReview: false, withSemanticReview: false, force: false,
+  const options = { withDriftReview: false, withSemanticReview: false, withGraphNamingReview: false, force: false,
     resetContent: false, dryRun: false };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
@@ -423,7 +443,7 @@ export function parseCliArgs(argv) {
     throw new Error(
       "--target is required — usage: node bin/install-ontology.mjs --target <repo> " +
         "[--project-name <name>] [--ontology-path <path>] [--default-branch <name>] " +
-        "[--with-drift-review] [--with-semantic-review] [--with-source-graph] [--source-graph-root <path>] [--with-enum-tests csharp|typescript|python] " +
+        "[--with-drift-review] [--with-semantic-review] [--with-source-graph] [--source-graph-root <path>] [--with-graph-naming-review] [--with-enum-tests csharp|typescript|python] " +
         "[--force] [--reset-content] [--dry-run]",
     );
   }
@@ -468,6 +488,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         console.log("Commit docs/ontology.ttl first (`node scripts/build-ontology.mjs`); the graph check requires it.");
         console.log("Set sourceGraph.repositoryUrl in ontology.config.json to this repository's HTTPS browser URL (owner/repository).");
         console.log("Then commit the canonical source, run `node scripts/render-source-graph.mjs`, review and stage the generated Markdown, and commit it in the same PR. See docs/source-knowledge-graph.md.");
+      }
+      if (options.withGraphNamingReview) {
+        console.log("Set sourceGraph.namingReview in ontology.config.json on the default branch to enable the graph naming review; see docs/graph-naming-review.md.");
       }
     }
   } catch (error) {

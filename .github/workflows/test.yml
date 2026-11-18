@@ -36,3 +36,9 @@ jobs:
           node --test llm-auth.test.mjs
           node --test semantic-review-model.test.mjs
           node --test semantic-review-worker.test.mjs
+          node --test graph-naming-select.test.mjs
+          node --test graph-naming-model.test.mjs
+          node --test graph-naming-commands.test.mjs
+          node --test graph-naming-github.test.mjs
+          node --test graph-naming-ledger.test.mjs
+          node --test graph-naming-worker.test.mjs
