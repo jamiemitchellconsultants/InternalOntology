@@ -49,7 +49,8 @@ by rewriting the original.
 | [33](#entry-feat-oidc-token-provider-for-the-model-reviewers-92) | 2026-11-18 | feat: OIDC token provider for the model reviewers (#92) | product | One shared `ModelAuthProvider` used by both reviewers, with retry-once on 401 and static-key fallback ([ADR 0012](docs/adr/0012-shared-model-auth-provider.md)); workflows map the existing `KEYCLOAK_CLIENT_SECRET` so consumers re-set… |
 | [34](#entry-docs-design-configurable-drift-request-budget-100) | 2026-11-18 | docs: design configurable drift request budget (#100) | product | Raise the default to 200,000 characters (about 50,000 to 67,000 tokens, at most half of a 131,072-token window), make the budget and the model timeout environment settings fed from repository variables with strict validation ([ADR… |
 | [35](#entry-docs-plan-configurable-drift-request-budget-100) | 2026-11-18 | docs: plan configurable drift request budget (#100) | product | Seven tasks in an order that keeps every commit green: setting parser and default, typed budget error, timeout and skip path in `main`, workflow variables, docs, a large-ontology acceptance test run first against the old code to prove it… |
-| [36](#entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow) | 2026-11-18 | fix: reviewer tests on Node 20/22 and a kit test workflow | product | Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. |
+| [36](#entry-feat-configurable-drift-reviewer-request-budget-100) | 2026-11-18 | feat: configurable drift reviewer request budget (#100) | product | Default 200,000 characters, configurable by environment variable with strict validation ([ADR 0014](docs/adr/0014-configurable-request-budget.md)); an oversized ontology is a neutral skipped outcome with a comment, notice and exit 0 ([ADR… |
+| [37](#entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow) | 2026-11-18 | fix: reviewer tests on Node 20/22 and a kit test workflow | product | Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. |
 
 ---
 
@@ -819,9 +820,29 @@ The build cannot start until this plan is reviewed and merged. The existing asse
 
 ---
 
+<a id="entry-feat-configurable-drift-reviewer-request-budget-100"></a>
+
+## Entry 36 — 2026-11-18 — feat: configurable drift reviewer request budget (#100)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The fixed 24,000-character budget made the drift reviewer refuse to run for JEPA-Speech and Grooveloom, with an unexplained red job. Scripts must stay byte-identical, so adopters could not change it.
+
+## Decision
+
+Default 200,000 characters, configurable by environment variable with strict validation ([ADR 0014](docs/adr/0014-configurable-request-budget.md)); an oversized ontology is a neutral skipped outcome with a comment, notice and exit 0 ([ADR 0015](docs/adr/0015-skipped-outcome-for-oversized-ontology.md)). Rejected: config-file setting, notice without a comment, changing `max_tokens`.
+
+## Consequences
+
+Large-ontology adopters work after a reinstall; larger requests cost more and may need a longer timeout. Skipped runs leave a comment where clean runs stay silent. Splitting the projection stays out of scope. Live-gateway behaviour with large prompts is open until a consumer runs it.
+
+---
+
 <a id="entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow"></a>
 
-## Entry 36 — 2026-11-18 — fix: reviewer tests on Node 20/22 and a kit test workflow
+## Entry 37 — 2026-11-18 — fix: reviewer tests on Node 20/22 and a kit test workflow
 
 *Kind: product. Status: accepted.*
 
