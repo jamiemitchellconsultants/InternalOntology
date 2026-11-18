@@ -322,3 +322,34 @@ test("a 60,000-character projection plans batches with the default budget", () =
     "x".repeat(60_000));
   assert.equal(batches.length, 1);
 });
+
+import { BudgetExceededError } from "./review-ontology-drift.mjs";
+
+test("the budget error is typed and carries the sizes", () => {
+  try {
+    buildBatches([], "x".repeat(5_000), 5_100);
+    assert.fail("must throw");
+  } catch (error) {
+    assert.ok(error instanceof BudgetExceededError);
+    assert.equal(error.projectionChars, 5_000);
+    assert.equal(error.maxRequestChars, 5_100);
+  }
+});
+
+test("a persistent single-line token limit throws the typed error", async () => {
+  const batch = [{ file: "a.md", lines: [{ line: 1, text: "x" }] }];
+  const review = async () => { throw new HttpError(413, "", "too big"); };
+  await assert.rejects(reviewResilient(batch, review), (error) => error instanceof BudgetExceededError);
+});
+
+test("the 413 split still halves a multi-line chunk before giving up", async () => {
+  const lines = [1, 2, 3, 4].map((line) => ({ line, text: "t" }));
+  const sizes = [];
+  const review = async (batch) => {
+    sizes.push(batch[0].lines.length);
+    if (batch[0].lines.length > 2) throw new HttpError(413, "", "too big");
+    return "NO_DRIFT";
+  };
+  await reviewResilient([{ file: "a.md", lines }], review);
+  assert.deepEqual(sizes, [4, 2, 2]);
+});

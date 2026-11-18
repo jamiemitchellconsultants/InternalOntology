@@ -229,7 +229,10 @@ export function buildBatches(files, ontologyProjection, maxRequestChars = MAX_RE
   const staticChars = SYSTEM_PROMPT.length + ontologyProjection.length + 16;
   const available = maxRequestChars - staticChars;
   if (available < 500) {
-    throw new Error("ontology projection and system prompt leave no useful diff budget");
+    throw new BudgetExceededError("ontology projection and system prompt leave no useful diff budget", {
+      projectionChars: ontologyProjection.length,
+      maxRequestChars,
+    });
   }
 
   const chunks = files.flatMap(({ file, lines }) => splitLinesToFit(file, lines, available));
@@ -256,6 +259,22 @@ export function buildBatches(files, ontologyProjection, maxRequestChars = MAX_RE
  */
 export function userPrompt(ontologyProjection, batch) {
   return [ontologyProjection, ...batch.map(renderChunk)].join("\n\n---\n\n");
+}
+
+/**
+ * The ontology (or one added line) does not fit what the model will accept. The review is skipped
+ * with an explanation rather than failed.
+ */
+export class BudgetExceededError extends Error {
+  /**
+   * @param {string} message
+   * @param {{ projectionChars?: number, maxRequestChars?: number }} [sizes]
+   */
+  constructor(message, { projectionChars, maxRequestChars } = {}) {
+    super(message);
+    this.projectionChars = projectionChars;
+    this.maxRequestChars = maxRequestChars;
+  }
 }
 
 export class HttpError extends Error {
@@ -385,7 +404,7 @@ export async function reviewResilient(batch, review) {
     }
     const [chunk] = batch;
     if (chunk.lines.length < 2) {
-      throw new Error(
+      throw new BudgetExceededError(
         `token limit persists for one added line in ${chunk.file}; the ontology projection is too large`,
       );
     }
