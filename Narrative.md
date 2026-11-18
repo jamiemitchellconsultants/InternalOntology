@@ -57,6 +57,7 @@ by rewriting the original.
 | [41](#entry-fix-semantic-reviewer-reads-fenced-replies-and-resolves-evidence-keys) | 2026-11-18 | fix: semantic reviewer reads fenced replies and resolves evidence keys | product | Parse one surrounding code fence; resolve evidence keys to the unique catalog item with the same name instead of requiring an exact key; list the valid keys in the prompt; report fixed, specific reasons ([ADR… |
 | [42](#entry-docs-design-for-agent-maintained-knowledge-graph-122) | 2026-11-18 | docs: design for agent-maintained knowledge graph (#122) | product | This is a correction of `docs-feature-behaviours-for-source-knowledge-graph`: a model may now produce semantic results about the graph, and a result takes effect only when a person with write access accepts it. |
 | [43](#entry-docs-plan-agent-maintained-knowledge-graph-122) | 2026-11-18 | docs: plan agent-maintained knowledge graph (#122) | product | There are 13 test-first tasks. Tasks 1–3 are the agent half: the `GraphReader` `concept` command, the stronger `GraphAgentProtocol`, and "Authoring graph entries" in the installed runbook. |
+| [44](#entry-feat-agent-maintained-knowledge-graph-and-graph-naming-review-122) | 2026-11-18 | feat: agent-maintained knowledge graph and graph naming review (#122) | product | The build follows the plan, with two rulings. - The existing installer option test now expects the new `withGraphNamingReview: false` default. |
 
 ---
 
@@ -999,5 +1000,37 @@ Rejected: one large worker script, and a whole-graph naming sweep (deferred by U
 ## Consequences
 
 The build cannot start until this plan is reviewed and merged. The existing `sourceGraph` deep-equal expectations in the config tests gain a `namingReview` default. Adopters who install `--with-graph-naming-review` without the semantic reviewer get two of its modules and their tests. Not verified: GitHub's `issue_comment` behaviour and the collaborator `role_name` values, which the user phase exercises in the deployed trial.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-feat-agent-maintained-knowledge-graph-and-graph-naming-review-122"></a>
+
+## Entry 44 — 2026-11-18 — feat: agent-maintained knowledge graph and graph naming review (#122)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+ADRs 0020–0025 and the plan (#125) fixed the design. This pull request delivers it: agents now name code against the `Ontology` and maintain the `SourceKnowledgeGraph` with the code, and a model-assisted naming check runs whose results only people settle.
+
+## Decision
+
+The build follows the plan, with two rulings.
+
+- The existing installer option test now expects the new `withGraphNamingReview: false` default.
+- A command ignored for lack of permission can carry its own reason, so a failed permission lookup is reported as such.
+
+Two minor findings from the final self-review are deferred.
+
+- Model reason and suggestion text reaches the summary and issues unchanged, apart from marker escaping, so an @mention in it would notify. The semantic reviewer behaves the same.
+- If the review job fails, the follow-up job reports the credential as unavailable instead of saying the job failed. This mirrors the semantic reviewer.
+
+The final review was a self-review by the implementer; no independent reviewer agent was run.
+
+## Consequences
+
+Adopters can upgrade with `--force` to get the stronger protocol and the `concept` lookup. The naming review stays off until `sourceGraph.namingReview` is enabled on the default branch, and until then every pull request gets a successful disabled status. `GraphChecker` and the renderer are unchanged. Adopters who install the naming review without the semantic reviewer also get `semantic-review-github` and `semantic-review-model` with their tests.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
