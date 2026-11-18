@@ -56,6 +56,7 @@ by rewriting the original.
 | [40](#entry-feat-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | feat: configurable semantic reviewer request budget (#111) | product | One shared settings module with the #100 defaults and conventions ([ADR 0018](docs/adr/0018-shared-request-budget-module-and-timeout-default.md)); a distinct non-blocking `too-large` outcome rather than a failing status or a re-worded… |
 | [41](#entry-fix-semantic-reviewer-reads-fenced-replies-and-resolves-evidence-keys) | 2026-11-18 | fix: semantic reviewer reads fenced replies and resolves evidence keys | product | Parse one surrounding code fence; resolve evidence keys to the unique catalog item with the same name instead of requiring an exact key; list the valid keys in the prompt; report fixed, specific reasons ([ADR… |
 | [42](#entry-docs-design-for-agent-maintained-knowledge-graph-122) | 2026-11-18 | docs: design for agent-maintained knowledge graph (#122) | product | This is a correction of `docs-feature-behaviours-for-source-knowledge-graph`: a model may now produce semantic results about the graph, and a result takes effect only when a person with write access accepts it. |
+| [43](#entry-docs-plan-agent-maintained-knowledge-graph-122) | 2026-11-18 | docs: plan agent-maintained knowledge graph (#122) | product | There are 13 test-first tasks. Tasks 1–3 are the agent half: the `GraphReader` `concept` command, the stronger `GraphAgentProtocol`, and "Authoring graph entries" in the installed runbook. |
 
 ---
 
@@ -968,5 +969,35 @@ Rejected alternatives: model calls inside `GraphChecker`, results that block or 
 ## Consequences
 
 Unsettled or accepted results hold the merge. A rejection or deferral lets the PR proceed, and a run that cannot review never blocks. A write-role author can clear their own results, and the rule that agents never settle results relies on the protocol, because agents use the human's token. Adopters with semantic review already set up need no new secret. Some real mismatches are missed by design. Still open as follow-ups: a model check of whether evidence supports each claim, a sweep of the whole graph, and showing earlier settlements on later PRs. The generated narrative fragment for this PR must have its kind set to `correction` on the narrative automation PR, citing `docs-feature-behaviours-for-source-knowledge-graph`.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-docs-plan-agent-maintained-knowledge-graph-122"></a>
+
+## Entry 43 — 2026-11-18 — docs: plan agent-maintained knowledge graph (#122)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The design pull request (#123) is merged with ADRs 0020–0025. The Architect's handoff left the developer to decide how to split the worker, what to reuse from the semantic reviewer, the prefilter's word rule, the ledger and command grammar edge cases, the acceptance approach, and the order of the plan.
+
+## Decision
+
+There are 13 test-first tasks. Tasks 1–3 are the agent half: the `GraphReader` `concept` command, the stronger `GraphAgentProtocol`, and "Authoring graph entries" in the installed runbook. They can be trialled in JEPA-Speech before the review half starts. Tasks 4–13 build the review half as six small modules: select, model, commands, github, ledger and worker, then the three workflows, the installer flag, an installed integration test and the docs.
+
+- Reuse: the semantic modules only export `decodeBlob`, `stripFence` and `resolveEvidenceKey`, and `catalogOntology` gains a `rows` map, so the semantic reviewer behaves exactly as before. The naming review installs `semantic-review-github` and `semantic-review-model` without the rest of the semantic reviewer.
+- Prefilter: words are PascalCase, acronym, lower-case or digit runs, compared case-insensitively. A label contains a name when the name's words appear in it in order and next to each other.
+- Settlement: each command's targets are resolved once, when it is first seen or edited, and recorded in the ledger. So `all` never widens to results that appear later. Unknown labels are ignored, and labels whose result has gone are reported as no longer current.
+- Bounds: at most 20 results per run, with stored text cut to 200 characters. The stored run keeps counts and at most 20 not-reviewed entries, so the summary comment stays under GitHub's limit.
+- Acceptance: the integration test runs the installed scripts against a local model stand-in and the real GitHub client with an in-memory `fetch`.
+
+Rejected: one large worker script, and a whole-graph naming sweep (deferred by U6).
+
+## Consequences
+
+The build cannot start until this plan is reviewed and merged. The existing `sourceGraph` deep-equal expectations in the config tests gain a `namingReview` default. Adopters who install `--with-graph-naming-review` without the semantic reviewer get two of its modules and their tests. Not verified: GitHub's `issue_comment` behaviour and the collaborator `role_name` values, which the user phase exercises in the deployed trial.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
