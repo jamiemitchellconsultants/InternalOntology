@@ -51,11 +51,19 @@ No numeric targets or retrieval baselines are set.
    ontology concept and find the graph nodes that denote or implement it, rather than relying on a
    substring of a label or IRI. Measure: the owner asks for several concepts and checks the answers
    against source.
-5. **Mismatched graph names are flagged for review.** An advisory, model-assisted check compares
-   graph labels and `kit:denotes` links with the ontology and reports likely mismatches on the pull
-   request, as the ontology semantic review does for prose. The deterministic graph check stays
-   offline and unchanged in what it proves. Measure: the owner judges the findings on trial pull
-   requests as useful and not noisy.
+5. **Mismatched graph names are found by a model and settled by a human.** A model-assisted check
+   compares graph labels, `kit:denotes` links and the names of linked code symbols with the
+   ontology, and reports likely mismatches on the pull request. Its results take effect only when
+   a human reviewer accepts them. The deterministic graph check stays offline and unchanged in what
+   it proves. Measure: the owner judges the findings on trial pull requests as useful and not
+   noisy.
+6. **Model results reach a reviewer early and are easy to settle.** A human reviewer learns of the
+   check's results as soon as they exist, not at merge time, and can settle each one in a step or
+   two: accept it, reject it with a reason, or defer it by creating an issue that records the
+   results for later review, for example after consulting stakeholders or subject-matter experts.
+   Deferring lets the pull request proceed, and the issue keeps the open question visible.
+   Measure: in the trial, the owner judges that results reached them promptly, that settling them
+   took little effort, and that deferred results could be picked up again from their issue.
 
 ### Scope
 
@@ -67,9 +75,18 @@ No numeric targets or retrieval baselines are set.
 - Authoring guidance for "add or refine this graph entry" requests.
 - A concept-first lookup in the `GraphReader` that follows `kit:denotes` and `kit:implements` from
   an ontology concept.
-- An advisory, model-assisted semantic match of graph labels and `kit:denotes` links against the
-  ontology, run separately from the deterministic `GraphChecker`, in the way the
-  `SemanticReviewWorker` runs separately from the term linter.
+- A model-assisted semantic match of graph names against the ontology: labels, `kit:denotes` links
+  and the names of linked code symbols. It runs separately from the deterministic `GraphChecker`,
+  in the way the `SemanticReviewWorker` runs separately from the term linter, and its results take
+  effect only on human acceptance.
+- A review path for those results that draws a human reviewer's attention as early as possible and
+  lets them accept, reject with a reason, or defer a result to a newly created issue so the pull
+  request can proceed.
+- Widening [#35 B11](../source-knowledge-graph/02-behaviours.md) from "keep semantic review human"
+  to "a model may produce semantic results about the graph, and they take effect only when a human
+  accepts them". The deterministic validation script still makes no model call and needs no secret
+  or network access. This reverses part of an accepted decision, so the design pull request's
+  Narrative sections carry a `correction` entry citing `docs-feature-behaviours-for-source-knowledge-graph`.
 - Implemented components and symbols only: every entry the agent writes is evidenced by source that
   exists.
 - Changes ship in the kit's templates, byte-identical in every adopting repository, with variation
@@ -86,11 +103,11 @@ No numeric targets or retrieval baselines are set.
   and MCP. These belong to the division ontology repository.
 - Any network call, model call or secret in the deterministic `GraphChecker`, the `GraphReader` or
   the renderer.
-- Judging whether a graph claim is true. Accuracy stays with maintainers, as accepted in
-  [#35 B11](../source-knowledge-graph/02-behaviours.md) and
-  [#62](../human-readable-source-knowledge-graph/01-vision.md). The semantic match checks naming
-  against the ontology, not truth; if a later phase finds it must judge truth, or make semantic
-  review of the graph non-human, that needs a `correction` narrative entry first.
+- A model check of whether each assertion is supported by its evidence. The widened B11 allows one,
+  with human acceptance, but it is a follow-up; this feature's check covers naming only.
+- Automatic judgement of semantic accuracy, as [#62](../human-readable-source-knowledge-graph/01-vision.md)
+  accepted. A model result that a human must accept, reject or defer is not automatic, so #62
+  stands unchanged.
 - Installing a source graph in this repository.
 - Numeric success targets and retrieval baselines.
 
@@ -115,12 +132,21 @@ No numeric targets or retrieval baselines are set.
 - **Search is literal.** The [graph reader's search](../../../templates/scripts/query-source-graph.mjs)
   matches lower-cased substrings of a node's IRI and label. It does not follow `kit:denotes` or
   `kit:implements`, so it cannot answer "what implements this concept?".
-- **There is a precedent for an advisory model-assisted check.** The ontology semantic review runs
-  in its own workflows (`ontology-semantic-review.yml`, `-request`, `-dismiss`), apart from the
-  deterministic term linter. [#35 B11](../source-knowledge-graph/02-behaviours.md) keeps semantic
-  review of the graph human and keeps the validation script free of model calls, secrets and
-  network access; [#62](../human-readable-source-knowledge-graph/01-vision.md) keeps automatic
-  accuracy judgement out of scope. A separate, advisory naming match fits inside both.
+- **There is a precedent for a model-assisted check.** The ontology semantic review runs in its own
+  workflows (`ontology-semantic-review.yml`, `-request`, `-dismiss`), apart from the deterministic
+  term linter. [#35 B11](../source-knowledge-graph/02-behaviours.md) keeps semantic review of the
+  graph human and keeps the validation script free of model calls, secrets and network access; the
+  [narrative entry](../../../narrative/entries/20261102-docs-feature-behaviours-for-source-knowledge-graph.md)
+  that accepted it says maintainers remain responsible for claims.
+  [#62](../human-readable-source-knowledge-graph/01-vision.md) keeps automatic accuracy judgement
+  out of scope. The owner's widening keeps the offline validation script and keeps humans
+  responsible, through acceptance of model results.
+- **Settling a finding is hard today.** In the [ontology semantic review](../../../templates/docs/ontology-semantic-review.md)
+  a finding blocks the merge until a maintainer posts a comment of exactly
+  `/ontology-dismiss <64-hex-finding-id> <40-hex-head-sha> <reason>`, copying both identifiers from
+  the run comment. One command settles one finding, the dismissal expires on the next push, and
+  there is no way to defer a finding for later review. The graph review path should be easier
+  than this.
 - **The wider system.** Each business area's division ontology repository imports every app
   repository's ontology and source graph at pinned commits and runs the runtime workspace,
   including embedding search. This kit's job is the quality of the source facts those imports
