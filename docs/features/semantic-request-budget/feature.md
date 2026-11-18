@@ -258,3 +258,97 @@ model credential stays an environment secret.
 - [ADR 0016: a too-large ontology is its own non-blocking outcome](../../adr/0016-too-large-ontology-outcome.md) (OQ1)
 - [ADR 0017: an invalid budget setting publishes an explained unavailable run, then fails the job](../../adr/0017-invalid-budget-setting-status.md) (OQ2)
 - [ADR 0018: one shared budget module and a 300,000 ms default timeout](../../adr/0018-shared-request-budget-module-and-timeout-default.md) (OQ3)
+
+## User: runbook, guide and acceptance
+
+### Runbook
+
+**Deployed environment used by acceptance:** a consumer repository's GitHub Actions run of the semantic
+review with `semanticReview` enabled, driven by the user. No consumer has the semantic reviewer enabled
+today, so this layer cannot run until one is set up (see Deploy). Nothing in this repository calls a
+real model, GitHub or the gateway.
+
+#### Deploy (per consumer)
+
+1. Install or upgrade the kit-owned files:
+   `node bin/install-ontology.mjs --target <repo> --force --with-semantic-review` (add
+   `--with-drift-review` if used). Commit to the default branch. This copies `scripts/request-budget.mjs`
+   with the reviewers.
+2. Create the Actions environment `ontology-semantic-review`, restricted to the default branch, with the
+   model credential as an environment secret (`KEYCLOAK_CLIENT_SECRET`, mapped by the workflow, or a
+   static key), and the OIDC repository variables if used (see the semantic runbook).
+3. On the default branch set `semanticReview` in `ontology.config.json` to `enabled: true` with the
+   model and base URL, and require the status `ontology/semantic-match`.
+4. Optional repository variables `ONTOLOGY_MAX_REQUEST_CHARS` (default 200000) and
+   `ONTOLOGY_MODEL_TIMEOUT_MS` (default 300000; it was 30000). Positive integers only.
+5. Health check: open a pull request that changes a Markdown file. The `ontology/semantic-match` status
+   must leave `pending` and the pull request must get a "Semantic ontology review" comment.
+
+#### Operate
+
+- Status "Semantic match not reviewed: ontology too large for the configured budget (raise
+  ONTOLOGY_MAX_REQUEST_CHARS)" means no model call was made. It is a success, so merging is not
+  blocked. Raise the variable to a size the model accepts and push to re-run.
+- Status "...service or configuration unavailable" with a reason naming `ONTOLOGY_MAX_REQUEST_CHARS` (or the
+  timeout variable) means the setting is not a positive integer; the review job is red until fixed.
+- Requests timing out: raise `ONTOLOGY_MODEL_TIMEOUT_MS`. The 300,000 ms default has not been measured near
+  the budget, and chunks are reviewed one after another. The semantic request has no output cap of its own.
+
+#### Recover and roll back
+
+- Delete the two variables to return to the defaults. To roll back the code, revert the consumer's upgrade
+  commit; the old script again reports ontologies above about 24,000 characters as unavailable, and its
+  30,000 ms timeout returns.
+- To switch the pilot off, set `semanticReview.enabled` to `false` on the default branch.
+
+### User guide
+
+For maintainers of an adopting repository, and for pull request authors reading the status.
+
+- **A large ontology is reviewed (B1, B2).** After upgrading, a projection up to roughly 199,000 characters
+  needs no setting.
+- **Change the budget without editing a script (B3, B4, B6).** Set the repository variable; unset or blank
+  means the default. The drift reviewer reads the same variable.
+- **Typos are explained (B5).** A non-integer value turns the job red and the pull request record names the
+  variable and your value.
+- **"Too large" is not an outage (B7, B8, B9).** You get a green status that says the ontology is too large
+  and which variable to raise, plus a comment listing each file. It permits merge; it never blocks.
+- **The model's own limit still applies (B10).** If the endpoint rejects a request as too long, the file is
+  split and retried.
+- **Nothing else changes (B11).** Findings, dismissals, partial and other unavailable results behave as before.
+- **Mind the timeout (B12, B13).** The default is now 300,000 ms; raise `ONTOLOGY_MODEL_TIMEOUT_MS` if needed.
+- **Upgrades stay mechanical (B14 to B17).** Only variables, secrets and `ontology.config.json` differ.
+
+### Acceptance
+
+Executable tests: `tests/semantic-budget-acceptance.test.mjs` (`node --test tests/semantic-budget-acceptance.test.mjs`),
+12 tests that install the kit into a scratch repository and drive the INSTALLED semantic reviewer against a
+roughly 60 KB ontology, a local HTTP stand-in for the model and an in-memory GitHub client. Unit-level
+cases (B14) are in the shipped `semantic-review-model`, `semantic-review-worker`, `semantic-review-ledger` and
+`request-budget` tests. "Local" below is a scratch repository; "deployed" is a consumer Actions run.
+
+| Behaviour | Scripted walkthrough (each step with its expected result) | Executable test |
+| --- | --- | --- |
+| B1 | 1. Install with `--with-semantic-review`, replace the ontology with a 60 KB one. 2. Run the installed review for a changed file with default settings. Expect a model request and the file reviewed. Deployed: open a pull request in a large-ontology consumer; expect a reviewed or finding result, not "not reviewed". | B1 B15 test |
+| B2 | 1. Plan with a budget one character above the overhead, projection and path. Expect the file in one-character pieces. 2. At exactly that floor. Expect no request and the too-large code. | B2 test |
+| B3, B4 | 1. Run with `ONTOLOGY_MAX_REQUEST_CHARS=90000`. Expect the model module to receive 90000. 2. Unset, then empty, then spaces. Expect 200000. | B3 B4 B12 test |
+| B5 | 1. Run with `abc`. Expect the job to fail, an unavailable record naming the variable and `abc`, and no model call. 2. Same value with the pilot disabled. Expect no failure. | B5 test |
+| B6 | 1. Open the installed semantic workflow. Expect both variables mapped from `vars`, no number, credential still an environment secret. | B6 test |
+| B7, B8 | 1. Run with a budget the ontology cannot fit. Expect no model call, outcome too-large, status success reading "ontology too large for the configured budget" and naming the variable, never "service or configuration unavailable", and the comment saying it permits merge. Deployed: set the variable very low in a consumer and open a pull request. | B7 tests |
+| B9, B10 | 1. Make the model answer 413 to everything. Expect each file coded too-large. 2. Make it answer 413 once to a larger chunk. Expect a split, a retry and the file reviewed. | B9 B10 test |
+| B11 | 1. Return a finding. Expect failure. 2. Make the model time out. Expect the "service or configuration unavailable" wording and outcome unavailable. | B11 test |
+| B12 | 1. Hang the model with a 20 ms timeout. Expect "model timed out". 2. Check defaults 45000 override and 300000. | B12 tests |
+| B13, B16 | 1. Read the installed runbook and README. Expect the default, variables, too-large result, timeout default of 300,000 ms with the "has not been measured" caveat and the lack of an output cap. | B13 B16 tests |
+| B14 | 1. Run the shipped unit tests alone. Expect the large-ontology, too-large and persistent-413 cases to pass on Node 20, 22 and 24. | shipped test files (run in Docker for #116) |
+| B15 | covered by B1 and B7 above | B1 B15, B7 tests |
+| B17 | 1. Install, then diff `scripts/request-budget.mjs` and the three reviewer scripts against the templates. Expect no difference, and both reviewers import the same module. | B17 test |
+
+#### Results
+
+| Environment | Layer | Result | Date | By |
+| --- | --- | --- | --- | --- |
+| Local build | Executable tests (12 tests) | pass; full `npm test` exits 0 | 2026-11-18 | run by the agent; not yet approved by the person acting as user |
+| Local build | Shipped unit and installed tests on Node 20, 22, 24 (Docker, from the build PR #116) | pass: `npm test` 529/529 on each; every shipped test file alone passes with none cancelled | 2026-11-18 | run by the agent |
+| Local build | Scripted walkthroughs | pending, not yet followed by a person | - | - |
+| Deployed | Everything | not run: no consumer has the semantic reviewer enabled. It needs a consumer reinstall with `--with-semantic-review`, `semanticReview` enabled in its `ontology.config.json`, the `ontology-semantic-review` environment secret, and a pull request that changes Markdown. No live call was made. | - | - |
+| Not verified live | - | the 200,000-character default and the 300,000 ms timeout for semantic prompts; the real GitHub client end to end; the too-large and junk-setting records as GitHub displays them; the person-run walkthroughs, which the user has not approved | - | - |
