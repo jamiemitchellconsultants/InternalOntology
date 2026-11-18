@@ -136,3 +136,63 @@ Terms are the ontology names added in this phase: `ModelAuthProvider`, `OidcClie
 | U8 | Rename the secret or map the existing one? | Map `KEYCLOAK_CLIENT_SECRET` (B7); architect to record as an ADR. |
 | U9 | Check `token_type`, validate the JWT, other grants? | Deferred as out of scope. |
 | U10 | Does it work against the live gateway? | Cannot be decided here; unverified until a consumer runs it. |
+
+## Architect: structure
+
+### Components
+
+| Component | Responsibility | Serves |
+| --- | --- | --- |
+| `ModelAuthProvider` (`templates/scripts/llm-auth.mjs`) | Resolves `AuthMode`; fetches, caches and refreshes the OIDC token; validates `OidcClientConfig`; exports `authorizedFetch` which applies the bearer and retries once on 401; keeps secrets out of errors | B1-B3, B5, B8-B14 |
+| `DriftReviewer` (`review-ontology-drift.mjs`, `modelJson`) | Builds an auth provider from `ONTOLOGY_OIDC_*` and `ONTOLOGY_LLM_API_KEY`; calls the model through `authorizedFetch` | B2, B4, B9 |
+| `SemanticReviewWorker` and its model module (`semantic-review-worker.mjs`, `semantic-review-model.mjs`) | Worker builds a provider from `ONTOLOGY_OIDC_*` and `ONTOLOGY_SEMANTIC_LLM_API_KEY`; `runSemanticReview` takes it instead of a secret string and keeps its "credential unavailable" outcome when the mode is none; `reviewFiles` calls the model through `authorizedFetch` | B2, B4, B9, B12 |
+| Drift and semantic workflow templates | Pass OIDC vars and the mapped secret, make the static key optional, check that one `AuthMode` is complete, drop the network-step comment | B6, B7 |
+| `Installer` | Copies `llm-auth.mjs` and its test wherever the reviewers are installed | B16 |
+| Runbooks, README, how-it-works | State gateway values, mapping and consumer steps | B15 |
+| Tests (`llm-auth.test.mjs`, updated reviewer tests) | Executable form of B1-B14 | B1-B14 |
+
+### Structure
+
+```mermaid
+flowchart LR
+  W[Workflow template env] --> D[DriftReviewer]
+  W --> S[SemanticReviewWorker]
+  D --> A[ModelAuthProvider]
+  S --> A
+  A -->|client credentials| K[Keycloak token endpoint]
+  D -->|Bearer JWT| G[Gateway]
+  S -->|Bearer JWT| G
+```
+
+### Deployment and runtime
+
+No service is added. The module runs inside the existing reviewer jobs in GitHub Actions on Node's
+built-in `fetch`; the cache lives in process memory for one job. The gateway and Keycloak are
+external and unchanged. Each consumer upgrades by re-running the installer with `--force`, then
+setting variables and, for the semantic reviewer, adding the secret to its environment.
+
+### Traceability
+
+| Behaviour | Components |
+| --- | --- |
+| B1 | `ModelAuthProvider` |
+| B2 | `ModelAuthProvider`, `DriftReviewer`, `SemanticReviewWorker` |
+| B3 | `ModelAuthProvider` (`authorizedFetch`) |
+| B4 | `DriftReviewer`, `SemanticReviewWorker`, `ModelAuthProvider` |
+| B5 | `ModelAuthProvider`, workflow templates |
+| B6 | workflow templates |
+| B7 | workflow templates |
+| B8 | `ModelAuthProvider` |
+| B9 | `ModelAuthProvider`, `DriftReviewer`, `SemanticReviewWorker` |
+| B10 | `ModelAuthProvider` |
+| B11 | `ModelAuthProvider` |
+| B12 | `ModelAuthProvider`, `SemanticReviewWorker` |
+| B13 | `ModelAuthProvider`, tests |
+| B14 | `ModelAuthProvider` |
+| B15 | runbooks, README, how-it-works |
+| B16 | `ModelAuthProvider`, `Installer` |
+
+### Decisions
+
+- [ADR 0012: shared provider with a retrying fetch wrapper](../../adr/0012-shared-model-auth-provider.md)
+- [ADR 0013: map the existing KEYCLOAK_CLIENT_SECRET](../../adr/0013-reuse-keycloak-client-secret.md)
