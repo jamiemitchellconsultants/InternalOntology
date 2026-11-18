@@ -44,6 +44,7 @@ by rewriting the original.
 | [28](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
 | [29](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
 | [30](#entry-keep-narrative-proposals-up-to-date) | 2026-11-04 | Keep narrative proposals up to date | product | Install the documented refresh workflow. Refresh after default-branch narrative changes and successful maintenance runs, and allow manual recovery. |
+| [31](#entry-docs-plan-configurable-drift-request-budget-100) | 2026-11-18 | docs: plan configurable drift request budget (#100) | product | Seven tasks in an order that keeps every commit green: setting parser and default, typed budget error, timeout and skip path in `main`, workflow variables, docs, a large-ontology acceptance test run first against the old code to prove it… |
 
 ---
 
@@ -710,3 +711,23 @@ Install the documented refresh workflow. Refresh after default-branch narrative 
 ## Consequences
 
 Open proposals can be updated and their compiled narrative validated without force-pushing. Conflicts outside generated output remain for human resolution. The workflow must reach the default branch before it can run, and narrative proposals remain subject to review.
+
+---
+
+<a id="entry-docs-plan-configurable-drift-request-budget-100"></a>
+
+## Entry 31 — 2026-11-18 — docs: plan configurable drift request budget (#100)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The design is merged; the plan turns it into reviewable, test-first tasks before any code exists.
+
+## Decision
+
+Seven tasks in an order that keeps every commit green: setting parser and default, typed budget error, timeout and skip path in `main`, workflow variables, docs, a large-ontology acceptance test run first against the old code to prove it reproduces the gap, then wrap-up. The plan also tells the builder to check `npm test`'s exit status explicitly. Rejected: one large commit, and testing `main` only through unit tests.
+
+## Consequences
+
+The build cannot start until this plan is reviewed and merged. The existing assertions for the old error messages are preserved by keeping the message prefixes.
