@@ -88,6 +88,17 @@ export async function publishPending(client, pull) {
   }
 }
 
+// A run with nothing to show, such as a repository that has not opted in, gets a status and no comment (B34).
+export async function publishStatusOnly(client, pull, run) {
+  const current = await client.get(`/pulls/${pull.number}`);
+  if (current.head?.sha !== run.headSha) return { published: false, newKeys: [] };
+  const status = statusFor(run, countResults(run, new Map()));
+  const targets = [run.headSha];
+  if (run.mergeSha && current.merge_commit_sha === run.mergeSha && run.mergeSha !== run.headSha) targets.push(run.mergeSha);
+  for (const sha of targets) await client.post(`/statuses/${sha}`, { ...status, context: STATUS_CONTEXT });
+  return { published: true, newKeys: [] };
+}
+
 const display = (value) => String(value).replaceAll("<!--", "&lt;!--");
 const labelNumber = (label) => Number(String(label).slice(1));
 

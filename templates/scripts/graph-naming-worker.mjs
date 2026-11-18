@@ -9,7 +9,7 @@ import { loadGraph } from "./source-graph-model.mjs";
 import { memoryTree, ontologySnapshot, selectComparedNodes, formPairs } from "./graph-naming-select.mjs";
 import { reviewPairs } from "./graph-naming-model.mjs";
 import { collectGraphNamingInput } from "./graph-naming-github.mjs";
-import { publishPending, publishState, loadLedger, isNewerTrigger, BOT_LOGIN } from "./graph-naming-ledger.mjs";
+import { publishPending, publishState, publishStatusOnly, loadLedger, isNewerTrigger, BOT_LOGIN } from "./graph-naming-ledger.mjs";
 import { parseCommand } from "./graph-naming-commands.mjs";
 
 const MAX_UNREVIEWED = 20;
@@ -25,14 +25,15 @@ function runRecord(pull, triggerRunId, state) {
 const emptySnapshot = (sections) => ontologySnapshot({ markdown: null, turtle: null, sections });
 
 export async function runGraphNamingReview({ client, pull, config, auth, env = process.env, modelFetch = fetch, deps = {} }) {
-  const api = { isEligiblePull, collectGraphNamingInput, reviewPairs, publishPending, publishState, ...deps };
+  const api = { isEligiblePull, collectGraphNamingInput, reviewPairs, publishPending, publishState, publishStatusOnly, ...deps };
   const triggerRunId = deps.triggerRunId ?? process.env.ONTOLOGY_TRIGGER_RUN_ID ?? "";
   const state = emptyState();
   const skip = (node, reason) => state.unreviewed.push({ node, reason });
   if (!deps.skipPending) await api.publishPending(client, pull);
   const finish = async () => {
     const run = runRecord(pull, triggerRunId, state);
-    await api.publishState({ client, pull, run });
+    if (run.outcome === "disabled") await api.publishStatusOnly(client, pull, run);
+    else await api.publishState({ client, pull, run });
     return run;
   };
   if (pull.semanticAssociationAmbiguous) { skip("<PR association>", "workflow run matches multiple current pull requests"); return finish(); }
@@ -87,7 +88,10 @@ export async function runGraphNamingReview({ client, pull, config, auth, env = p
   state.unreviewed.push(...result.unreviewed);
   state.results = result.results;
   const onlyTooLarge = state.unreviewed.length > 0 && state.unreviewed.every((item) => item.code === "too-large");
-  state.outcome = !state.unreviewed.length ? "reviewed" : state.reviewed.length || state.results.length ? "partial" : onlyTooLarge ? "too-large" : "unavailable";
+  // Names settled without the model do not make a budget failure partial: the status must name the setting to raise.
+  const modelAssessed = result.reviewed.length > 0 || state.results.length > 0;
+  state.outcome = !state.unreviewed.length ? "reviewed" : onlyTooLarge && !modelAssessed ? "too-large"
+    : state.reviewed.length || state.results.length ? "partial" : "unavailable";
   return finish();
 }
 
