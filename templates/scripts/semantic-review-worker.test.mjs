@@ -201,3 +201,53 @@ test("a partial OIDC configuration makes the credential misconfigured, without e
   assert.match(JSON.stringify(result), /semantic model credential is misconfigured/);
   assert.doesNotMatch(JSON.stringify(result), /hush-value/);
 });
+
+const tooLargeEnabled = { ...config, semanticReview: { enabled: true, model: "m", baseUrl: "https://model.example/v1" } };
+const tooLargeItem = { path: "docs/a.md", code: "too-large", reason: "ontology too large for the configured budget" };
+
+test("a run whose every file is too large for the budget has the too-large outcome", async () => {
+  const result = await runSemanticReview({ client: {}, pull, config: tooLargeEnabled, auth: authFor("secret"),
+    deps: deps({ reviewFiles: async () => ({ reviewed: [], unreviewed: [tooLargeItem], findings: [] }) }).value });
+  assert.equal(result.outcome, "too-large");
+  assert.deepEqual(result.reviewed, []);
+});
+
+test("a too-large file next to a reviewed one is partial, and next to another cause is not too-large", async () => {
+  const partial = await runSemanticReview({ client: {}, pull, config: tooLargeEnabled, auth: authFor("secret"),
+    deps: deps({ reviewFiles: async () => ({ reviewed: ["docs/b.md"], unreviewed: [tooLargeItem], findings: [] }) }).value });
+  assert.equal(partial.outcome, "partial");
+  const mixed = await runSemanticReview({ client: {}, pull, config: tooLargeEnabled, auth: authFor("secret"),
+    deps: deps({ collectReviewInput: async () => ({ ...input, unreviewed: [{ path: "docs/c.md", reason: "blob unavailable" }] }),
+      reviewFiles: async () => ({ reviewed: [], unreviewed: [tooLargeItem], findings: [] }) }).value });
+  assert.equal(mixed.outcome, "unavailable");
+});
+
+test("a junk budget setting publishes an explained unavailable run, then fails, without calling the model", async () => {
+  const support = deps({ reviewFiles: async () => { throw new Error("must not call the model"); } });
+  await assert.rejects(
+    runSemanticReview({ client: {}, pull, config: tooLargeEnabled, auth: authFor("secret"),
+      env: { ONTOLOGY_MAX_REQUEST_CHARS: "abc" }, deps: support.value }),
+    /ONTOLOGY_MAX_REQUEST_CHARS must be a positive integer, got "abc"/);
+  assert.equal(support.published.length, 1);
+  assert.equal(support.published[0].outcome, "unavailable");
+  assert.match(JSON.stringify(support.published[0].unreviewed), /ONTOLOGY_MAX_REQUEST_CHARS must be a positive integer, got \\"abc\\"/);
+});
+
+test("a junk setting does not fail a disabled review", async () => {
+  const result = await runSemanticReview({ client: {}, pull, config, auth: authFor("secret"),
+    env: { ONTOLOGY_MAX_REQUEST_CHARS: "abc" }, deps: deps().value });
+  assert.equal(result.outcome, "disabled");
+});
+
+test("valid settings reach the model module as the budget and timeout", async () => {
+  let seen;
+  await runSemanticReview({ client: {}, pull, config: tooLargeEnabled, auth: authFor("secret"),
+    env: { ONTOLOGY_MAX_REQUEST_CHARS: "90000", ONTOLOGY_MODEL_TIMEOUT_MS: "45000" },
+    deps: deps({ reviewFiles: async (arguments_) => { seen = arguments_; return { reviewed: ["docs/a.md"], unreviewed: [], findings: [] }; } }).value });
+  assert.equal(seen.maxRequestChars, 90_000);
+  assert.equal(seen.timeoutMs, 45_000);
+  await runSemanticReview({ client: {}, pull, config: tooLargeEnabled, auth: authFor("secret"), env: {},
+    deps: deps({ reviewFiles: async (arguments_) => { seen = arguments_; return { reviewed: ["docs/a.md"], unreviewed: [], findings: [] }; } }).value });
+  assert.equal(seen.maxRequestChars, 200_000);
+  assert.equal(seen.timeoutMs, 300_000);
+});

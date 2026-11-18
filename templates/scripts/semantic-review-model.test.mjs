@@ -166,3 +166,57 @@ test("a token failure leaves the file unreviewed with a fixed reason and no secr
   assert.match(text, /model credential could not be obtained/);
   assert.doesNotMatch(text, /LEAK-BODY|s3cr3t-value/);
 });
+
+test("a 60,000-character ontology is reviewed with the default budget", async () => {
+  const rows = Array.from({ length: 600 }, (_, i) =>
+    `| \`Entity${i}\` | A canonical entity number ${i} with a long description of its role. |`);
+  const big = ["## Entities", "", "| Name | Description |", "| --- | --- |", ...rows, ""].join("\n");
+  const sizes = [];
+  const fetchImpl = async (_url, request) => {
+    sizes.push(request.body.length);
+    return completion(JSON.stringify({ findings: [] }));
+  };
+  const result = await reviewFiles({ ...options([{ path: "docs/a.md", text: "plain prose" }], fetchImpl),
+    ontologyText: big });
+  assert.deepEqual(result.reviewed, ["docs/a.md"]);
+  assert.ok(sizes.length >= 1 && sizes.every((size) => size <= 200_000));
+});
+
+test("a budget the projection cannot fit makes no request and codes the file too-large", async () => {
+  let called = false;
+  const fetchImpl = async () => { called = true; return completion("{}"); };
+  const result = await reviewFiles({ ...options([{ path: "docs/a.md", text: "prose" }], fetchImpl),
+    maxRequestChars: 1_005 });
+  assert.equal(called, false);
+  assert.deepEqual(result.reviewed, []);
+  assert.equal(result.unreviewed[0].code, "too-large");
+  assert.match(result.unreviewed[0].reason, /ontology too large for the configured budget/);
+});
+
+test("a persistent 413 on the smallest chunk is coded too-large", async () => {
+  const result = await reviewFiles(options([{ path: "docs/a.md", text: "x" }],
+    async () => ({ ok: false, status: 413 })));
+  assert.equal(result.unreviewed[0].code, "too-large");
+  assert.match(result.unreviewed[0].reason, /ontology too large/);
+});
+
+test("other failures carry no too-large code", async () => {
+  const result = await reviewFiles(options([{ path: "docs/a.md", text: "x" }],
+    async () => ({ ok: false, status: 500 })));
+  assert.equal(result.unreviewed[0].code, undefined);
+  assert.match(result.unreviewed[0].reason, /HTTP 500/);
+});
+
+test("the configured timeout aborts a hung request", async () => {
+  const hang = (_url, request) => new Promise((_resolve, reject) => {
+    // AbortSignal timers do not keep the event loop alive on Node 20 and 22, so hold a ref'd timer.
+    const keepAlive = setTimeout(() => {}, 60_000);
+    request.signal.addEventListener("abort", () => {
+      clearTimeout(keepAlive);
+      reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+    });
+  });
+  const result = await reviewFiles({ ...options([{ path: "docs/a.md", text: "prose" }], hang), timeoutMs: 20 });
+  assert.match(result.unreviewed[0].reason, /timed out/);
+  assert.equal(result.unreviewed[0].code, undefined);
+});

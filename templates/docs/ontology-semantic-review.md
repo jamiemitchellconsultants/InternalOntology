@@ -47,6 +47,37 @@ or an unavailable model post a successful *not reviewed* result with the reason.
 blocks merge even if another file could not be assessed. A later unavailable run on the same
 revision supersedes an earlier failure; the earlier comment remains visible as history.
 
+## Request budget
+
+Each model request holds the instructions, the ontology projection and a piece of the changed file.
+Requests are planned against a character budget: **200,000 characters by default** (about 50,000 to
+67,000 tokens, so at most about half of a 131,072-token context window). Two optional repository
+variables change it without editing a script; the drift reviewer reads the same ones.
+
+| Setting | Where | Default | Meaning |
+|---|---|---|---|
+| `ONTOLOGY_MAX_REQUEST_CHARS` | repository variable | 200000 | complete-request character budget |
+| `ONTOLOGY_MODEL_TIMEOUT_MS` | repository variable | 300000 | how long one model request may take |
+
+Both must be positive integers (digits only). An unset or empty variable uses the default. Anything
+else makes the review job fail with an error naming the variable and the value, and the pull request
+gets a successful *not reviewed* record that says the configuration is invalid and why; fix the
+variable and push again.
+
+If the ontology projection leaves no room for any Markdown at the configured budget, no model call is
+made and the result is **too large**. The status reads
+"Semantic match not reviewed: ontology too large for the configured budget (raise ONTOLOGY_MAX_REQUEST_CHARS)",
+the pull request comment lists
+each file with its reason, and the result permits merge, like every other case in which review did not
+run. It does not fail the status: raise `ONTOLOGY_MAX_REQUEST_CHARS` to a size your model accepts. If
+the model keeps rejecting even the smallest request as too long, the same result is reported. A model
+that rejects a larger request as too long still makes the reviewer split the file and retry.
+
+Larger prompts take longer to answer. The request timeout default is now 300,000 ms (it was 30,000 ms);
+that figure has not been measured with prompts near the budget against any gateway, so raise
+`ONTOLOGY_MODEL_TIMEOUT_MS` if requests time out. A hung model call can hold a request for that long, and
+chunks are reviewed one after another. The semantic request sets no output cap of its own.
+
 ## Respond to a finding
 
 The PR comment names the file, exact passage, ontology evidence, suggested correction, finding

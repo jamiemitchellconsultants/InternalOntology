@@ -64,6 +64,8 @@ jobs:
           ONTOLOGY_OIDC_TOKEN_URL: ${{ vars.ONTOLOGY_OIDC_TOKEN_URL }}
           ONTOLOGY_OIDC_CLIENT_ID: ${{ vars.ONTOLOGY_OIDC_CLIENT_ID }}
           ONTOLOGY_OIDC_CLIENT_SECRET: ${{ secrets.KEYCLOAK_CLIENT_SECRET }}
+          ONTOLOGY_MAX_REQUEST_CHARS: ${{ vars.ONTOLOGY_MAX_REQUEST_CHARS }}
+          ONTOLOGY_MODEL_TIMEOUT_MS: ${{ vars.ONTOLOGY_MODEL_TIMEOUT_MS }}
         run: node scripts/semantic-review-worker.mjs review
 
   finalize:

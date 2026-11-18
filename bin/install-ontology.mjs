@@ -70,7 +70,8 @@ export function buildPlan(options) {
   ];
 
   if (options.withDriftReview || options.withSemanticReview) {
-    for (const path of ["scripts/llm-auth.mjs", "scripts/llm-auth.test.mjs"]) {
+    for (const path of ["scripts/llm-auth.mjs", "scripts/llm-auth.test.mjs",
+      "scripts/request-budget.mjs", "scripts/request-budget.test.mjs"]) {
       plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
     }
   }

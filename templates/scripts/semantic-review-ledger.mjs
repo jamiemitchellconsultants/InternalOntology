@@ -14,6 +14,7 @@ export function statusFor(run, dismissals = []) {
     case "reviewed": return { state: "success", description: `Semantic match reviewed ${run.reviewed.length} file(s); no active findings` };
     case "partial": return { state: "success", description: `Partial semantic review; ${run.unreviewed.length} file(s) not reviewed` };
     case "unavailable": return { state: "success", description: "Semantic match not reviewed: service or configuration unavailable" };
+    case "too-large": return { state: "success", description: "Semantic match not reviewed: ontology too large for the configured budget (raise ONTOLOGY_MAX_REQUEST_CHARS)" };
     case "disabled": return { state: "success", description: "Semantic match disabled; not reviewed" };
     case "out-of-scope": return { state: "success", description: "Semantic match not reviewed: PR is out of scope" };
     case "no-eligible": return { state: "success", description: "Semantic match: no eligible changed Markdown files" };
@@ -60,6 +61,9 @@ function renderRun(run, dismissals) {
   }
   if (run.outcome === "unavailable" || run.outcome === "disabled" || run.outcome === "out-of-scope") {
     lines.push("Semantic matching did not run; this result permits merge.");
+  } else if (run.outcome === "too-large") {
+    lines.push("Semantic matching did not run because the ontology is too large for the configured budget; " +
+      "this result permits merge. Raise the ONTOLOGY_MAX_REQUEST_CHARS repository variable.");
   } else if (run.outcome === "partial") {
     lines.push("Coverage is incomplete; only active findings block merge.");
   }

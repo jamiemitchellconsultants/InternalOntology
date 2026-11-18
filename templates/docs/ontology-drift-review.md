@@ -81,7 +81,7 @@ reasoning model's thinking and its 8,192-token output cap).
 | `ONTOLOGY_MAX_REQUEST_CHARS` | repository variable | 200000 | complete-request character budget |
 | `ONTOLOGY_MODEL_TIMEOUT_MS` | repository variable | 300000 | how long one model request may take |
 
-Both are optional and must be positive integers (digits only); an unset variable uses the default and
+The semantic reviewer reads the same two variables (see its runbook). Both are optional and must be positive integers (digits only); an unset variable uses the default and
 anything else fails the job with an error naming the variable and the value. Raise the budget when
 you move to a model with a larger window; lower it for a smaller one.
 
