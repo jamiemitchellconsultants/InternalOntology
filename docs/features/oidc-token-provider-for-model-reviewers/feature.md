@@ -68,7 +68,7 @@ Terms are the ontology names added in this phase: `ModelAuthProvider`, `OidcClie
   `grant_type=client_credentials` request to the token URL, authenticating with the client id and
   secret via HTTP Basic, and returns the `access_token`.
 - **B2 Token used.** Given a token was obtained, when the reviewer calls the model endpoint, then
-  the request carries `Authorization: Bearer <token>`.
+  the request carries an Authorization header of the form Bearer followed by the token.
 - **B3 401 retry once.** Given a cached token, when the model endpoint answers 401, then the
   provider discards the cached token, fetches a new one and the reviewer repeats the request once;
   a second 401 is reported as an ordinary model failure with no further retry.
@@ -94,7 +94,7 @@ Terms are the ontology names added in this phase: `ModelAuthProvider`, `OidcClie
   set, when a reviewer asks for a bearer, then it returns the static key and makes no token
   request.
 - **B9 No credentials.** Given neither mode is configured, when the `DriftReviewer` asks for a
-  bearer, then it returns none and sends no `Authorization` header, as today; the
+  bearer, then it returns none and sends no Authorization header, as today; the
   `SemanticReviewWorker` keeps its existing requirement for its secret.
 - **B10 Precedence.** Given both OIDC and a static key are set, when a reviewer asks for a bearer,
   then OIDC is used.
