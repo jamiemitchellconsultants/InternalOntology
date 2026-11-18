@@ -45,6 +45,10 @@ Internal components that are ours to build. Named so that specs can describe the
 | `SemanticReviewWorker` | kit-owned trusted follow-up workflow and script | Assesses the full contents of changed eligible Markdown against the proposed `Ontology`, using maintainer-owned model settings and an environment secret; records incomplete coverage rather than silently dropping files. | Executes from the default branch; treats PR files and model output as data. |
 | `SemanticStatusPublisher` | kit-owned status and PR-comment logic | Publishes the latest `SemanticReviewRun` outcome as a fixed commit status and preserves each run's visible PR record. | Reads `SemanticFinding`s and `FindingDismissal`s; writes GitHub statuses and comments. |
 | `SemanticDismissalHandler` | kit-owned issue-comment workflow and script | Verifies a maintainer's reasoned dismissal of one current `SemanticFinding` and recomputes the current status. | Reads PR comments and repository permissions; does not invoke the model. |
+| `GraphNamingTrigger` | kit-owned PR workflow, installed with `--with-graph-naming-review` | Runs on every pull request without secrets, checkout or path filtering so the trusted `GraphNamingWorker` can produce a result for each revision. | Its completion starts `GraphNamingWorker`; it passes no executable PR artefact. |
+| `GraphNamingWorker` | kit-owned trusted follow-up workflow and script | Selects the added or changed `GraphNode`s of a pull request deterministically, drops names that contain the canonical term, asks the configured model about the rest, and grounds the replies into one `GraphNamingRun`. | Executes from the default branch with maintainer-owned settings from `OntologyConfig`; reads PR graph Turtle and `Ontology` through the GitHub API as data; never changes the graph or `GraphChecker`. |
+| `GraphNamingPublisher` | kit-owned status and PR-comment logic | Publishes the fixed `ontology/graph-naming` status and keeps one summary comment, with its bot-written ledger of result labels and deferral issues, edited in place; posts a short notification when new results appear. | Reads `GraphNamingResult`s and `NamingSettlement`s; writes GitHub statuses and comments. |
+| `GraphNamingSettlementHandler` | kit-owned issue-comment workflow and script | Applies `/graph-naming accept`, `reject` and `defer` commands from people with write access, creates and annotates deferral issues, and recomputes the status and summary. | Reads PR comments and repository permissions; writes issues; does not invoke the model. |
 | `OntologySetupSkill` | `skills/ontology-setup` | The agent skill that installs the mechanism, then supplies the judgement the mechanism cannot: which sections apply, and the real seeded content of an adopting repository's `Ontology`. | Drives `Installer`, then edits `Ontology` and `OntologyConfig` directly. |
 | `GraphReader` | kit-owned local reader script | Finds nodes, assertions, bounded paths, evidence, and coverage in a `SourceKnowledgeGraph` at a named Git revision, including the nodes that denote or implement a named `Ontology` concept. Reports gaps and stale results without creating new assertions. | Reads adopter-owned graph files and local Git objects; produces grounded query results for an agent or downstream consumer. |
 | `GraphChecker` | kit-owned local checker script | Deterministically validates graph structure, evidence locations, declared coverage, and review of covered file changes before a pull request merges. | Reads adopter-owned graph data, `OntologyConfig`, and local base and proposed Git trees; reports failures without judging semantic truth. |
@@ -101,7 +105,7 @@ enum lock test catches.
 | Name | Values | Description |
 |------|--------|-------------|
 | `Ownership` | `Kit`, `Adopter` | Who owns a `PlanEntry`'s destination file. `Kit`-owned files (the scripts, the CI workflow) are replaced wholesale by `--force`; `Adopter`-owned files (`OntologyConfig`, `Ontology`, the enum test) survive `--force` and are discarded only by the separate `--reset-content`. Spelled `"kit"` / `"adopter"` in code. |
-| `SemanticOutcome` | `reviewed`, `partial`, `unavailable`, `disabled`, `out-of-scope`, `no-eligible`, `too-large` | The outcome of one `SemanticReviewRun`, which controls the fixed status. `too-large` is non-blocking like `unavailable`, but records that the `RequestBudget` left no room for the ontology projection, so the status and the pull request record name the budget instead of an outage. |
+| `SemanticOutcome` | `reviewed`, `partial`, `unavailable`, `disabled`, `out-of-scope`, `no-eligible`, `too-large` | The outcome of one `SemanticReviewRun` or `GraphNamingRun`, which controls that review's fixed status. `too-large` is non-blocking like `unavailable`, but records that the `RequestBudget` left no room for the ontology projection, so the status and the pull request record name the budget instead of an outage. |
 | `SettlementDecision` | `accepted`, `rejected`, `deferred` | The decision a `NamingSettlement` records. `accepted` makes the `GraphNamingResult` a required correction that holds the merge until a revision no longer reports it; `rejected` and `deferred` let the pull request proceed. |
 | `AuthMode` | `Oidc`, `Static`, `None` | Which credential a `ModelAuthProvider` resolved: a complete `OidcClientConfig`, the static key variable, or nothing. `Oidc` wins over `Static`; a partial `OidcClientConfig` is an error, not `Static`. |
 
@@ -151,6 +155,12 @@ enum lock test catches.
 | `SemanticReviewWorker` | reads | `Ontology` | many → 1 |
 | `SemanticStatusPublisher` | publishes | `SemanticReviewRun` | 1 → many |
 | `SemanticDismissalHandler` | records | `FindingDismissal` | 1 → many |
+| `GraphNamingTrigger` | starts | `GraphNamingWorker` | many → 1 |
+| `GraphNamingWorker` | produces | `GraphNamingRun` | 1 → many |
+| `GraphNamingWorker` | authenticates through | `ModelAuthProvider` | many → 1 |
+| `GraphNamingWorker` | runs within | `RequestBudget` | many → 1 |
+| `GraphNamingPublisher` | publishes | `GraphNamingRun` | 1 → many |
+| `GraphNamingSettlementHandler` | records | `NamingSettlement` | 1 → many |
 | `GraphNamingRun` | reports | `GraphNamingResult` | 1 → many |
 | `GraphNamingRun` | reads | `SourceKnowledgeGraph` | many → 1 |
 | `GraphNamingResult` | may have | `NamingSettlement` | 1 → 0 or 1 per pull request |

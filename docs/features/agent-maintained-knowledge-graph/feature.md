@@ -162,3 +162,131 @@ Added to `docs/ontology.md` in this phase (this repository has no ontology seria
 - Updated: the `GraphAgentProtocol`, `GraphReader` and `RefreshSourceKnowledgeGraph` descriptions, for B1–B12 and B20.
 
 Subsystems for the run, the summary and the settlement handler are the architect's to name.
+
+## Architect: structure
+
+The feature has two halves that share nothing at runtime. The agent half (Outcomes 1–4) is text and one offline reader command: a stronger `GraphAgentProtocol`, authoring guidance in the installed source graph runbook, and a concept-first lookup in the `GraphReader`. The review half (Outcomes 5–6) is a new opt-in, model-assisted `ReviewGraphNaming` pipeline built the same way as `ReviewSemanticMatch`: a secret-free trigger, a trusted worker that runs default-branch code, a publisher of one fixed commit status and one summary comment, and a settlement handler driven by short PR comment commands. `GraphChecker`, `GraphCheckWorkflow`, `GraphRenderer` and `GraphRenderWorkflow` do not change ([ADR 0020](../../adr/0020-model-graph-naming-results-take-effect-on-human-acceptance.md)).
+
+### Components
+
+| Component | Responsibility | Behaviours |
+| --- | --- | --- |
+| `GraphAgentProtocol` (changed) | The kit-owned block spliced into the `AgentInstructionFile`. It now also says: look up the `Ontology` and graph before naming code; record symbols and components with `kit:implements` in the same change; propose the narrowest coverage widening for new code in unknown scope and never in excluded scope; list graph changes in a "Graph changes" section of the pull request body; record only implemented source; never settle a `GraphNamingResult`; apply accepted corrections. For "add or refine" requests it points to the authoring section of the runbook ([ADR 0025](../../adr/0025-graph-authoring-guidance-in-the-installed-runbook.md)). | B1–B12, B18, B26, B37 |
+| Source graph runbook (changed) | The installed `docs/source-knowledge-graph.md` gains an "Authoring graph entries" section with the label, kind, concept link, evidence and refinement rules, worked examples for a `kit:source-symbol` and for a coverage widening, and the reply format of B19. | B7, B9, B13–B19 |
+| `GraphReader` (changed) | Adds a `concept <term>` command to `scripts/query-source-graph.mjs` serving `FindConceptImplementations`. It resolves the term against the ontology serialisation the graph is checked with: an exact local name, a `:Name` form or the full IRI must name a subject there, with no fuzzy matching. It lists nodes whose `kit:denotes` is that IRI, then `kit:implements` assertions whose object is one of those nodes, grouped as "denotes" and "implements", with the existing evidence status, tentative and `STALE` annotations and `--json` output. Unknown term: exit 2 with a hint to use `search`. Known term with nothing linked: the gap message and coverage inventory. | B20–B24 |
+| `GraphNamingTrigger` (new) | `ontology-graph-naming-request.yml`, a `pull_request` workflow with no path filter, no secret and no checkout, whose completion starts the worker. It runs on every pull request so the required status always gets a result. | B31 |
+| `GraphNamingWorker` (new) | `ontology-graph-naming-review.yml` (a `workflow_run` workflow) and `scripts/graph-naming-worker.mjs`, executed from the default branch. It resolves the pull request and head, checks same-repository eligibility and the opt-in in the default branch's `OntologyConfig`, and fetches as data, through the GitHub API, the base and head Turtle under `sourceGraph.root` and the base and head `Ontology` and its serialisation. It parses them with the kit's own Turtle reader, selects the compared nodes deterministically, drops pairs that contain the canonical name, asks the model in bounded requests and grounds the replies ([ADR 0024](../../adr/0024-deterministic-selection-and-prefilter-for-graph-naming.md)). It produces one `GraphNamingRun` with a `SemanticOutcome`. | B25, B27–B34 |
+| `GraphNamingPublisher` (new) | Logic shared by the worker and the handler. It computes the current state from the latest run and the valid settlements, publishes the fixed status `ontology/graph-naming` on the verified head and test-merge commit, and keeps one machine-marked summary comment edited in place, with a short notification comment when a run finds results not seen before ([ADR 0022](../../adr/0022-one-summary-comment-with-a-bot-ledger-for-graph-naming.md)). | B33, B35, B37–B40, B43 |
+| `GraphNamingSettlementHandler` (new) | `ontology-graph-naming-settle.yml`, an `issue_comment` workflow run from the default branch with no model secret, and the `settle` mode of the worker script. It parses `/graph-naming` commands, checks the commenter's write access, records `NamingSettlement`s, creates deferral issues, comments on them when a deferral is replaced, and has the publisher recompute the status and summary ([ADR 0021](../../adr/0021-settle-graph-naming-results-with-short-comment-commands.md)). | B36, B38–B43 |
+| `ModelAuthProvider`, `RequestBudget` (reused) | The worker authenticates and plans its requests exactly as the `SemanticReviewWorker` does, with the same variables and secrets ([ADR 0023](../../adr/0023-graph-naming-review-as-a-separate-opt-in.md)). | B32, B33 |
+| `OntologyConfig` validation (changed) | `ontology-config.mjs` accepts an optional `sourceGraph.namingReview` object with `enabled`, `model` and `baseUrl`, validated like `semanticReview`; it is valid only when `sourceGraph` is enabled. | B34 |
+| `Installer` (changed) | A new `--with-graph-naming-review` flag, which requires `--with-source-graph`, copies the three workflows, the worker script and its tests, and the runbook `docs/graph-naming-review.md`. Without the flag nothing is installed. | B5, B34 |
+| `GraphChecker`, `GraphRenderer` (unchanged) | No model call, secret or network; no settlement data reaches the graph or its Markdown. | B25, B44 |
+
+### Structure
+
+```mermaid
+flowchart LR
+  subgraph Agent half
+    Proto[GraphAgentProtocol in AGENTS.md] --> Agent[AI agent]
+    Runbook[Authoring section of the runbook] --> Agent
+    Agent -->|concept term| Reader[GraphReader concept]
+    Agent -->|Turtle, config, records| Graph[(Graph files in the PR)]
+  end
+  subgraph Review half
+    PR[PR event] --> Trigger[GraphNamingTrigger]
+    Trigger -->|workflow_run| Worker[GraphNamingWorker]
+    Graph -->|base and head, as data| Worker
+    Onto[(Base and head Ontology)] -->|as data| Worker
+    Worker --> Model[Model endpoint]
+    Worker --> Pub[GraphNamingPublisher]
+    Pub --> Status[ontology/graph-naming status]
+    Pub --> Summary[Summary comment with ledger]
+    Reviewer[Reviewer with write access] -->|/graph-naming command| Handler[GraphNamingSettlementHandler]
+    Summary --> Handler
+    Handler --> Pub
+    Handler --> Issue[Deferral issue]
+  end
+```
+
+**Selecting what is compared (B27, B31).** The worker builds base and head graph models by IRI. A node is compared when it is new, when its label, kind or `kit:denotes` changed, when it became the subject of a new or changed `kit:implements` assertion, or when the ontology item it denotes or implements (through the concept node's `kit:denotes`) was removed or had its row changed between base and head. Nodes of kind `kit:source-file`, `kit:test` and `kit:document` are skipped. If no graph file and neither ontology file changed, the run is `no-eligible` with no model call. A malformed graph that the kit's reader cannot parse makes the run `partial` or `unavailable` with a fixed reason; `GraphChecker` reports the structural failure separately.
+
+**Prefilter and pairs (B27, B28).** For each compared node the worker forms pairs: (label, denoted item), (label, implemented concept), and for unlinked concept, component, system and symbol nodes (label, whole ontology). A pair whose label contains the item's local name as a whole PascalCase word sequence (for example SessionRemovalService against SessionRemoval) is dropped before the model sees it and is never reported. The model is asked only whether each remaining label refers to the linked item by a different word or spelling, or to a different item than the one linked, or, for unlinked nodes, uses a synonym of an ontology term.
+
+**Grounding and identity (B29, B30).** A reply is parsed as ADR 0019 parses semantic replies (one surrounding fence tolerated, a `results` array required). A result is kept only if it names the IRI of a compared node, quotes that node's current label or `kit:denotes` target exactly, and cites an ontology item that resolves to one entry of the catalog built from the head `Ontology`, by the ADR 0019 key resolution. Anything else leaves the node not reviewed with a fixed reason. The result key is the SHA-256 of the node IRI, the pair type, the compared values and the canonical ontology key, so the same mismatch on another revision has the same key whatever the model wrote.
+
+**State and settlement (B35–B43).** The summary comment carries a hidden, machine-readable ledger: the latest run (head SHA, outcome, results with their keys), the R label assigned to each result key the first time it appeared on the pull request (labels are never reused), the deferral issue created for each defer command, and the comment IDs already processed. Only a ledger in a comment written by the workflow's bot identity is trusted. Settlements are not stored in the ledger: they are the reviewers' command comments, re-read and applied in creation order on every recompute, with the latest valid one per result key winning. So editing or deleting a command comment changes the outcome, as it does for `FindingDismissal`, and settlements survive pushes because they are keyed by result key, not SHA. The status is `failure` while any current result is unsettled or accepted, and `success` otherwise; its description gives the counts. Worker and handler runs for one pull request share a concurrency group, so updates are serialised, and both re-read the head before publishing.
+
+**Commands (B36, B38, B42).** A command is a PR comment whose first line is `/graph-naming accept|reject|defer <targets> [text]`, where `<targets>` is one or more R labels separated by commas, or `all` for every currently unsettled result. `reject` requires the text, which is the reason; `defer` treats the text as an optional note. One comment is one action. The handler checks the author's permission through the collaborator permission API and accepts write, maintain, admin or owner (`role_name` of `write`, `maintain` or `admin`; a repository owner reports `admin`). Commands from others, commands naming labels that are not current, and rejections without a reason are ignored, and the summary lists them with the reason they were ignored. The summary shows a copyable example command for each result, so no identifier has to be looked up.
+
+**Deferral issues (B39, B41).** On the first processing of a defer command the handler creates one issue titled with the pull request number and the deferred R labels. The body has the pull request link, the head SHA, the reviewer and note, and per result the node IRI, compared values, ontology item, reason, suggested correction, and blob links at the head SHA to the node's Turtle file and to its evidence paths. The issue gets the label `graph-naming-deferred`, which the handler creates if it is missing. The issue number is recorded in the ledger against the command's comment ID, so reprocessing never creates a second issue. When a later command replaces a deferral, the handler comments on the issue and leaves it open. The summary's count of open deferral issues comes from listing open issues with that label.
+
+### Deployment and runtime
+
+- Everything ships in the kit's templates, byte-identical across adopters. New files: `templates/github/workflows/ontology-graph-naming-request.yml`, `-review.yml` and `-settle.yml`; `templates/scripts/graph-naming-worker.mjs` and its tests (the developer may split the module); `templates/docs/graph-naming-review.md`. Changed files: `templates/protocol/source-graph-protocol.md`, `templates/docs/source-knowledge-graph.md`, `templates/scripts/query-source-graph.mjs` and its test, `templates/scripts/ontology-config.mjs`, `bin/install-ontology.mjs`, the README and `docs/how-it-works.md`.
+- Opt-in: install with `--with-graph-naming-review` and set `sourceGraph.namingReview` on the default branch to `{ "enabled": true, "model": "…", "baseUrl": "…" }`. With the flag absent or `enabled: false`, the workflows are absent or publish a successful *disabled* status; nothing else posts. The setting is read from the default branch, never from the pull request.
+- The review job uses the existing `ontology-semantic-review` environment, restricted to the default branch, and the same secrets and variables: `KEYCLOAK_CLIENT_SECRET` with `ONTOLOGY_OIDC_TOKEN_URL` and `ONTOLOGY_OIDC_CLIENT_ID`, or `ONTOLOGY_SEMANTIC_LLM_API_KEY`, plus `ONTOLOGY_MAX_REQUEST_CHARS` and `ONTOLOGY_MODEL_TIMEOUT_MS`. An adopter with semantic review already set up, such as JEPA-Speech, needs no new secret.
+- Permissions: trigger `contents: read`; worker identify `contents: read`, `pull-requests: read`; worker review and finalize `contents: read`, `pull-requests: write`, `issues: write`, `statuses: write`; settlement handler `contents: read`, `pull-requests: write`, `issues: write`, `statuses: write`, with no environment. Every job checks out the default branch with `persist-credentials: false` and executes no pull request content.
+- Maintainers add `ontology/graph-naming` as a required status after the workflows reach the default branch. Fork pull requests get an *out-of-scope* success, as for `ReviewSemanticMatch`.
+- The concept lookup runs locally, offline, wherever the reader runs today.
+- No database or service is added. The state lives in the summary comment's ledger, the command comments and the deferral issues.
+
+### Traceability
+
+| Behaviour | Components |
+| --- | --- |
+| B1 | `GraphAgentProtocol`, `GraphReader` |
+| B2 | `GraphAgentProtocol`, `GraphReader` |
+| B3 | `GraphAgentProtocol` |
+| B4 | `GraphAgentProtocol` |
+| B5 | `GraphAgentProtocol`, `Installer` |
+| B6 | `GraphAgentProtocol`, `GraphChecker` (unchanged, validates the result) |
+| B7 | `GraphAgentProtocol`, source graph runbook |
+| B8 | `GraphAgentProtocol` |
+| B9 | `GraphAgentProtocol`, source graph runbook, `GraphChecker` (unchanged) |
+| B10 | `GraphAgentProtocol` |
+| B11 | `GraphAgentProtocol` |
+| B12 | `GraphAgentProtocol` |
+| B13 | source graph runbook |
+| B14 | source graph runbook |
+| B15 | source graph runbook |
+| B16 | source graph runbook |
+| B17 | source graph runbook |
+| B18 | source graph runbook, `GraphAgentProtocol` |
+| B19 | source graph runbook |
+| B20 | `GraphReader` |
+| B21 | `GraphReader` |
+| B22 | `GraphReader` |
+| B23 | `GraphReader` |
+| B24 | `GraphReader` |
+| B25 | `GraphNamingWorker`, `GraphChecker` (unchanged) |
+| B26 | `GraphAgentProtocol` |
+| B27 | `GraphNamingWorker` |
+| B28 | `GraphNamingWorker` |
+| B29 | `GraphNamingWorker` |
+| B30 | `GraphNamingWorker` |
+| B31 | `GraphNamingTrigger`, `GraphNamingWorker` |
+| B32 | `GraphNamingWorker`, `ModelAuthProvider`, `RequestBudget` |
+| B33 | `GraphNamingWorker`, `GraphNamingPublisher` |
+| B34 | `OntologyConfig` validation, `Installer`, `GraphNamingWorker` |
+| B35 | `GraphNamingPublisher` |
+| B36 | `GraphNamingSettlementHandler` |
+| B37 | `GraphNamingPublisher`, `GraphAgentProtocol` |
+| B38 | `GraphNamingSettlementHandler`, `GraphNamingPublisher` |
+| B39 | `GraphNamingSettlementHandler` |
+| B40 | `GraphNamingPublisher` |
+| B41 | `GraphNamingSettlementHandler` |
+| B42 | `GraphNamingSettlementHandler` |
+| B43 | `GraphNamingSettlementHandler`, `GraphNamingPublisher` |
+| B44 | `GraphChecker`, `GraphRenderer` (unchanged), `GraphNamingPublisher` |
+
+### Decisions
+
+- [ADR 0020](../../adr/0020-model-graph-naming-results-take-effect-on-human-acceptance.md): widen #35 B11 so a model may produce graph naming results that take effect only on human acceptance; the deterministic check is unchanged. This corrects part of `docs-feature-behaviours-for-source-knowledge-graph`.
+- [ADR 0021](../../adr/0021-settle-graph-naming-results-with-short-comment-commands.md): settle results with `/graph-naming` comment commands using per-pull-request R labels, by anyone with write access.
+- [ADR 0022](../../adr/0022-one-summary-comment-with-a-bot-ledger-for-graph-naming.md): one summary comment edited in place, holding a bot-written ledger, with a notification comment for new results.
+- [ADR 0023](../../adr/0023-graph-naming-review-as-a-separate-opt-in.md): a separate opt-in with its own workflows and status, reusing the semantic review's environment, `ModelAuthProvider`, `RequestBudget` and `SemanticOutcome`.
+- [ADR 0024](../../adr/0024-deterministic-selection-and-prefilter-for-graph-naming.md): deterministic selection of compared nodes and a canonical-name prefilter before any model call.
+- [ADR 0025](../../adr/0025-graph-authoring-guidance-in-the-installed-runbook.md): rules in the protocol block, authoring guidance in the installed runbook, and the lookup as a reader command.
+
+Terms: the ontology gains the subsystems `GraphNamingTrigger`, `GraphNamingWorker`, `GraphNamingPublisher` and `GraphNamingSettlementHandler` and their relationships, and `SemanticOutcome` now also describes a `GraphNamingRun`.
