@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { STATUS_CONTEXT, DEFERRED_LABEL, BOT_LOGIN, MARKER_PREFIX, emptyLedger, encodeLedger, readLedger, assignLabels, statusFor,
-  isNewerTrigger, publishPending, publishState } from "./graph-naming-ledger.mjs";
+  isNewerTrigger, publishPending, publishState, publishStatusOnly } from "./graph-naming-ledger.mjs";
 import { HEAD, HEAD2, MERGE, REPO_URL, pullFixture, namingResult, namingRun, fakeGitHub, summaryOf, lastStatus } from "./graph-naming-test-helpers.mjs";
 
 const r1 = namingResult(1), r2 = namingResult(2), r3 = namingResult(3);
@@ -53,6 +53,19 @@ test("trigger order compares run id, then attempt", () => {
   for (const [left, right, newer] of [["82:1", "81:3", true], ["81:2", "81:1", true], ["81:1", "81:1", false], [null, "81:1", false], ["80:9", "81:1", false]]) {
     assert.equal(isNewerTrigger(left, right), newer, `${left} vs ${right}`);
   }
+});
+
+test("B34: a status-only run posts the status on head and merge and no comment, and skips a moved head", async () => {
+  const client = fakeGitHub();
+  const run = namingRun([], { outcome: "disabled" });
+  assert.deepEqual(await publishStatusOnly(client, client.state.pull, run), { published: true, newKeys: [] });
+  assert.deepEqual(client.state.statuses.map((s) => [s.sha, s.state, s.description, s.context]), [
+    [HEAD, "success", "Graph naming review disabled; not reviewed", STATUS_CONTEXT],
+    [MERGE, "success", "Graph naming review disabled; not reviewed", STATUS_CONTEXT]]);
+  assert.deepEqual(client.state.comments, []);
+  const moved = fakeGitHub({ pull: pullFixture({ head: { sha: HEAD2, repo: { id: 1 } } }) });
+  assert.deepEqual(await publishStatusOnly(moved, moved.state.pull, run), { published: false, newKeys: [] });
+  assert.deepEqual(moved.state.statuses, []);
 });
 
 test("pending is posted on head and merge at the start of a review", async () => {

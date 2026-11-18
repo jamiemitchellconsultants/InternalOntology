@@ -293,3 +293,88 @@ flowchart LR
 - [ADR 0025](../../adr/0025-graph-authoring-guidance-in-the-installed-runbook.md): rules in the protocol block, authoring guidance in the installed runbook, and the lookup as a reader command.
 
 Terms: the ontology gains the subsystems `GraphNamingTrigger`, `GraphNamingWorker`, `GraphNamingPublisher` and `GraphNamingSettlementHandler` and their relationships, and `SemanticOutcome` now also describes a `GraphNamingRun`.
+
+## User: runbook, guide and acceptance
+
+### Runbook
+
+**Deployed environment used by acceptance:** JEPA-Speech (`jamiemitchellconsultants/JEPA-Speech`) on GitHub Actions, reinstalled from this repository's `main` after the build pull request merges. It reuses JEPA-Speech's existing `ontology-semantic-review` environment, its gateway model settings and its source graph at `docs/source-knowledge-graph`. The trial order is the one U15 sets: "add or refine" requests first, then lookups, then a trial pull request with a deliberate naming mismatch.
+
+#### Deploy (per adopting repository)
+
+1. Upgrade the kit-owned files from a clean checkout of the default branch, on a new branch: `node <kit>/bin/install-ontology.mjs --target <repo> --force --with-source-graph --with-graph-naming-review`, plus every flag the repository already uses (JEPA-Speech: `--with-semantic-review --with-drift-review`). This refreshes the `GraphAgentProtocol` block in `AGENTS.md`, the reader with `concept`, the runbook `docs/source-knowledge-graph.md`, and adds `docs/graph-naming-review.md`, `scripts/graph-naming-*.mjs` with their tests and the three `ontology-graph-naming-*.yml` workflows. Open a pull request, review the diff and merge it.
+2. Health check before opting in: on the upgrade pull request and every later one, `ontology/graph-naming` is a success reading "Graph naming review disabled; not reviewed", and no graph naming comment is posted.
+3. Opt in on the default branch: add `"namingReview": { "enabled": true, "model": "<model>", "baseUrl": "<base URL>" }` inside `sourceGraph` in `ontology.config.json`, and merge it. A repository that already runs the semantic review uses the same model and base URL and needs no new secret; otherwise set up the `ontology-semantic-review` environment as `docs/graph-naming-review.md` describes.
+4. Require the status: add `ontology/graph-naming` to the default branch's required status checks.
+5. Health check after opting in: a pull request that changes no graph Turtle or ontology file gets "Graph naming: no eligible graph or ontology changes". A pull request that changes a graph Turtle file gets a pending status that becomes success or failure, and one "Graph naming review" summary comment.
+
+#### Operate
+
+- Read the summary comment on the pull request. Each result has an R label, the node, the compared names, the ontology item, the reason, the suggested correction and copyable commands. The status description gives the counts.
+- Settle with a comment whose first line is `/graph-naming accept|reject|defer <R labels|all> [text]`. A rejection needs a reason. Anyone with write, maintain or admin role may settle. Agents never settle.
+- Deferral issues carry the label `graph-naming-deferred`; the summary links to the open ones and counts them.
+- Not-reviewed outcomes (`unavailable`, `partial`, `too-large`, `disabled`, `out-of-scope`, `no-eligible`) permit merge. `too-large` names `ONTOLOGY_MAX_REQUEST_CHARS`; raise that repository variable and push.
+- Agents: before naming code, run `node scripts/query-source-graph.mjs concept <Term>`; for graph entries follow "Authoring graph entries" in `docs/source-knowledge-graph.md`, then check and render.
+
+#### Recover and roll back
+
+- Switch the review off: set `sourceGraph.namingReview.enabled` to `false` on the default branch. Every pull request then gets the disabled success and nothing else. Remove `ontology/graph-naming` from the required checks if you also remove the workflows.
+- A stuck status: push to the pull request, or re-run the "Ontology graph naming review" workflow run; a settlement command can also be edited or re-posted, and the latest valid one wins.
+- Roll back the kit: revert the upgrade commit on the default branch. Deferral issues, summary comments and command comments stay on GitHub; nothing was written into the graph, so the graph needs no rollback.
+
+### User guide
+
+For developers in adopting repositories, JEPA-Speech's maintainer first, and for the agents they direct.
+
+- **Agents name code after the ontology (B1–B5).** Before naming a new class, function, component or file, the agent reads the ontology and runs `concept <Term>`. It uses the ontology term as the name or its distinguishing part, follows an existing symbol's naming, adds a missing concept to the ontology first, and names any conflict in its reply and the pull request body. This comes from `AGENTS.md`, so it reaches the persona skills and superpowers without other changes.
+- **The graph keeps up with the code (B6–B12, B45).** When the agent builds something that realises a concept, the same pull request adds the graph entries: a `kit:source-symbol` for the named class or function, its `kit:implements` link to the concept node, evidence on the declaration, and refresh records. Code in unknown scope comes with the narrowest coverage widening; code in excluded scope is left unrecorded with the reason. The pull request body has a "Graph changes" section. The agent edits Turtle, runs the check, then regenerates the Markdown.
+- **Ask for a graph entry (B13–B19).** Ask the agent to "add (or refine) a graph entry for X". It replies with the label, kind, concept link, evidence and check result it chose, keeps the IRI when refining, and declines anything with no source yet.
+- **Find what implements a concept (B20–B24).** `node scripts/query-source-graph.mjs concept <Term>` takes the term's name, its colon form or the full IRI. It lists the nodes that denote the term and the source elements that implement them, with basis, evidence and staleness, one hop only, and `--json`. A known term with nothing linked prints the coverage instead of saying it is unimplemented. An unknown term exits 2 and suggests `search`. It runs offline.
+- **Naming results on pull requests (B25–B35).** Once you opt in, each pull request that changes the graph or the ontology gets one summary comment and the `ontology/graph-naming` status. Only added or changed nodes, and nodes whose ontology item changed, are compared. Names that already contain their canonical term are never reported. A review that cannot run never blocks.
+- **Settle in one comment (B36–B43).** `/graph-naming accept R1`, `/graph-naming reject R2 <reason>`, `/graph-naming defer R1,R3 <note>`, or `all` in place of the labels. Accepting holds the merge until a push no longer reports the result. Rejecting or deferring releases it. A deferral opens one issue with everything needed to pick it up later. Settlements survive pushes while the result is unchanged; the latest one wins; a label that is no longer current is ignored and named in the summary.
+- **Nothing is written to the graph (B44).** Only a correction you commit changes the graph or its Markdown.
+- **Model text in the summary.** Reasons and suggestions are the model's words, shown as data. An @mention in them would notify that person, as in the semantic review.
+
+### Acceptance
+
+Executable tests: `tests/agent-maintained-graph-acceptance.test.mjs` (`node --test tests/agent-maintained-graph-acceptance.test.mjs`), 29 tests that install the kit into a scratch repository and drive the INSTALLED protocol, runbook, reader, checker and graph naming review. The review tests use the real GitHub client over an in-memory GitHub and a local HTTP model stand-in. Scenario setup is shared with the walkthroughs in `tests/helpers/agent-graph-scenarios.mjs`; `node tests/helpers/agent-graph-walkthrough.mjs <symbol|widening|lookup> <new-directory>` prepares a scratch repository for a person-run local walkthrough. The unit-level cases are in the shipped `query-source-graph`, `graph-naming-*` and `ontology-config` tests.
+
+"Local" is a scratch repository on the person's Mac. "Deployed" is JEPA-Speech. The review-half walkthroughs (B25–B44) need GitHub, so their person-run layer is deployed only; locally they are covered by the executable tests.
+
+| Behaviour | Local walkthrough | Deployed walkthrough | Executable test |
+| --- | --- | --- | --- |
+| B1–B4 | L1: read "Naming code" in the installed `AGENTS.md`. Expect the lookup-before-naming, follow-existing-symbol, missing-concept-first and ontology-wins rules. | D3: ask the agent to add a small class for an existing concept (for example SessionRemoval). Expect it to run `concept`, use the term in the name, and name any conflict. | B1 B2 B3 B4 test |
+| B5 | L1: reinstall with `--force`. Expect each graph protocol heading once in `AGENTS.md`. | D1: the upgrade pull request's `AGENTS.md` diff shows the new subsections once. | B5 test |
+| B6, B7, B15, B16 | L2: set up `symbol`, run the check against the base, commit, run `concept SessionRemoval`. Expect the check to pass and the lookup to list SessionRemovalService as a direct implementation with evidence on line 12. | D2: the agent's entries for AssetDownloadProgress and AssetDownloadRetry use `kit:source-symbol` nodes with declaration evidence, and the check passes in CI. | B6 B7 B15 B16 test |
+| B8, B10–B12, B45 | L1: read "Recording what you build" and the Turtle-first paragraph. Expect the no-retrofit, excluded-scope, "Graph changes" section, implemented-only and check-then-render rules. | D2: the pull request body has a "Graph changes" section; existing file-level entries are untouched; the Markdown was regenerated by the renderer after the Turtle. | B6 B7 B8 B10 B11 B12 B45 test |
+| B9 | L3: set up `widening`, run `coverage` for the new file before committing (expect `kit:unknown`), run the check (expect pass), commit, run `coverage` again (expect `kit:covered`). | D2: AssetDownloadProgress and AssetDownloadRetry code is outside JEPA-Speech's coverage; expect a narrow `kit:covered` selector, a matching `sourceGraph.evidence` selector and refresh records in the same pull request. | B9 test |
+| B13, B14, B17–B19 | L1: read "Authoring graph entries". Expect the label, kind, concept link, evidence, refine, decline and reply rules. | D2: the agent's reply gives label, kind, concept link, evidence and check result; a refine request keeps the IRI; a request for a planned component is declined. | B13–B19 test |
+| B20, B21 | L4: set up `lookup`, run `concept Invoice`, `:Invoice`, the full IRI and `--json`. Expect the same answer, `:node-invoice-service` marked tentative, the Billing component not listed; after a later commit `--rev <base>` prints `STALE`. | D4: run `concept` for SessionRemoval, AuditEvent and the new terms; check each answer against source. | B20 B21 test |
+| B22 | L4: `concept Payment`. Expect "No graph node denotes :Payment; that does not mean the concept is unimplemented." and the coverage list. | D4: `concept` for an ontology term with no graph node. | B22 test |
+| B23 | L4: `concept Invoices` and `concept invoice`. Expect exit 2 and a suggestion to use `search`. | D4: a misspelt term. | B23 test |
+| B24, B25 | L4: run the lookup and the graph check with networking disabled (`--import` stub). Expect both to succeed. | D5: the "source-graph-check" job holds no secret and is unchanged by the upgrade. | B24 B25 test |
+| B26, B37 (agent) | L1: read "Graph naming results". Expect "Never accept, reject or defer" and "apply its correction". | D6: the agent never posts a `/graph-naming` command; after `accept`, asked to fix, it corrects the Turtle. | B26 B37 test |
+| B27, B28 | executable only | D5: the trial pull request changes one symbol to a synonym label and adds one that contains the term; expect only the synonym reported and the summary counting the other as containing its canonical term. | B27 B28 test |
+| B29, B30 | executable only | D5: re-run the review on the same head; expect the same R labels and no second notification. | B29, B30 tests |
+| B31 | executable only | D1/D5: a pull request that touches no graph or ontology file gets "no eligible graph or ontology changes". | B31 tests |
+| B32 | executable only | D5: the review runs from the default branch's settings even when the pull request edits `ontology.config.json`. | B32 test |
+| B33 | executable only | D5: optional, set `ONTOLOGY_MAX_REQUEST_CHARS` very low and push; expect the too-large success naming the variable. | B33 test |
+| B34 | executable only | D1: before opting in, expect the disabled success and no comment. | B34 test |
+| B35 | executable only | D5: one summary comment, a failing status with counts, and a notification comment. | B35 test |
+| B36, B38, B42 | executable only | D6: `/graph-naming reject R<n> <reason>` and `/graph-naming accept all`; expect the summary and status within one settle run. A non-write account is not available in the trial, so the refused case is executable only. | B36 B42, B38, B42 tests |
+| B37 | executable only | D6: accept a result, push the correction; expect the status to clear. | B37 test |
+| B39–B41 | executable only | D6: defer a result with a note; expect one `graph-naming-deferred` issue with the links; push again (no second issue); later reject it (the issue gets a comment and stays open). | B39, B40, B41 tests |
+| B43 | executable only | D6: settle a label after the push that removed it; expect "no longer current". | B43 test |
+| B44 | executable only | D6: after settling, the pull request has no commit by the workflow bot and the graph files are unchanged. | B44 test |
+
+#### Results
+
+| Environment | Layer | Result | Date | By |
+| --- | --- | --- | --- | --- |
+| Local build | Walkthrough L1 (B1–B5, B8, B10–B14, B17–B19, B26, B37, B45) | pass, every step | 2026-11-18 | Jamie Mitchell |
+| Local build | Walkthrough L2 (B6, B7, B15, B16) | pass, every step | 2026-11-18 | Jamie Mitchell |
+| Local build | Walkthrough L3 (B9) | pass, every step | 2026-11-18 | Jamie Mitchell |
+| Local build | Walkthrough L4 (B20–B25) | pass, every step | 2026-11-18 | Jamie Mitchell |
+| Local build | Executable tests (29 tests) | approved and run on the person's Mac: 29/29 pass; full `npm test` 667/667 | 2026-11-18 | Jamie Mitchell |
+| Local build | Walkthroughs for B27–B44 | none locally: they need GitHub, so they are run in the deployed trial (D5, D6) | - | - |
+| Deployed | Walkthroughs D1–D6 and executable tests | not run: needs the build pull request merged and JEPA-Speech reinstalled | - | - |

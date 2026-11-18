@@ -23,21 +23,22 @@ const input = (head, base = [concept]) => ({ changed: true, incomplete: false, b
 const mismatchInput = () => input([concept, symbol("RemovalJob"), ...link]);
 
 function harness(extra = {}) {
-  const published = [], modelCalls = [];
+  const published = [], modelCalls = [], statusOnly = [];
   const deps = { triggerRunId: "81:1", isEligiblePull: async () => true, collectGraphNamingInput: async () => mismatchInput(),
     publishPending: async () => {}, publishState: async ({ run }) => { published.push(run); return { published: true, newKeys: [] }; },
+    publishStatusOnly: async (_client, _pull, run) => { statusOnly.push(run); return { published: true, newKeys: [] }; },
     reviewPairs: async (args) => { modelCalls.push(args); return { reviewed: [...new Set(args.pairs.map((p) => p.node))], unreviewed: [], results: [] }; },
     ...extra };
-  return { deps, published, modelCalls };
+  return { deps, published, modelCalls, statusOnly };
 }
 const review = (h, extra = {}) => runGraphNamingReview({ client: {}, pull: pullFixture(), config: config(), auth, env: {}, deps: h.deps, ...extra });
 
-test("B34: a repository that has not opted in reports disabled without reading the pull request", async () => {
+test("B34: a repository that has not opted in reports disabled with a status only, without reading the pull request", async () => {
   for (const trusted of [config({ enabled: false, model: "", baseUrl: "" }), config(enabled, false)]) {
     let read = 0;
     const h = harness({ collectGraphNamingInput: async () => { read++; return mismatchInput(); } });
     const run = await review(h, { config: trusted });
-    assert.deepEqual([run.outcome, read, h.modelCalls.length, h.published.length], ["disabled", 0, 0, 1]);
+    assert.deepEqual([run.outcome, read, h.modelCalls.length, h.published.length, h.statusOnly], ["disabled", 0, 0, 0, [run]]);
   }
 });
 
@@ -87,6 +88,12 @@ test("B33: outcomes follow the semantic rule and the stored run stays bounded", 
   assert.equal(await outcome({ reviewed: [":a"], unreviewed: [{ node: ":b", reason: "model timed out" }], results: [] }), "partial");
   assert.equal(await outcome({ reviewed: [], unreviewed: [{ node: ":node-job", reason: "model timed out" }], results: [] }), "unavailable");
   assert.equal(await outcome({ reviewed: [], unreviewed: [{ node: ":node-job", code: "too-large", reason: "x" }], results: [] }), "too-large");
+  const settledWithoutModel = harness({ collectGraphNamingInput: async () => input([concept, symbol("RemovalJob"), ...link,
+    block(":node-service", "kit:GraphNode", [["kit:kind", "kit:source-symbol"], ["rdfs:label", S("SessionRemovalService")]]),
+    block(":node-file", "kit:GraphNode", [["kit:kind", "kit:source-file"], ["rdfs:label", S("src/RemovalJob.cs")]])]),
+  reviewPairs: async () => ({ reviewed: [], unreviewed: [{ node: ":node-job", code: "too-large", reason: "x" }], results: [] }) });
+  const tooLarge = await review(settledWithoutModel);
+  assert.deepEqual([tooLarge.outcome, tooLarge.prefiltered, tooLarge.reviewed], ["too-large", 1, 2]);
   const many = Array.from({ length: 30 }, (_, i) => ({ node: `:n${i}`, reason: "model timed out" }));
   const run = await review(harness({ reviewPairs: async () => ({ reviewed: [], unreviewed: many, results: [] }) }));
   assert.deepEqual([run.unreviewedCount, run.unreviewed.length], [30, 20]);
