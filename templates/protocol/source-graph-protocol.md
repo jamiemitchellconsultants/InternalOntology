@@ -2,24 +2,34 @@
 
 Before a task, read the ontology and the generated current-state Markdown at `sourceGraph.markdownPath` (default `{{GRAPH_ROOT}}/README.md`), then run `node scripts/query-source-graph.mjs search <term>`; use `neighbors` and `path` as needed. The graph lives under `{{GRAPH_ROOT}}`. Follow a readable claim's evidence link to assess its accuracy; use its Turtle source link for exact graph detail. Structural checks do not judge the claim's truth.
 
-When citing a relationship, name its assertion, direct or inferred basis, source path, lines and
-revision from the reader. A graph-only citation is not grounded. Call an inferred relationship
-tentative and say it is an inference. When the reader finds nothing, report the coverage it prints;
-never say the relationship does not exist. When it prints `STALE`, check current source before
-presenting the relationship as current, or say it is unverified.
+When citing a relationship, name its assertion, direct or inferred basis, source path, lines and revision from the reader. A graph-only citation is not grounded. Call an inferred relationship tentative and say it is an inference. When the reader finds nothing, report the coverage it prints; never say the relationship does not exist. When it prints `STALE`, check current source before presenting the relationship as current, or say it is unverified.
 
-When a graph assertion or selected document conflicts with the ontology, name the conflict and use
-the ontology term; do not rewrite the evidence.
+When a graph assertion or selected document conflicts with the ontology, name the conflict and use the ontology term; do not rewrite the evidence.
 
-Before a pull request, review each changed file in declared coverage. Update affected assertions
-and evidence or record that review found no fact change, then replace its refresh record. Use
-`git rev-parse :<path>` for the staged blob ID. Update evidence blob IDs and line ranges for changed
-files. New covered files and deletions need records too. Never publish a relationship without
-supporting source observations.
+### Naming code
 
-After staging and before committing, run `node scripts/check-source-graph.mjs --staged --base <merge-base>`
-with the merge base with the default branch. A pass means the graph is structurally valid and
-covered changes have review records; it does not mean the claims are true. Do not edit
-`{{GRAPH_ROOT}}/graph-schema.ttl` or generate the graph in CI.
+Before you name a new function, class, component or file for a concept, read the ontology and run `node scripts/query-source-graph.mjs concept <Term>` for that concept, or `search` when you do not yet know the term. Use the ontology's exact name as the name or as its distinguishing part, for example the term followed by a role such as Service or Repository. Where the graph already holds a `kit:source-symbol` or `kit:component` node that implements the same concept, follow its naming and say in your reply which node you matched. If the concept is in neither the ontology nor the graph, add it to the ontology first, as the ontology protocol requires, and only then name the code; never link new code to an approximate existing concept. If a graph label or an existing name conflicts with the ontology, use the ontology term for the new code, name the conflict in your reply and in the pull request body, and rename existing code or graph entries only when the task asks for it.
+
+### Recording what you build
+
+When you implement a type, function or component that realises an ontology concept, record it in the graph in the same change: a node for the source element, a `kit:concept` node with `kit:denotes` to the ontology IRI (create it if absent), a `kit:implements` assertion from the source element to the concept node, and evidence citing the source lines, as well as the refresh records described below. When one named type or function realises the concept, record a `kit:source-symbol` node labelled with the symbol's exact name, evidence it with its declaration, and assert `kit:contains` from its file's node where that node exists. Use a file-level `kit:implements` only when the concept is spread across several functions in the file. Members that do not realise a concept on their own get no node. Leave existing file-level entries that the change does not touch as they are. Record only source that exists at the pull request's revision; never record a planned or designed component.
+
+If the new code lies in unknown scope, propose widening coverage in the same change: a `kit:covered` coverage entry with the narrowest selector that holds the new code (the new files, or their own directory when the change creates it), a matching selector under the right role in `sourceGraph.evidence` where no existing selector matches, a refresh record for every existing file the new selector covers, and the entries above. Never widen excluded scope: record nothing there, and say in the pull request body that the code is in excluded scope, quoting the exclusion's reason. If a maintainer declines a widening, remove the selector, its records and the entries that depended on it, and list the code as unrecorded.
+
+Write graph changes in Turtle only, in the files under `{{GRAPH_ROOT}}` and in `ontology.config.json`. Run `node scripts/check-source-graph.mjs --staged --base <merge-base>` until it passes, and only then regenerate the Markdown as described below. Never write or edit the generated Markdown by hand, and never propose a Markdown change with no Turtle change behind it.
+
+In the pull request body, add a "Graph changes" section listing each added or changed concept link (source element, relationship, concept), each widened selector with the number of files it newly covers and why, and any code that realises a concept but stays unrecorded, with the reason.
+
+Before any request to add or refine a graph entry, read "Authoring graph entries" in `docs/source-knowledge-graph.md` and follow it.
+
+### Graph naming results
+
+Where the graph naming review is installed, it may post results on the pull request. Never accept, reject or defer a graph naming result, under any identity, including a maintainer's own token; only a person with write access settles results. You may reply on the pull request with a proposed correction. When a result has been accepted, apply its correction to the graph or the code, in Turtle and source, then check and regenerate as above.
+
+### Before a pull request
+
+Review each changed file in declared coverage. Update affected assertions and evidence or record that review found no fact change, then replace its refresh record. Use `git rev-parse :<path>` for the staged blob ID. Update evidence blob IDs and line ranges for changed files. New covered files and deletions need records too. Never publish a relationship without supporting source observations.
+
+After staging and before committing, run `node scripts/check-source-graph.mjs --staged --base <merge-base>` with the merge base with the default branch. A pass means the graph is structurally valid and covered changes have review records; it does not mean the claims are true. Do not edit `{{GRAPH_ROOT}}/graph-schema.ttl` or generate the graph in CI.
 
 Keep the generated Markdown in the same pull request as its canonical inputs. Configure `sourceGraph.repositoryUrl` with this repository's HTTPS browser URL before the source commit; the renderer requires it for immutable source links. Commit the configuration, ontologies, graph and covered source first, then run `node scripts/render-source-graph.mjs`. Review the whole current state and its evidence, stage the output, and run `node scripts/render-source-graph.mjs --check --staged` and the ontology term check before the generated-document commit. Never edit the generated Markdown manually. See `docs/source-knowledge-graph.md` for source-snapshot recovery and the `source-graph-markdown` CI check.
