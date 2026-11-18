@@ -127,3 +127,22 @@ test("reconciliation updates statuses without invoking a new model run or commen
   assert.equal(client.comments.length, 0);
   assert.deepEqual(client.posts.map((item) => item.body.state), ["success", "success"]);
 });
+
+test("a too-large ontology is a non-blocking outcome that names the budget, not an outage", async () => {
+  const tooLarge = { ...run, triggerRunId: 83, outcome: "too-large", reviewed: [], findings: [],
+    unreviewed: [{ path: "docs/a.md", reason: "ontology too large for the configured budget", code: "too-large" }] };
+  const status = statusFor(tooLarge, []);
+  assert.equal(status.state, "success");
+  assert.match(status.description, /ontology too large/);
+  assert.match(status.description, /ONTOLOGY_MAX_REQUEST_CHARS/);
+  assert.doesNotMatch(status.description, /service or configuration unavailable/);
+  assert.ok(status.description.length <= 140, `description is ${status.description.length} characters`);
+  assert.equal(statusFor({ ...tooLarge, findings: [finding] }, []).state, "failure");
+  const client = mockClient();
+  await publishRun(client, pull, tooLarge);
+  const comment = client.comments.at(-1).body;
+  assert.match(comment, /Semantic ontology review — too-large/);
+  assert.match(comment, /Not reviewed: `docs\/a\.md` — ontology too large for the configured budget/);
+  assert.match(comment, /ontology is too large for the configured budget; this result permits merge/);
+  assert.match(comment, /ONTOLOGY_MAX_REQUEST_CHARS/);
+});

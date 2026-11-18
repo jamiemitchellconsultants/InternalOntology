@@ -92,6 +92,14 @@ test("both reviewer workflows map the OIDC settings and the shared client secret
   }
 });
 
+test("the semantic review step passes the request budget variables without baking in a value", () => {
+  const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-semantic-review.yml"), "utf8");
+  assert.match(yaml, /ONTOLOGY_MAX_REQUEST_CHARS: \$\{\{ vars\.ONTOLOGY_MAX_REQUEST_CHARS \}\}/);
+  assert.match(yaml, /ONTOLOGY_MODEL_TIMEOUT_MS: \$\{\{ vars\.ONTOLOGY_MODEL_TIMEOUT_MS \}\}/);
+  assert.equal(/ONTOLOGY_(MAX_REQUEST_CHARS|MODEL_TIMEOUT_MS): ["']?\d/.test(yaml), false);
+  assert.equal(yaml.includes("secrets.ONTOLOGY_SEMANTIC_LLM_API_KEY"), true);
+});
+
 test("the drift workflow passes the request budget variables without baking in a value", () => {
   const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-drift-review.yml"), "utf8");
   assert.match(yaml, /ONTOLOGY_MAX_REQUEST_CHARS: \$\{\{ vars\.ONTOLOGY_MAX_REQUEST_CHARS \}\}/);
@@ -176,4 +184,12 @@ test("semantic runbook names the protected environment, status, dismissal and fo
 test("how-it-works states what the mechanism does not catch", () => {
   const doc = readFileSync(fileURLToPath(new URL("../docs/how-it-works.md", import.meta.url)), "utf8");
   assert.match(doc, /What it does not catch/);
+});
+
+test("the semantic runbook documents the request budget, the too-large result and the timeout", () => {
+  const text = readFileSync(join(TEMPLATES, "docs/ontology-semantic-review.md"), "utf8");
+  for (const expected of ["200,000 characters", "ONTOLOGY_MAX_REQUEST_CHARS", "ONTOLOGY_MODEL_TIMEOUT_MS",
+    "ontology too large for the configured budget", "permits merge", "has not been measured", "was 30,000 ms"]) {
+    assert.ok(text.includes(expected), `semantic runbook lacks ${expected}`);
+  }
 });

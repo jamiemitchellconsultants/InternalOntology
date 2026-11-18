@@ -104,6 +104,19 @@ test("llm-auth is planned exactly once for each reviewer flag and both together"
   assert.equal(buildPlan({}).some((entry) => entry.dest.includes("llm-auth")), false);
 });
 
+test("request-budget is planned exactly once for each reviewer flag and both together", () => {
+  for (const options of [{ withDriftReview: true }, { withSemanticReview: true },
+    { withDriftReview: true, withSemanticReview: true }]) {
+    const plan = buildPlan(options);
+    for (const dest of ["scripts/request-budget.mjs", "scripts/request-budget.test.mjs"]) {
+      const hits = plan.filter((entry) => entry.dest === dest);
+      assert.equal(hits.length, 1, `${dest} for ${JSON.stringify(options)}`);
+      assert.equal(hits[0].ownedBy, "kit");
+    }
+  }
+  assert.equal(buildPlan({}).some((entry) => entry.dest.includes("request-budget")), false);
+});
+
 test("the old advisory install remains a separate option", () => {
   const destinations = buildPlan({ withDriftReview: true }).map((entry) => entry.dest);
   assert.ok(destinations.includes("scripts/review-ontology-drift.mjs"));
