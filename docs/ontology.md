@@ -40,6 +40,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `Installer` | `bin/install-ontology.mjs` | Copies the kit's templates into a `TargetRepository` and splices `OntologyProtocol`, and optionally `GraphAgentProtocol`, into its `AgentInstructionFile`. Mechanical only — it writes no repository-specific domain content. | Reads `templates/`; writes a `PlanEntry` list, `Ontology`, `OntologyConfig`, and optional graph starter files. |
 | `TermChecker` | `scripts/check-ontology-terms.mjs`, installed byte-identical into every adopting repository | Derives the canonical vocabulary from `Ontology` and scans tracked Markdown for an unknown backticked term or a paraphrase of a named `External System`. Runs in CI on every pull request. | Reads `Ontology` and `OntologyConfig`; produces `Violation`s. |
 | `DriftReviewer` | `scripts/review-ontology-drift.mjs`, installed only with `--with-drift-review` | Advisory, model-assisted second pass that catches unbackticked paraphrase the `TermChecker` cannot see (e.g. "approved" drifting to "sent" in running prose). Never blocks a merge. | Not installed in this repository. |
+| `ModelAuthProvider` | `templates/scripts/llm-auth.mjs`, installed byte-identical with the reviewers | Supplies the bearer for model requests for the `DriftReviewer` and `SemanticReviewWorker`: a cached, auto-refreshed OIDC client-credentials token when an `OidcClientConfig` is complete, otherwise the static key. Retries once after a 401. | Reads environment variables; calls the token endpoint; never logs the secret, the token or the token response body. |
 | `SemanticReviewTrigger` | kit-owned PR workflow, installed with `--with-semantic-review` | Runs without secrets or path filtering so a trusted follow-up review can produce a result for each PR revision. | Its completion triggers `SemanticReviewWorker`; it passes no executable PR artefact. |
 | `SemanticReviewWorker` | kit-owned trusted follow-up workflow and script | Assesses the full contents of changed eligible Markdown against the proposed `Ontology`, using maintainer-owned model settings and an environment secret; records incomplete coverage rather than silently dropping files. | Executes from the default branch; treats PR files and model output as data. |
 | `SemanticStatusPublisher` | kit-owned status and PR-comment logic | Publishes the latest `SemanticReviewRun` outcome as a fixed commit status and preserves each run's visible PR record. | Reads `SemanticFinding`s and `FindingDismissal`s; writes GitHub statuses and comments. |
@@ -81,6 +82,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `GraphCoverage` | repository-relative selector, status, priority, reason | The portion of a `TargetRepository` that a `SourceKnowledgeGraph` declares covered, unknown, or excluded. The highest matching priority wins; unmatched paths remain unknown. Missing coverage remains visible rather than being inferred from absent assertions. |
 | `GraphVocabulary` | schema version, core kind and relationship IRIs, defined local extensions | The shared meanings allowed for `GraphNode` kinds and `GraphAssertion` relationships. The Kit versions a small core of `kit:` IRIs; an adopter may declare additional IRIs in its own namespace with definitions in its Turtle manifest. |
 | `GraphRefreshRecord` | covered path, current Git blob ID or deletion, review outcome | The current review of one covered source path for graph impact, including a decision that no graph fact changed. Replaced when that path changes; it is a snapshot rather than an event log. |
+| `OidcClientConfig` | `ONTOLOGY_OIDC_TOKEN_URL`, `ONTOLOGY_OIDC_CLIENT_ID`, `ONTOLOGY_OIDC_CLIENT_SECRET` | The three settings that select OIDC client-credentials authentication. All or none must be set; a partial set is an error, never a silent fallback. |
 | `Violation` | `file`, `line`, `column`, `message` | One flagged occurrence the `TermChecker` reports: an unknown backticked term, or a banned-alias paraphrase. |
 | `SemanticFinding` | revision, file, passage, ontology evidence, suggested correction | A claim made by a `SemanticReviewRun` that changed Markdown conflicts with the ontology. Its identity is stable across reruns of the same revision and is reconsidered on a new revision. |
 | `FindingDismissal` | `SemanticFinding`, revision, maintainer, reason | A maintainer's recorded decision to disregard one `SemanticFinding` for one PR revision. It survives reruns of that revision and expires when the PR changes. |
@@ -95,6 +97,7 @@ enum lock test catches.
 | Name | Values | Description |
 |------|--------|-------------|
 | `Ownership` | `Kit`, `Adopter` | Who owns a `PlanEntry`'s destination file. `Kit`-owned files (the scripts, the CI workflow) are replaced wholesale by `--force`; `Adopter`-owned files (`OntologyConfig`, `Ontology`, the enum test) survive `--force` and are discarded only by the separate `--reset-content`. Spelled `"kit"` / `"adopter"` in code. |
+| `AuthMode` | `Oidc`, `Static`, `None` | Which credential a `ModelAuthProvider` resolved: a complete `OidcClientConfig`, the static key variable, or nothing. `Oidc` wins over `Static`; a partial `OidcClientConfig` is an error, not `Static`. |
 
 ---
 
@@ -152,6 +155,9 @@ enum lock test catches.
 | `GraphRenderer` | delegates validation to | `GraphChecker` | many → 1 |
 | `GraphRenderWorkflow` | runs | `GraphRenderer` | many → 1 |
 | `Installer` | splices | `GraphAgentProtocol` | 1 → 0 or 1 |
+| `DriftReviewer` | authenticates through | `ModelAuthProvider` | many → 1 |
+| `SemanticReviewWorker` | authenticates through | `ModelAuthProvider` | many → 1 |
+| `ModelAuthProvider` | reads | `OidcClientConfig` | many → 1 |
 
 ---
 
@@ -165,6 +171,8 @@ enum lock test catches.
 - **`PlanEntry`** — a `Kit`-owned entry is replaced wholesale by `--force`; an `Adopter`-owned entry
   is replaced only by the separate, deliberately destructive `--reset-content`. Plain `--force` must
   never touch adopter content — that is what makes it the safe, routine upgrade path.
+- **`ModelAuthProvider`** — never includes the client secret, a token, or the token endpoint's response
+  body in an error or log line; reports the HTTP status only.
 - **`OntologyConfig`** — every `AllowlistEntry` must carry a non-empty reason; an entry with no
   reason is rejected rather than silently accepted.
 - **`OntologyConfig`** — an unknown top-level key, or an unknown key under `sections`, is a
