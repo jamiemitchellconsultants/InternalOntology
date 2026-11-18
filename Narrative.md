@@ -44,6 +44,7 @@ by rewriting the original.
 | [28](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
 | [29](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
 | [30](#entry-keep-narrative-proposals-up-to-date) | 2026-11-04 | Keep narrative proposals up to date | product | Install the documented refresh workflow. Refresh after default-branch narrative changes and successful maintenance runs, and allow manual recovery. |
+| [31](#entry-docs-plan-oidc-token-provider-for-model-reviewers-92) | 2026-11-18 | docs: plan OIDC token provider for model reviewers (#92) | product | Seven tasks: shared `llm-auth.mjs` with full test contract, drift reviewer, semantic reviewer, installer entries (the installer lists scripts explicitly), workflow templates, docs, wrap-up. |
 
 ---
 
@@ -710,3 +711,23 @@ Install the documented refresh workflow. Refresh after default-branch narrative 
 ## Consequences
 
 Open proposals can be updated and their compiled narrative validated without force-pushing. Conflicts outside generated output remain for human resolution. The workflow must reach the default branch before it can run, and narrative proposals remain subject to review.
+
+---
+
+<a id="entry-docs-plan-oidc-token-provider-for-model-reviewers-92"></a>
+
+## Entry 31 — 2026-11-18 — docs: plan OIDC token provider for model reviewers (#92)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The design (PR #93) is merged; the plan turns it into reviewable, test-first tasks before any code exists.
+
+## Decision
+
+Seven tasks: shared `llm-auth.mjs` with full test contract, drift reviewer, semantic reviewer, installer entries (the installer lists scripts explicitly), workflow templates, docs, wrap-up. The provider reads the environment at call time so a module-level default serves one cache across all batches. Rejected: splitting the provider per reviewer.
+
+## Consequences
+
+The build cannot start until this plan is reviewed and merged. Reviewer function signatures change (`apiKey` and `secret` become `auth`) and their existing tests are updated.
