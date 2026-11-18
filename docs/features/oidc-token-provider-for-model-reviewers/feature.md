@@ -196,3 +196,87 @@ setting variables and, for the semantic reviewer, adding the secret to its envir
 
 - [ADR 0012: shared provider with a retrying fetch wrapper](../../adr/0012-shared-model-auth-provider.md)
 - [ADR 0013: map the existing KEYCLOAK_CLIENT_SECRET](../../adr/0013-reuse-keycloak-client-secret.md)
+
+## User: runbook, guide and acceptance
+
+### Runbook
+
+**Deployed environment used by acceptance:** a consumer repository's GitHub Actions run (JEPA-Speech
+first) calling the live gateway `https://gateway.tqaentry.com/v1`, authenticated by Keycloak
+(`https://auth.tqaentry.com/realms/homelab/protocol/openid-connect/token`, client `litellm-ci`).
+
+#### Deploy (per consumer)
+
+1. Upgrade the kit-owned files: `node bin/install-ontology.mjs --target <repo> --force --with-drift-review`
+   (add `--with-semantic-review` if used). Commit the result to the consumer's default branch.
+2. Set repository variables: `ONTOLOGY_LLM_BASE_URL=https://gateway.tqaentry.com/v1`,
+   `ONTOLOGY_MODEL=ontology-review`, `ONTOLOGY_OIDC_TOKEN_URL`
+   (the Keycloak URL above) and `ONTOLOGY_OIDC_CLIENT_ID=litellm-ci`.
+3. Confirm the repository secret `KEYCLOAK_CLIENT_SECRET` exists. For semantic review also add it to
+   the `ontology-semantic-review` environment, and enable `semanticReview` in `ontology.config.json`
+   on the default branch (model `ontology-review`, base URL the gateway).
+4. Health check: open a pull request that changes a Markdown file; the drift review job must finish
+   and post or update its comment. In the job log the configuration check passes and no line shows
+   a secret or token.
+
+#### Operate
+
+- Tokens last 300 seconds and are refreshed automatically about 60 seconds early; a 401 triggers one
+  refetch and retry. Nothing to rotate on the runner.
+- Failure signatures: "OIDC settings are incomplete" (set all three or none); "no model credential"
+  (neither mode set); "token request failed: HTTP <status>" (identity provider or client problem;
+  the response body is deliberately not logged); "model credential could not be obtained" (semantic
+  review, same cause).
+- To rotate the client secret, update `KEYCLOAK_CLIENT_SECRET` in each consumer (and the semantic
+  environment).
+
+#### Recover and roll back
+
+- Roll back a consumer by reverting its upgrade commit; the previous scripts read only the static key,
+  so also restore `ONTOLOGY_LLM_API_KEY` if the old behaviour is wanted.
+- Static-key mode keeps working: unset the three OIDC values and set `ONTOLOGY_LLM_API_KEY`.
+
+### User guide
+
+For maintainers of an adopting repository and for the home lab operator.
+
+- **Use short-lived tokens (B1-B5, B14).** Set the three OIDC values and the secret; the reviewers fetch
+  and refresh a token themselves. You never paste a token.
+- **Expect one transparent retry (B3).** If the gateway rejects a token with 401 the reviewer gets a new
+  one and tries once more; a second rejection is an ordinary model failure.
+- **Keep a static key (B8-B10).** Unset the OIDC values and set the static key secret as before.
+  With both configured, OIDC is used. With neither, the drift reviewer sends no credential.
+- **Read configuration errors (B6, B7, B11).** A partial OIDC set is refused with the names of the
+  missing settings. The workflow reuses your existing `KEYCLOAK_CLIENT_SECRET`.
+- **Trust the logs (B12, B13).** Failures show an HTTP status at most; never the secret, token or
+  identity-provider response.
+- **Upgrade (B15, B16).** Re-run the installer with `--force`; scripts are identical everywhere and
+  only variables, secrets and `ontology.config.json` differ.
+
+### Acceptance
+
+Executable tests: `tests/oidc-acceptance.test.mjs` (run with `node --test tests/oidc-acceptance.test.mjs`).
+They install the kit into a scratch repository and drive the installed scripts over real HTTP against
+a local stand-in for the token endpoint and the gateway. Nothing calls the real gateway or Keycloak.
+Walkthroughs use that same local build ("local") or a consumer's Actions run ("deployed").
+
+| Behaviour | Scripted walkthrough (numbered steps, each with its expected result) | Executable test |
+| --- | --- | --- |
+| B1, B2, B5 | 1. Install the kit with `--with-drift-review` in a scratch repo. Expect the files incl. `scripts/llm-auth.mjs`. 2. Set only the three OIDC values (deployed: the repo variables and secret). 3. Run the drift review on a changed Markdown file. Expect a comment and no static key needed. 4. Read the job log. Expect no secret or token. | B1 B2 B5 test |
+| B3 | 1. With OIDC set, make the gateway reject the first token (local: the test stage; deployed: not safely reproducible, mark n/a). 2. Run a review. Expect it to succeed. 3. Expect exactly two token requests. | B3 test |
+| B4 | 1. Install with `--with-semantic-review`. 2. Set OIDC values and the environment secret. 3. Open a pull request with changed Markdown. Expect the semantic status to appear with no "credential unavailable" reason. | B4 B2 test |
+| B6, B7 | 1. Open the installed drift and semantic workflow files. Expect `KEYCLOAK_CLIENT_SECRET` mapped to `ONTOLOGY_OIDC_CLIENT_SECRET`. 2. Unset every credential and open a pull request. Expect "no model credential". 3. Set one OIDC value. Expect "OIDC settings are incomplete". | B6 B7 test |
+| B8, B9, B10 | 1. Unset OIDC, set the static key. Expect a review with the static key. 2. Set both. Expect the token used. 3. Unset both (drift). Expect the workflow check to fail first. | B8 B9 B10 test |
+| B11 | 1. Set only the secret. 2. Run a review. Expect an error naming the two missing settings and no values. | B11 test |
+| B12, B13 | 1. Point the token URL at a failing endpoint (local only). 2. Run a review. Expect "HTTP <status>" and no response body. | B12 B13 test |
+| B14 | 1. Run two reviews inside the token's life. Expect one token request. 2. Run again within 60 seconds of expiry. Expect a new token. | B14 test |
+| B15 | 1. Read both runbooks. Expect the gateway values, model name, token URL, client id and the secret mapping. | B15 test |
+| B16 | 1. Install, then diff `scripts/llm-auth.mjs` against the kit template. Expect no difference. | B16 test |
+
+#### Results
+
+| Environment | Layer | Result | Date | By |
+| --- | --- | --- | --- | --- |
+| Local build | Executable tests (all 10 tests) | pass (`node --test tests/oidc-acceptance.test.mjs`; full `npm test` 483 pass at last run, see PR) | 2026-11-18 | run by the agent; not yet approved by the person acting as user |
+| Local build | Scripted walkthroughs | pending, not yet followed by a person | - | - |
+| Deployed (consumer run against the live gateway) | Walkthroughs and executable layer | not run: needs a consumer repository with the variables set and `KEYCLOAK_CLIENT_SECRET`; no live call has been made | - | - |

@@ -35,14 +35,67 @@ nothing."
 
 | Setting | Where | Example |
 |---|---|---|
-| `ONTOLOGY_LLM_BASE_URL` | repository variable | `https://api.example.com/v1` |
-| `ONTOLOGY_MODEL` | repository variable | `qwen3-27b` |
-| `ONTOLOGY_LLM_API_KEY` | repository secret | the endpoint's bearer token |
+| `ONTOLOGY_LLM_BASE_URL` | repository variable | `https://gateway.tqaentry.com/v1` |
+| `ONTOLOGY_MODEL` | repository variable | `ontology-review` |
 
-Any OpenAI-compatible chat-completions endpoint works. If yours is not reachable from a GitHub
-hosted runner — a self-hosted model on a private network, say — either run the job on a self-hosted
-runner, or add your own network step at the marked point in
-`.github/workflows/ontology-drift-review.yml`.
+Any OpenAI-compatible chat-completions endpoint works. The endpoint must be reachable from a
+GitHub hosted runner; otherwise run the job on a self-hosted runner.
+
+### Authentication
+
+`scripts/llm-auth.mjs` supplies the bearer for every model request. Set one of two modes.
+
+**OIDC client credentials (preferred; short-lived tokens).**
+
+| Setting | Where | Example |
+|---|---|---|
+| `ONTOLOGY_OIDC_TOKEN_URL` | repository variable | `https://auth.tqaentry.com/realms/homelab/protocol/openid-connect/token` |
+| `ONTOLOGY_OIDC_CLIENT_ID` | repository variable | `litellm-ci` |
+| `KEYCLOAK_CLIENT_SECRET` | repository secret | the client's secret |
+
+The workflow maps the `KEYCLOAK_CLIENT_SECRET` secret into the `ONTOLOGY_OIDC_CLIENT_SECRET`
+environment variable the script reads, so a repository that already holds that secret sets nothing
+new. All three values must be present; a partial set fails with an error naming the missing
+variable names (never their values) and does not fall back to a static key. The script requests a
+token with the client-credentials grant (the secret goes in an HTTP Basic header), caches it until
+about 60 seconds before it expires (gateway tokens last 300 seconds), fetches a new one after that,
+and fetches once more and repeats the request if the model endpoint answers 401. The secret, the
+token and the token endpoint's response body are never logged or placed in an error.
+
+**Static key (legacy; still works).** Leave the OIDC settings unset and add
+`ONTOLOGY_LLM_API_KEY` as a repository secret holding the endpoint's bearer token. If both modes
+are configured, OIDC wins.
+
+The workflow's configuration check passes when either mode is complete and fails, naming what is
+missing, when neither is.
+
+## Request budget
+
+Each model request holds the system prompt, the ontology projection and a batch of added lines. The
+reviewer plans batches against a character budget: **200,000 characters by default** (about 50,000
+to 67,000 tokens, so at most about half of a 131,072-token context window, leaving room for a
+reasoning model's thinking and its 8,192-token output cap).
+
+| Setting | Where | Default | Meaning |
+|---|---|---|---|
+| `ONTOLOGY_MAX_REQUEST_CHARS` | repository variable | 200000 | complete-request character budget |
+| `ONTOLOGY_MODEL_TIMEOUT_MS` | repository variable | 300000 | how long one model request may take |
+
+Both are optional and must be positive integers (digits only); an unset variable uses the default and
+anything else fails the job with an error naming the variable and the value. Raise the budget when
+you move to a model with a larger window; lower it for a smaller one.
+
+If the system prompt plus the ontology projection leave almost no room at the configured budget, the
+review is **skipped, not failed**: the job stays green, a notice is logged, and the pull request gets
+a comment starting "Skipped: ontology too large for the configured budget" with the sizes. Raise
+`ONTOLOGY_MAX_REQUEST_CHARS` to resolve it. A model that still rejects a request as too long makes
+the reviewer split the added lines and retry; if a single line still does not fit, the same skipped
+comment is posted.
+
+A larger prompt takes longer to answer. The 300,000 ms default timeout has not been measured with
+prompts near the 200,000-character default against any particular gateway, so if requests time out,
+raise `ONTOLOGY_MODEL_TIMEOUT_MS`. `max_tokens` is fixed at 8,192 in the script and is not
+configurable; the prompt budget, timeout and output cap should be raised together.
 
 ## Running it locally
 
@@ -52,7 +105,8 @@ BASE_REF=origin/main DRY_RUN=1 node scripts/review-ontology-drift.mjs docs/spec.
 
 `DRY_RUN` prints the batching plan and the approximate request size without calling the model or
 GitHub. Drop it, and supply `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `PR_NUMBER` and
-`ONTOLOGY_LLM_BASE_URL`, to do a real run.
+`ONTOLOGY_LLM_BASE_URL`, plus either `ONTOLOGY_LLM_API_KEY` or the three `ONTOLOGY_OIDC_*` values,
+to do a real run.
 
 ## Tuning
 

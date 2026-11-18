@@ -82,6 +82,30 @@ test("the drift-review workflow carries no personal infrastructure", () => {
   }
 });
 
+test("both reviewer workflows map the OIDC settings and the shared client secret", () => {
+  for (const name of ["ontology-drift-review.yml", "ontology-semantic-review.yml"]) {
+    const yaml = readFileSync(join(TEMPLATES, "github/workflows", name), "utf8");
+    assert.match(yaml, /ONTOLOGY_OIDC_TOKEN_URL: \$\{\{ vars\.ONTOLOGY_OIDC_TOKEN_URL \}\}/, name);
+    assert.match(yaml, /ONTOLOGY_OIDC_CLIENT_ID: \$\{\{ vars\.ONTOLOGY_OIDC_CLIENT_ID \}\}/, name);
+    assert.match(yaml, /ONTOLOGY_OIDC_CLIENT_SECRET: \$\{\{ secrets\.KEYCLOAK_CLIENT_SECRET \}\}/, name);
+    assert.equal(yaml.includes("add your own network step"), false, name);
+  }
+});
+
+test("the drift workflow passes the request budget variables without baking in a value", () => {
+  const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-drift-review.yml"), "utf8");
+  assert.match(yaml, /ONTOLOGY_MAX_REQUEST_CHARS: \$\{\{ vars\.ONTOLOGY_MAX_REQUEST_CHARS \}\}/);
+  assert.match(yaml, /ONTOLOGY_MODEL_TIMEOUT_MS: \$\{\{ vars\.ONTOLOGY_MODEL_TIMEOUT_MS \}\}/);
+  assert.equal(/ONTOLOGY_(MAX_REQUEST_CHARS|MODEL_TIMEOUT_MS): ["']?\d/.test(yaml), false);
+});
+
+test("the drift configuration check accepts either authentication mode", () => {
+  const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-drift-review.yml"), "utf8");
+  assert.match(yaml, /ONTOLOGY_LLM_API_KEY/);
+  assert.match(yaml, /ONTOLOGY_OIDC_CLIENT_SECRET/);
+  assert.match(yaml, /OIDC settings are incomplete/);
+});
+
 test("the semantic review job is restricted to same-repository pull requests", () => {
   const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-drift-review.yml"), "utf8");
   assert.match(yaml, /head\.repo\.full_name == github\.repository/);

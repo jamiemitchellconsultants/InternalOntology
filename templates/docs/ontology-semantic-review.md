@@ -11,8 +11,15 @@ current write access. It does not execute PR code or apply corrections.
    the default branch. Use `--force --with-semantic-review` to upgrade the kit-owned files later;
    `ontology.config.json` and the ontology remain adopter-owned.
 2. In repository settings, create an Actions environment named `ontology-semantic-review`.
-   Restrict its deployment branches to the repository's default branch. Add an environment secret
-   named `ONTOLOGY_SEMANTIC_LLM_API_KEY`. The trusted review job names this environment with
+   Restrict its deployment branches to the repository's default branch. Add the model credential as an
+   environment secret, in one of two modes. OIDC (preferred): the environment secret
+   `KEYCLOAK_CLIENT_SECRET` (the workflow maps it to `ONTOLOGY_OIDC_CLIENT_SECRET`), plus repository
+   variables `ONTOLOGY_OIDC_TOKEN_URL` (for example
+   `https://auth.tqaentry.com/realms/homelab/protocol/openid-connect/token`) and
+   `ONTOLOGY_OIDC_CLIENT_ID` (for example `litellm-ci`). The script fetches a short-lived token with
+   the client-credentials grant, refreshes it shortly before expiry, and retries once after a 401;
+   a partial OIDC set is reported as a misconfigured credential. Static key (legacy): the
+   environment secret `ONTOLOGY_SEMANTIC_LLM_API_KEY`. OIDC wins when both are present. The trusted review job names this environment with
    `deployment: false`; the request, identification, finalizer, and dismissal jobs have no model
    secret. Check that your GitHub plan supports protected environment secrets before activating.
 3. On the **default branch**, set `semanticReview` in `ontology.config.json` to:
@@ -25,7 +32,8 @@ current write access. It does not execute PR code or apply corrections.
    }
    ```
 
-   The endpoint must provide OpenAI-compatible `POST /chat/completions`. Keep credentials out of
+   For the home lab gateway use `"model": "ontology-review"` and
+   `"baseUrl": "https://gateway.tqaentry.com/v1"`. The endpoint must provide OpenAI-compatible `POST /chat/completions`. Keep credentials out of
    this file. A PR's proposed config never controls the model, endpoint, or secret used to review
    that PR.
 4. Require the commit status context `ontology/semantic-match` in branch protection or a
