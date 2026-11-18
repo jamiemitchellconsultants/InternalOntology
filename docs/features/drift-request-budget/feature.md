@@ -201,3 +201,78 @@ repository variables. Nothing is required: defaults apply when they are unset.
 
 - [ADR 0014: configurable budget, default 200,000 characters](../../adr/0014-configurable-request-budget.md)
 - [ADR 0015: neutral skipped outcome for an oversized ontology](../../adr/0015-skipped-outcome-for-oversized-ontology.md)
+
+## User: runbook, guide and acceptance
+
+### Runbook
+
+**Deployed environment used by acceptance:** a GitHub Actions run of the drift review in a consumer
+repository whose ontology is large (JEPA-Speech first, then Grooveloom), driven by the user, calling
+that repository's configured model gateway. No call is made from this repository.
+
+#### Deploy (per consumer)
+
+1. Upgrade the kit-owned files: `node bin/install-ontology.mjs --target <repo> --force --with-drift-review`;
+   commit to the default branch.
+2. Optional repository variables: `ONTOLOGY_MAX_REQUEST_CHARS` (default 200000) and
+   `ONTOLOGY_MODEL_TIMEOUT_MS` (default 300000). Positive integers only. Nothing is required.
+3. Health check: open a pull request that changes a Markdown file. The drift review job must go green
+   and either post its findings or stay silent. The job log's configuration check must pass.
+
+#### Operate
+
+- A comment starting "Skipped: ontology too large for the configured budget" means nothing was
+  reviewed. Raise `ONTOLOGY_MAX_REQUEST_CHARS` to a size the model accepts and push to re-run.
+- Error "ONTOLOGY_MAX_REQUEST_CHARS must be a positive integer, got ..." (or the timeout variable):
+  correct the variable; the job is red until you do.
+- Timeouts on large prompts: raise `ONTOLOGY_MODEL_TIMEOUT_MS`. The default has not been measured at
+  200,000 characters. `max_tokens` is fixed at 8,192.
+
+#### Recover and roll back
+
+- Delete the two variables to return to the defaults. To roll back the code, revert the consumer's
+  upgrade commit; the old script fails again on ontologies above about 24,000 characters.
+
+### User guide
+
+For maintainers of an adopting repository.
+
+- **Large ontologies just work (B1, B2, B13).** After upgrading, an ontology up to roughly 199,000
+  characters of projection needs no setting.
+- **Change the budget without editing a script (B3, B4, B6).** Set the repository variable; unset or
+  blank means the default.
+- **Typos are caught (B5, B11).** A non-integer value fails the job with the variable's name and
+  your value.
+- **A skip is explained (B7, B8, B10).** You get a neutral pull request comment and a green job,
+  never a silent pass or an unexplained red job.
+- **The model's own limit still applies (B9).** If the endpoint rejects a request as too long, the
+  reviewer splits the added lines and retries.
+- **Mind the timeout (B12, B14).** Larger prompts take longer; the runbook explains how to raise it.
+- **Upgrades stay mechanical (B15).** Only variables differ between repositories.
+
+### Acceptance
+
+Executable tests: `tests/drift-budget-acceptance.test.mjs` (`node --test tests/drift-budget-acceptance.test.mjs`).
+They install the kit into a scratch repository with a roughly 60 KB ontology and run the INSTALLED
+reviewer in dry-run, plus installed-module checks. Nothing calls any model or GitHub.
+
+| Behaviour | Scripted walkthrough (each step with its expected result) | Executable test |
+| --- | --- | --- |
+| B1, B13 | 1. Install with `--with-drift-review`, replace the ontology with a roughly 60 KB one, commit, branch, add prose. 2. Run `BASE_REF=main DRY_RUN=1 node scripts/review-ontology-drift.mjs docs/notes.md`. Expect "batch" and "budget: 200000 chars", exit 0, no "no useful diff budget". | B1 B13 test |
+| B2 | 1. Import the installed planner. 2. Plan with a projection 500 characters under the room. Expect one batch. 3. At 499 under. Expect the skipped error type. | B2 test |
+| B3 | 1. Run step 2 above with `ONTOLOGY_MAX_REQUEST_CHARS=90000`. Expect "budget: 90000 chars". | B3 test |
+| B4 | 1. Run with the variable set to empty, then spaces. Expect the default budget. | B4 test |
+| B5, B11 | 1. Run with `abc`, then the timeout variable set to `0`. Expect exit 1 and the variable named, with the value for the budget. | B5 and B11 tests |
+| B6 | 1. Open the installed workflow. Expect both variables mapped from `vars` and no number baked in. | B6 test |
+| B7, B10 | 1. Run with `ONTOLOGY_MAX_REQUEST_CHARS=2000`. Expect the notice line "drift review skipped: ontology too large for the configured budget" and exit 0. Deployed: expect the "Skipped" pull request comment and a green job. | B7 B10 test |
+| B8, B9 | 1. Make the model reject with a token-limit error on a four-line chunk. Expect it split 4, 2, 2. 2. Reject one line. Expect the typed skip, not a crash. | B8 B9 test |
+| B12, B14 | 1. Read the installed runbook and README. Expect the default, the variables, the skip comment and the unmeasured-timeout caveat. | B12 B14 test |
+| B15 | 1. Diff the installed script against the template. Expect no difference. | B15 test |
+
+#### Results
+
+| Environment | Layer | Result | Date | By |
+| --- | --- | --- | --- | --- |
+| Local build | Executable tests (11 tests) | pass; full `npm test` exits 0 | 2026-11-18 | run by the agent; not yet approved by the person acting as user |
+| Local build | Scripted walkthroughs | pending, not yet followed by a person | - | - |
+| Deployed (consumer Actions run, user-driven) | Walkthroughs and executable layer | not run: needs the user to reinstall in JEPA-Speech or Grooveloom and open a pull request; no live call has been made | - | - |
