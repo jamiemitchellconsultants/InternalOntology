@@ -47,6 +47,7 @@ by rewriting the original.
 | [31](#entry-docs-design-oidc-token-provider-for-model-reviewers-92) | 2026-11-18 | docs: design OIDC token provider for model reviewers (#92) | product | Add one shared `ModelAuthProvider` (client-credentials token, Basic auth, cache until 60s before expiry, one retry on 401, static-key fallback, partial config rejected) used by both reviewers ([ADR… |
 | [32](#entry-docs-plan-oidc-token-provider-for-model-reviewers-92) | 2026-11-18 | docs: plan OIDC token provider for model reviewers (#92) | product | Seven tasks: shared `llm-auth.mjs` with full test contract, drift reviewer, semantic reviewer, installer entries (the installer lists scripts explicitly), workflow templates, docs, wrap-up. |
 | [33](#entry-feat-oidc-token-provider-for-the-model-reviewers-92) | 2026-11-18 | feat: OIDC token provider for the model reviewers (#92) | product | One shared `ModelAuthProvider` used by both reviewers, with retry-once on 401 and static-key fallback ([ADR 0012](docs/adr/0012-shared-model-auth-provider.md)); workflows map the existing `KEYCLOAK_CLIENT_SECRET` so consumers re-set… |
+| [34](#entry-docs-design-configurable-drift-request-budget-100) | 2026-11-18 | docs: design configurable drift request budget (#100) | product | Raise the default to 200,000 characters (about 50,000 to 67,000 tokens, at most half of a 131,072-token window), make the budget and the model timeout environment settings fed from repository variables with strict validation ([ADR… |
 
 ---
 
@@ -773,3 +774,23 @@ One shared `ModelAuthProvider` used by both reviewers, with retry-once on 401 an
 ## Consequences
 
 Static-key adopters keep working; OIDC wins when both are set. Consumers must reinstall with `--force`, set variables and, for semantic review, add the secret to its environment. Function signatures of `reviewFiles` and `runSemanticReview` changed (`auth` replaces `apiKey` and `secret`). Token-type checks, JWT validation and other grants stay out of scope. Live-gateway behaviour is open until a consumer runs it.
+
+---
+
+<a id="entry-docs-design-configurable-drift-request-budget-100"></a>
+
+## Entry 34 — 2026-11-18 — docs: design configurable drift request budget (#100)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The drift reviewer's fixed 24,000-character budget makes it refuse to run for repositories with larger ontologies (JEPA-Speech, Grooveloom), failing with an unexplained red job. Scripts must stay byte-identical, so adopters cannot change the cap.
+
+## Decision
+
+Raise the default to 200,000 characters (about 50,000 to 67,000 tokens, at most half of a 131,072-token window), make the budget and the model timeout environment settings fed from repository variables with strict validation ([ADR 0014](docs/adr/0014-configurable-request-budget.md)), and turn an oversized ontology into a neutral skipped outcome: marker comment, notice, exit 0 ([ADR 0015](docs/adr/0015-skipped-outcome-for-oversized-ontology.md)). The 413 split stays the fallback. Rejected: config-file setting, deriving from a context-window setting, notice without a comment.
+
+## Consequences
+
+Large-ontology adopters work after a reinstall; larger requests cost more and the 300,000 ms timeout is unmeasured for them, so it is configurable and documented. Skipped runs leave a comment where clean runs stay silent. Splitting the ontology projection and changing `max_tokens` stay out of scope.
