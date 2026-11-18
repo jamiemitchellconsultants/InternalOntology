@@ -115,9 +115,9 @@ export function chunkFiles(files, catalog, maxRequestChars = MAX_REQUEST_CHARS) 
 }
 
 // Fixed reasons only: model content must never reach CI logs, comments or status text.
-class ReplyError extends Error {}
+export class ReplyError extends Error {}
 
-function stripFence(content) {
+export function stripFence(content) {
   const fenced = /^```[A-Za-z0-9_-]*[ \t]*\r?\n?([\s\S]*?)\r?\n?```$/.exec(content.trim());
   return fenced ? fenced[1].trim() : content.trim();
 }
@@ -126,7 +126,7 @@ const sectionKey = (value) => value.toLowerCase().replace(/[^a-z]/g, "").replace
 
 // Resolve what the model cited to the unique catalog key with the same item name. The prefix may be
 // wrong, singular or plural; the name must match exactly (ADR 0019).
-function resolveEvidenceKey(cited, catalog) {
+export function resolveEvidenceKey(cited, catalog) {
   if (catalog.evidenceKeys.has(cited)) return cited;
   const separator = cited.indexOf(":");
   const prefix = separator === -1 ? "" : cited.slice(0, separator);
