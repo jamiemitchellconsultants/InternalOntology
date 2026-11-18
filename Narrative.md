@@ -54,6 +54,7 @@ by rewriting the original.
 | [38](#entry-docs-design-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | docs: design configurable semantic reviewer request budget (#111) | product | Raise the default to 200,000 characters and make budget and timeout configurable with the #100 variables and validation, through one shared module ([ADR 0018](docs/adr/0018-shared-request-budget-module-and-timeout-default.md), which also… |
 | [39](#entry-docs-plan-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | docs: plan configurable semantic reviewer request budget (#111) | product | Eight tasks ordered so every commit leaves the suite green: the shared settings module with its installer entries first (a script must never import a file the installer does not copy, the mistake that left an earlier commit red in #92)… |
 | [40](#entry-feat-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | feat: configurable semantic reviewer request budget (#111) | product | One shared settings module with the #100 defaults and conventions ([ADR 0018](docs/adr/0018-shared-request-budget-module-and-timeout-default.md)); a distinct non-blocking `too-large` outcome rather than a failing status or a re-worded… |
+| [41](#entry-fix-semantic-reviewer-reads-fenced-replies-and-resolves-evidence-keys) | 2026-11-18 | fix: semantic reviewer reads fenced replies and resolves evidence keys | product | Parse one surrounding code fence; resolve evidence keys to the unique catalog item with the same name instead of requiring an exact key; list the valid keys in the prompt; report fixed, specific reasons ([ADR… |
 
 ---
 
@@ -920,3 +921,23 @@ One shared settings module with the #100 defaults and conventions ([ADR 0018](do
 ## Consequences
 
 Large-ontology adopters can run the semantic pilot after a reinstall with `--force`. A hung semantic model call can now hold a request for up to five minutes. A too-large ontology passes the status with a clear message instead of blocking; a repository that wants a hard stop must add its own check. Splitting the projection and capping semantic output stay out of scope.
+
+---
+
+<a id="entry-fix-semantic-reviewer-reads-fenced-replies-and-resolves-evidence-keys"></a>
+
+## Entry 41 — 2026-11-18 — fix: semantic reviewer reads fenced replies and resolves evidence keys
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The first live trial of the blocking semantic reviewer showed that it never reviewed anything: the gateway's correct reply was fenced JSON with a singular section prefix in its evidence keys, and the reviewer rejected it as unusable without saying why.
+
+## Decision
+
+Parse one surrounding code fence; resolve evidence keys to the unique catalog item with the same name instead of requiring an exact key; list the valid keys in the prompt; report fixed, specific reasons ([ADR 0019](docs/adr/0019-grounding-of-model-findings.md)). Rejected: fixing only the fence, fixing only the prompt, fuzzy name matching, and requesting JSON mode without verifying the gateway.
+
+## Consequences
+
+A finding is now grounded by an exact quote plus a real item name, slightly looser than an exact key. The prompt grows by one line per ontology entry. Unreadable replies are diagnosable from the pull request comment. Adopters need `--force` to receive the fix.
