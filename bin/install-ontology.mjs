@@ -69,6 +69,12 @@ export function buildPlan(options) {
     { template: "github/workflows/ontology-lint.yml", dest: ".github/workflows/ontology-lint.yml", substitute: true, ownedBy: "kit" },
   ];
 
+  if (options.withDriftReview || options.withSemanticReview) {
+    for (const path of ["scripts/llm-auth.mjs", "scripts/llm-auth.test.mjs"]) {
+      plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
+    }
+  }
+
   if (options.withDriftReview) {
     plan.push(
       { template: "scripts/review-ontology-drift.mjs", dest: "scripts/review-ontology-drift.mjs", substitute: false, ownedBy: "kit" },
