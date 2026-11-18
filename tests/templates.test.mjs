@@ -92,6 +92,14 @@ test("both reviewer workflows map the OIDC settings and the shared client secret
   }
 });
 
+test("the semantic review step passes the request budget variables without baking in a value", () => {
+  const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-semantic-review.yml"), "utf8");
+  assert.match(yaml, /ONTOLOGY_MAX_REQUEST_CHARS: \$\{\{ vars\.ONTOLOGY_MAX_REQUEST_CHARS \}\}/);
+  assert.match(yaml, /ONTOLOGY_MODEL_TIMEOUT_MS: \$\{\{ vars\.ONTOLOGY_MODEL_TIMEOUT_MS \}\}/);
+  assert.equal(/ONTOLOGY_(MAX_REQUEST_CHARS|MODEL_TIMEOUT_MS): ["']?\d/.test(yaml), false);
+  assert.equal(yaml.includes("secrets.ONTOLOGY_SEMANTIC_LLM_API_KEY"), true);
+});
+
 test("the drift workflow passes the request budget variables without baking in a value", () => {
   const yaml = readFileSync(join(TEMPLATES, "github/workflows/ontology-drift-review.yml"), "utf8");
   assert.match(yaml, /ONTOLOGY_MAX_REQUEST_CHARS: \$\{\{ vars\.ONTOLOGY_MAX_REQUEST_CHARS \}\}/);
