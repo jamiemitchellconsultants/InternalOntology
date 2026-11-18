@@ -83,6 +83,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `GraphVocabulary` | schema version, core kind and relationship IRIs, defined local extensions | The shared meanings allowed for `GraphNode` kinds and `GraphAssertion` relationships. The Kit versions a small core of `kit:` IRIs; an adopter may declare additional IRIs in its own namespace with definitions in its Turtle manifest. |
 | `GraphRefreshRecord` | covered path, current Git blob ID or deletion, review outcome | The current review of one covered source path for graph impact, including a decision that no graph fact changed. Replaced when that path changes; it is a snapshot rather than an event log. |
 | `OidcClientConfig` | `ONTOLOGY_OIDC_TOKEN_URL`, `ONTOLOGY_OIDC_CLIENT_ID`, `ONTOLOGY_OIDC_CLIENT_SECRET` | The three settings that select OIDC client-credentials authentication. All or none must be set; a partial set is an error, never a silent fallback. |
+| `RequestBudget` | `ONTOLOGY_MAX_REQUEST_CHARS`, `ONTOLOGY_MODEL_TIMEOUT_MS` | The complete-request character budget and the model timeout the `DriftReviewer` runs with. Defaults apply when a setting is unset or empty; a non-integer or non-positive value is an error. When the system prompt plus ontology projection leave too little room, the review is skipped with an explanation rather than failed. |
 | `Violation` | `file`, `line`, `column`, `message` | One flagged occurrence the `TermChecker` reports: an unknown backticked term, or a banned-alias paraphrase. |
 | `SemanticFinding` | revision, file, passage, ontology evidence, suggested correction | A claim made by a `SemanticReviewRun` that changed Markdown conflicts with the ontology. Its identity is stable across reruns of the same revision and is reconsidered on a new revision. |
 | `FindingDismissal` | `SemanticFinding`, revision, maintainer, reason | A maintainer's recorded decision to disregard one `SemanticFinding` for one PR revision. It survives reruns of that revision and expires when the PR changes. |
@@ -158,6 +159,7 @@ enum lock test catches.
 | `DriftReviewer` | authenticates through | `ModelAuthProvider` | many → 1 |
 | `SemanticReviewWorker` | authenticates through | `ModelAuthProvider` | many → 1 |
 | `ModelAuthProvider` | reads | `OidcClientConfig` | many → 1 |
+| `DriftReviewer` | runs within | `RequestBudget` | many → 1 |
 
 ---
 
@@ -171,6 +173,9 @@ enum lock test catches.
 - **`PlanEntry`** — a `Kit`-owned entry is replaced wholesale by `--force`; an `Adopter`-owned entry
   is replaced only by the separate, deliberately destructive `--reset-content`. Plain `--force` must
   never touch adopter content — that is what makes it the safe, routine upgrade path.
+- **`DriftReviewer`** — never fails a job merely because the ontology outgrew the `RequestBudget`;
+  it reports a skipped review. A malformed `RequestBudget` setting is a configuration error and
+  does fail.
 - **`ModelAuthProvider`** — never includes the client secret, a token, or the token endpoint's response
   body in an error or log line; reports the HTTP status only.
 - **`OntologyConfig`** — every `AllowlistEntry` must carry a non-empty reason; an entry with no

@@ -78,7 +78,9 @@ npm test
 ```
 
 `node --test` over `tests/` and the shipped reviewer tests in `templates/scripts/`. No
-dependencies. The suite must pass before any commit.
+dependencies. The suite must pass before any commit. CI (`.github/workflows/test.yml`) runs it on Node 20, 22 and 24, and also runs
+several shipped test files alone from `templates/scripts/`, as an adopting repository does. Keep
+tests independent of the host's git defaults and of timers that do not keep the event loop alive.
 
 <!-- ontology-protocol:start -->
 ## Ontology protocol

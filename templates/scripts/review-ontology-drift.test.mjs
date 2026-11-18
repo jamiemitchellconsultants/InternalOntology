@@ -12,6 +12,19 @@ import {
   renderChunk,
 } from "./review-ontology-drift.mjs";
 
+// AbortSignal.timeout's timer does not keep the event loop alive on Node 20 and 22, so a promise
+// that only the timeout can settle leaves the loop empty and the test runner cancels the rest of
+// the file. A real fetch is kept alive by its socket; the simulation holds a ref'd timer instead.
+function hangUntilAborted(signal) {
+  return new Promise((_resolve, reject) => {
+    const keepAlive = setTimeout(() => {}, 60_000);
+    signal.addEventListener("abort", () => {
+      clearTimeout(keepAlive);
+      reject(new Error("aborted"));
+    });
+  });
+}
+
 const SECTIONS = {
   required: ["Entities", "Enums", "Business Rules & Invariants"],
   optional: ["External Systems"],
@@ -229,10 +242,7 @@ test("modelJson throws a typed HttpError carrying status and body", async () => 
 });
 
 test("modelJson aborts a hanging request instead of waiting indefinitely", async () => {
-  const hangingFetch = (_url, init) =>
-    new Promise((_resolve, reject) => {
-      init.signal.addEventListener("abort", () => reject(new Error("aborted")));
-    });
+  const hangingFetch = (_url, init) => hangUntilAborted(init.signal);
   await assert.rejects(
     modelJson("http://endpoint/chat/completions", { method: "POST" }, hangingFetch, 10),
     /aborted/i,
@@ -278,4 +288,102 @@ test("reviewBatch rejects an empty completion rather than reporting no drift", a
       [{ file: "a.md", lines: [{ line: 1, text: "text" }] }], fakeFetch),
     /empty response from model/,
   );
+});
+
+import {
+  MAX_REQUEST_CHARS,
+  readPositiveInteger,
+  resolveRequestBudget,
+} from "./review-ontology-drift.mjs";
+
+test("the default request budget is 200,000 characters and the default timeout 300,000 ms", () => {
+  assert.equal(MAX_REQUEST_CHARS, 200_000);
+  assert.deepEqual(resolveRequestBudget({}), { maxRequestChars: 200_000, modelTimeoutMs: 300_000 });
+});
+
+test("unset, empty and whitespace settings fall back to the defaults", () => {
+  for (const value of [undefined, "", "   "]) {
+    assert.deepEqual(
+      resolveRequestBudget({ ONTOLOGY_MAX_REQUEST_CHARS: value, ONTOLOGY_MODEL_TIMEOUT_MS: value }),
+      { maxRequestChars: 200_000, modelTimeoutMs: 300_000 },
+    );
+  }
+});
+
+test("valid settings override the defaults", () => {
+  assert.deepEqual(
+    resolveRequestBudget({ ONTOLOGY_MAX_REQUEST_CHARS: " 500000 ", ONTOLOGY_MODEL_TIMEOUT_MS: "900000" }),
+    { maxRequestChars: 500_000, modelTimeoutMs: 900_000 },
+  );
+  assert.equal(readPositiveInteger({ X: "7" }, "X", 1), 7);
+});
+
+test("junk settings are rejected naming the variable and the value", () => {
+  for (const junk of ["abc", "0", "-5", "1.5", "2e5", "200_000", "1000 chars", "9007199254740993"]) {
+    assert.throws(() => resolveRequestBudget({ ONTOLOGY_MAX_REQUEST_CHARS: junk }),
+      (error) => error.message.includes("ONTOLOGY_MAX_REQUEST_CHARS") && error.message.includes(junk), junk);
+    assert.throws(() => resolveRequestBudget({ ONTOLOGY_MODEL_TIMEOUT_MS: junk }),
+      (error) => error.message.includes("ONTOLOGY_MODEL_TIMEOUT_MS"), junk);
+  }
+});
+
+test("a 60,000-character projection plans batches with the default budget", () => {
+  const batches = buildBatches([{ file: "a.md", lines: [{ line: 1, text: "some added prose" }] }],
+    "x".repeat(60_000));
+  assert.equal(batches.length, 1);
+});
+
+import { BudgetExceededError } from "./review-ontology-drift.mjs";
+
+test("the budget error is typed and carries the sizes", () => {
+  try {
+    buildBatches([], "x".repeat(5_000), 5_100);
+    assert.fail("must throw");
+  } catch (error) {
+    assert.ok(error instanceof BudgetExceededError);
+    assert.equal(error.projectionChars, 5_000);
+    assert.equal(error.maxRequestChars, 5_100);
+  }
+});
+
+test("a persistent single-line token limit throws the typed error", async () => {
+  const batch = [{ file: "a.md", lines: [{ line: 1, text: "x" }] }];
+  const review = async () => { throw new HttpError(413, "", "too big"); };
+  await assert.rejects(reviewResilient(batch, review), (error) => error instanceof BudgetExceededError);
+});
+
+test("the 413 split still halves a multi-line chunk before giving up", async () => {
+  const lines = [1, 2, 3, 4].map((line) => ({ line, text: "t" }));
+  const sizes = [];
+  const review = async (batch) => {
+    sizes.push(batch[0].lines.length);
+    if (batch[0].lines.length > 2) throw new HttpError(413, "", "too big");
+    return "NO_DRIFT";
+  };
+  await reviewResilient([{ file: "a.md", lines }], review);
+  assert.deepEqual(sizes, [4, 2, 2]);
+});
+
+import { COMMENT_MARKER, skippedBody } from "./review-ontology-drift.mjs";
+
+test("skippedBody explains the skip, names the variable and keeps the marker", () => {
+  const error = new BudgetExceededError("ontology projection and system prompt leave no useful diff budget",
+    { projectionChars: 73_517, maxRequestChars: 24_000 });
+  const body = skippedBody(error, { maxRequestChars: 24_000 }, "m");
+  assert.ok(body.startsWith(COMMENT_MARKER));
+  assert.match(body, /Skipped: ontology too large for the configured budget/);
+  assert.match(body, /73,?517/);
+  assert.match(body, /ONTOLOGY_MAX_REQUEST_CHARS/);
+});
+
+test("reviewBatch hands the configured timeout to the model call", async () => {
+  let aborted = false;
+  const hanging = (_url, init) => {
+    init.signal.addEventListener("abort", () => { aborted = true; });
+    return hangUntilAborted(init.signal);
+  };
+  await assert.rejects(
+    reviewBatch("http://x", "m", "p", [{ file: "a.md", lines: [{ line: 1, text: "t" }] }], hanging, 10),
+  );
+  assert.equal(aborted, true);
 });

@@ -69,6 +69,34 @@ are configured, OIDC wins.
 The workflow's configuration check passes when either mode is complete and fails, naming what is
 missing, when neither is.
 
+## Request budget
+
+Each model request holds the system prompt, the ontology projection and a batch of added lines. The
+reviewer plans batches against a character budget: **200,000 characters by default** (about 50,000
+to 67,000 tokens, so at most about half of a 131,072-token context window, leaving room for a
+reasoning model's thinking and its 8,192-token output cap).
+
+| Setting | Where | Default | Meaning |
+|---|---|---|---|
+| `ONTOLOGY_MAX_REQUEST_CHARS` | repository variable | 200000 | complete-request character budget |
+| `ONTOLOGY_MODEL_TIMEOUT_MS` | repository variable | 300000 | how long one model request may take |
+
+Both are optional and must be positive integers (digits only); an unset variable uses the default and
+anything else fails the job with an error naming the variable and the value. Raise the budget when
+you move to a model with a larger window; lower it for a smaller one.
+
+If the system prompt plus the ontology projection leave almost no room at the configured budget, the
+review is **skipped, not failed**: the job stays green, a notice is logged, and the pull request gets
+a comment starting "Skipped: ontology too large for the configured budget" with the sizes. Raise
+`ONTOLOGY_MAX_REQUEST_CHARS` to resolve it. A model that still rejects a request as too long makes
+the reviewer split the added lines and retry; if a single line still does not fit, the same skipped
+comment is posted.
+
+A larger prompt takes longer to answer. The 300,000 ms default timeout has not been measured with
+prompts near the 200,000-character default against any particular gateway, so if requests time out,
+raise `ONTOLOGY_MODEL_TIMEOUT_MS`. `max_tokens` is fixed at 8,192 in the script and is not
+configurable; the prompt budget, timeout and output cap should be raised together.
+
 ## Running it locally
 
 ```bash
