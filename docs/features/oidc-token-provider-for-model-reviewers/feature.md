@@ -279,4 +279,5 @@ Walkthroughs use that same local build ("local") or a consumer's Actions run ("d
 | --- | --- | --- | --- | --- |
 | Local build | Executable tests (all 10 tests) | pass (`node --test tests/oidc-acceptance.test.mjs`; full `npm test` 483 pass at last run, see PR) | 2026-11-18 | run by the agent; not yet approved by the person acting as user |
 | Local build | Scripted walkthroughs | pending, not yet followed by a person | - | - |
-| Deployed (consumer run against the live gateway) | Walkthroughs and executable layer | not run: needs a consumer repository with the variables set and `KEYCLOAK_CLIENT_SECRET`; no live call has been made | - | - |
+| Deployed (JEPA-Speech#205, GitHub Actions, merged) | Live run of the drift reviewer | pass: a token was minted as `litellm-ci` and the model call through `https://gateway.tqaentry.com/v1` returned no drift in about 18 s for a 58 KB ontology; all 10 pull request checks passed after #108 fixed the Node 20 and 22 test bug | see JEPA-Speech#205 | the user's consumer run; not a person-run walkthrough |
+| Deployed | Not verified live | the 401-retry path (B3) was not exercised against the gateway; the semantic reviewer's OIDC path was not run live; the person-run walkthroughs were not followed and the executable tests were not approved by the user | - | - |

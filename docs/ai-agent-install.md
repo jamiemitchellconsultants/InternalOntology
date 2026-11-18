@@ -23,7 +23,14 @@ node bin/install-ontology.mjs --target <target-repo>
 
 Add `--with-drift-review` only if the target repository already has a reachable OpenAI-compatible
 model endpoint configured (see `docs/ontology-drift-review.md` after installing) — otherwise
-core-only is the right default. Add `--with-enum-tests <language>` only if the user's prompt asked
+core-only is the right default. The reviewer authenticates in one of two modes: short-lived OIDC
+client-credentials tokens (repository variables `ONTOLOGY_OIDC_TOKEN_URL` and
+`ONTOLOGY_OIDC_CLIENT_ID`, with the secret `KEYCLOAK_CLIENT_SECRET`, which the workflow maps to
+`ONTOLOGY_OIDC_CLIENT_SECRET`), or a legacy static key in the `ONTOLOGY_LLM_API_KEY` secret. Set
+all three OIDC values or none; OIDC wins when both modes are present. Large ontologies need no
+setting (the request budget defaults to 200,000 characters), and the optional repository variables
+`ONTOLOGY_MAX_REQUEST_CHARS` and `ONTOLOGY_MODEL_TIMEOUT_MS` change the budget and the model timeout.
+Both modes and the budget are described in the installed runbook. Add `--with-enum-tests <language>` only if the user's prompt asked
 for enum lock tests specifically.
 
 Add `--with-semantic-review` only when the user requests the blocking semantic pilot. It is a
