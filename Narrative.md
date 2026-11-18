@@ -44,6 +44,7 @@ by rewriting the original.
 | [28](#entry-fix-open-graph-evidence-at-cited-source-lines) | 2026-11-04 | fix: open graph evidence at cited source lines | product | Select source view explicitly on generated source-file links using the host's `plain=1` query parameter, preserving commit-pinned destinations and numeric line anchors. |
 | [29](#entry-docs-accept-readable-source-knowledge-graph-on-github) | 2026-11-04 | docs: accept readable source knowledge graph on GitHub | product | Accept the current-state Markdown view for the tested GitHub deployments based on scripted walkthroughs, approved executable cases and hosted evidence. |
 | [30](#entry-keep-narrative-proposals-up-to-date) | 2026-11-04 | Keep narrative proposals up to date | product | Install the documented refresh workflow. Refresh after default-branch narrative changes and successful maintenance runs, and allow manual recovery. |
+| [31](#entry-docs-design-configurable-drift-request-budget-100) | 2026-11-18 | docs: design configurable drift request budget (#100) | product | Raise the default to 200,000 characters (about 50,000 to 67,000 tokens, at most half of a 131,072-token window), make the budget and the model timeout environment settings fed from repository variables with strict validation ([ADR… |
 
 ---
 
@@ -710,3 +711,23 @@ Install the documented refresh workflow. Refresh after default-branch narrative 
 ## Consequences
 
 Open proposals can be updated and their compiled narrative validated without force-pushing. Conflicts outside generated output remain for human resolution. The workflow must reach the default branch before it can run, and narrative proposals remain subject to review.
+
+---
+
+<a id="entry-docs-design-configurable-drift-request-budget-100"></a>
+
+## Entry 31 — 2026-11-18 — docs: design configurable drift request budget (#100)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The drift reviewer's fixed 24,000-character budget makes it refuse to run for repositories with larger ontologies (JEPA-Speech, Grooveloom), failing with an unexplained red job. Scripts must stay byte-identical, so adopters cannot change the cap.
+
+## Decision
+
+Raise the default to 200,000 characters (about 50,000 to 67,000 tokens, at most half of a 131,072-token window), make the budget and the model timeout environment settings fed from repository variables with strict validation ([ADR 0014](docs/adr/0014-configurable-request-budget.md)), and turn an oversized ontology into a neutral skipped outcome: marker comment, notice, exit 0 ([ADR 0015](docs/adr/0015-skipped-outcome-for-oversized-ontology.md)). The 413 split stays the fallback. Rejected: config-file setting, deriving from a context-window setting, notice without a comment.
+
+## Consequences
+
+Large-ontology adopters work after a reinstall; larger requests cost more and the 300,000 ms timeout is unmeasured for them, so it is configurable and documented. Skipped runs leave a comment where clean runs stay silent. Splitting the ontology projection and changing `max_tokens` stay out of scope.
