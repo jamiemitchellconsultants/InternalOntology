@@ -50,6 +50,7 @@ by rewriting the original.
 | [34](#entry-docs-design-configurable-drift-request-budget-100) | 2026-11-18 | docs: design configurable drift request budget (#100) | product | Raise the default to 200,000 characters (about 50,000 to 67,000 tokens, at most half of a 131,072-token window), make the budget and the model timeout environment settings fed from repository variables with strict validation ([ADR… |
 | [35](#entry-docs-plan-configurable-drift-request-budget-100) | 2026-11-18 | docs: plan configurable drift request budget (#100) | product | Seven tasks in an order that keeps every commit green: setting parser and default, typed budget error, timeout and skip path in `main`, workflow variables, docs, a large-ontology acceptance test run first against the old code to prove it… |
 | [36](#entry-feat-configurable-drift-reviewer-request-budget-100) | 2026-11-18 | feat: configurable drift reviewer request budget (#100) | product | Default 200,000 characters, configurable by environment variable with strict validation ([ADR 0014](docs/adr/0014-configurable-request-budget.md)); an oversized ontology is a neutral skipped outcome with a comment, notice and exit 0 ([ADR… |
+| [37](#entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow) | 2026-11-18 | fix: reviewer tests on Node 20/22 and a kit test workflow | product | Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. |
 
 ---
 
@@ -836,3 +837,23 @@ Default 200,000 characters, configurable by environment variable with strict val
 ## Consequences
 
 Large-ontology adopters work after a reinstall; larger requests cost more and may need a longer timeout. Skipped runs leave a comment where clean runs stay silent. Splitting the projection stays out of scope. Live-gateway behaviour with large prompts is open until a consumer runs it.
+
+---
+
+<a id="entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow"></a>
+
+## Entry 37 — 2026-11-18 — fix: reviewer tests on Node 20/22 and a kit test workflow
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The kit's reviewer tests were cancelled on Node 20 and 22, which adopters' `deterministic-preparation` jobs use, and the kit ran no test job in CI, so nobody saw it until JEPA-Speech#205.
+
+## Decision
+
+Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. Make temp repositories independent of the host's default branch. Rejected: changing `AbortSignal.timeout` use in `modelJson` (not the defect), and adding the check to branch protection in this PR (done by the maintainer after it has run once on `main`).
+
+## Consequences
+
+Test regressions on the supported Node versions now fail the pull request. The workflow's check names (`test (20)`, `test (22)`, `test (24)`) can be made required once it has run. Adopters need `--force` to receive the corrected test file.
