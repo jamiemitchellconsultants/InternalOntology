@@ -353,3 +353,26 @@ test("the 413 split still halves a multi-line chunk before giving up", async () 
   await reviewResilient([{ file: "a.md", lines }], review);
   assert.deepEqual(sizes, [4, 2, 2]);
 });
+
+import { COMMENT_MARKER, skippedBody } from "./review-ontology-drift.mjs";
+
+test("skippedBody explains the skip, names the variable and keeps the marker", () => {
+  const error = new BudgetExceededError("ontology projection and system prompt leave no useful diff budget",
+    { projectionChars: 73_517, maxRequestChars: 24_000 });
+  const body = skippedBody(error, { maxRequestChars: 24_000 }, "m");
+  assert.ok(body.startsWith(COMMENT_MARKER));
+  assert.match(body, /Skipped: ontology too large for the configured budget/);
+  assert.match(body, /73,?517/);
+  assert.match(body, /ONTOLOGY_MAX_REQUEST_CHARS/);
+});
+
+test("reviewBatch hands the configured timeout to the model call", async () => {
+  let aborted = false;
+  const hanging = (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener("abort", () => { aborted = true; reject(new Error("aborted")); });
+  });
+  await assert.rejects(
+    reviewBatch("http://x", "m", "p", [{ file: "a.md", lines: [{ line: 1, text: "t" }] }], hanging, 10),
+  );
+  assert.equal(aborted, true);
+});

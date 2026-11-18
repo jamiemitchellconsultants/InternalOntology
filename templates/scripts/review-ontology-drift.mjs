@@ -356,7 +356,8 @@ async function githubJson(token, url, init) {
 /**
  * Deliberately sends no sampling parameters — those belong where the model is configured.
  * max_tokens covers any reasoning tokens as well as the final content, so it is the binding
- * constraint; raise it and modelJson's timeout together.
+ * constraint. The prompt budget, the model timeout (ONTOLOGY_MODEL_TIMEOUT_MS) and max_tokens are
+ * raised together or not at all: a larger prompt takes longer to answer.
  * @param {string} baseUrl
  * @param {string} model
  * @param {string} ontologyProjection
@@ -364,7 +365,8 @@ async function githubJson(token, url, init) {
  * @param {typeof fetch} [fetchImpl]
  * @returns {Promise<string>}
  */
-export async function reviewBatch(baseUrl, model, ontologyProjection, batch, fetchImpl = fetch) {
+export async function reviewBatch(baseUrl, model, ontologyProjection, batch, fetchImpl = fetch,
+  timeoutMs = MODEL_TIMEOUT_MS) {
   const completion = await modelJson(
     `${baseUrl}/chat/completions`,
     {
@@ -379,6 +381,7 @@ export async function reviewBatch(baseUrl, model, ontologyProjection, batch, fet
       }),
     },
     fetchImpl,
+    timeoutMs,
   );
   const answer = (completion.choices?.[0]?.message?.content ?? "").trim();
   if (!answer) throw new Error("empty response from model");
@@ -416,7 +419,29 @@ export async function reviewResilient(batch, review) {
   }
 }
 
+/**
+ * @param {BudgetExceededError} error
+ * @param {{ maxRequestChars: number }} budget
+ * @param {string} model
+ * @returns {string}
+ */
+export function skippedBody(error, budget, model) {
+  const sizes = error.projectionChars === undefined
+    ? ""
+    : `Ontology projection: ${error.projectionChars.toLocaleString("en-US")} characters. `;
+  return (
+    `${COMMENT_MARKER}\n### Ontology drift review (AI-assisted, advisory)\n\n` +
+    `**Skipped: ontology too large for the configured budget.**\n\n` +
+    `${sizes}Request budget: ${budget.maxRequestChars.toLocaleString("en-US")} characters. ` +
+    `Reason: ${error.message}.\n\n` +
+    `Nothing was reviewed. Raise the \`ONTOLOGY_MAX_REQUEST_CHARS\` repository variable ` +
+    `(see docs/ontology-drift-review.md) to a size your model accepts.` +
+    `\n\n---\n*Model: \`${model}\`. Advisory only — human review is the gate.*`
+  );
+}
+
 async function main() {
+  const budget = resolveRequestBudget();
   const config = loadConfig({});
   const model = process.env.ONTOLOGY_MODEL || "ontology-review";
   const baseRef = process.env.BASE_REF || "origin/main";
@@ -440,42 +465,50 @@ async function main() {
     return;
   }
 
-  const batches = buildBatches(files, projection);
-  if (process.env.DRY_RUN) {
-    console.log(`DRY_RUN — model: ${model}, base: ${baseRef}, ${files.length} file(s) in ${batches.length} batch(es)`);
-    batches.forEach((batch, index) => {
-      console.log(
-        `  batch ${index + 1}: ${batch.map((chunk) => chunk.file).join(", ")} ` +
-          `(~${SYSTEM_PROMPT.length + userPrompt(projection, batch).length} complete-request chars)`,
-      );
-    });
-    return;
-  }
-
-  const token = requireEnv("GITHUB_TOKEN");
-  const repo = requireEnv("GITHUB_REPOSITORY");
-  const prNumber = requireEnv("PR_NUMBER");
-  const baseUrl = requireEnv("ONTOLOGY_LLM_BASE_URL");
-
   const findings = [];
-  for (const [index, batch] of batches.entries()) {
-    const answers = await reviewResilient(batch, (candidate) =>
-      reviewBatch(baseUrl, model, projection, candidate));
-    console.log(`batch ${index + 1}/${batches.length}: ${answers.length} request(s) after token-limit splitting`);
-    for (const answer of answers) {
-      if (!answer.startsWith(NO_DRIFT_TOKEN)) findings.push(answer);
+  try {
+    const batches = buildBatches(files, projection, budget.maxRequestChars);
+    if (process.env.DRY_RUN) {
+      console.log(
+        `DRY_RUN — model: ${model}, base: ${baseRef}, budget: ${budget.maxRequestChars} chars, ` +
+          `${files.length} file(s) in ${batches.length} batch(es)`,
+      );
+      batches.forEach((batch, index) => {
+        console.log(
+          `  batch ${index + 1}: ${batch.map((chunk) => chunk.file).join(", ")} ` +
+            `(~${SYSTEM_PROMPT.length + userPrompt(projection, batch).length} complete-request chars)`,
+        );
+      });
+      return;
     }
+
+    const baseUrl = requireEnv("ONTOLOGY_LLM_BASE_URL");
+    requireEnv("GITHUB_TOKEN");
+    requireEnv("GITHUB_REPOSITORY");
+    requireEnv("PR_NUMBER");
+    for (const [index, batch] of batches.entries()) {
+      const answers = await reviewResilient(batch, (candidate) =>
+        reviewBatch(baseUrl, model, projection, candidate, fetch, budget.modelTimeoutMs));
+      console.log(`batch ${index + 1}/${batches.length}: ${answers.length} request(s) after token-limit splitting`);
+      for (const answer of answers) {
+        if (!answer.startsWith(NO_DRIFT_TOKEN)) findings.push(answer);
+      }
+    }
+  } catch (error) {
+    if (!(error instanceof BudgetExceededError)) throw error;
+    console.log(`::notice::drift review skipped: ontology too large for the configured budget (${error.message})`);
+    if (process.env.DRY_RUN) {
+      console.log(`  projection: ${error.projectionChars ?? "unknown"} chars, budget: ${budget.maxRequestChars} chars`);
+      return;
+    }
+    await upsertComment(skippedBody(error, budget, model), { createWhenEmpty: true });
+    return;
   }
 
   const noDrift = findings.length === 0;
   const answer = findings.join("\n");
   console.log(noDrift ? "no drift found" : `findings:\n${answer}`);
 
-  const api = `https://api.github.com/repos/${repo}`;
-  const comments = await githubJson(token, `${api}/issues/${prNumber}/comments?per_page=100`);
-  const existing = comments.find(
-    (comment) => typeof comment.body === "string" && comment.body.includes(COMMENT_MARKER),
-  );
   const header = `${COMMENT_MARKER}\n### Ontology drift review (AI-assisted, advisory)\n\n`;
   const footer =
     `\n\n---\n*Model: \`${model}\`. Advisory only — human review is the gate. ` +
@@ -483,14 +516,30 @@ async function main() {
   const body = noDrift
     ? `${header}No paraphrase drift found in the changed markdown files of this revision.${footer}`
     : header + answer + footer;
+  await upsertComment(body, { createWhenEmpty: !noDrift });
+}
 
+/**
+ * Updates the marker comment when one exists; creates it only when asked to.
+ * @param {string} body
+ * @param {{ createWhenEmpty: boolean }} options
+ */
+async function upsertComment(body, { createWhenEmpty }) {
+  const token = requireEnv("GITHUB_TOKEN");
+  const repo = requireEnv("GITHUB_REPOSITORY");
+  const prNumber = requireEnv("PR_NUMBER");
+  const api = `https://api.github.com/repos/${repo}`;
+  const comments = await githubJson(token, `${api}/issues/${prNumber}/comments?per_page=100`);
+  const existing = comments.find(
+    (comment) => typeof comment.body === "string" && comment.body.includes(COMMENT_MARKER),
+  );
   if (existing) {
     await githubJson(token, `${api}/issues/comments/${existing.id}`, {
       method: "PATCH",
       body: JSON.stringify({ body }),
     });
     console.log(`updated comment ${existing.id}`);
-  } else if (!noDrift) {
+  } else if (createWhenEmpty) {
     const created = await githubJson(token, `${api}/issues/${prNumber}/comments`, {
       method: "POST",
       body: JSON.stringify({ body }),
