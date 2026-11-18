@@ -193,3 +193,12 @@ test("the semantic runbook documents the request budget, the too-large result an
     assert.ok(text.includes(expected), `semantic runbook lacks ${expected}`);
   }
 });
+
+test("the semantic runbook explains the not-reviewed reasons and the accepted reply shape", () => {
+  const text = readFileSync(join(TEMPLATES, "docs/ontology-semantic-review.md"), "utf8");
+  for (const expected of ["model reply was not valid JSON", "model reply was empty",
+    "finding quote not found in the file", "finding cites an unknown evidence key",
+    "finding cites an ambiguous evidence key", "one markdown code fence"]) {
+    assert.ok(text.includes(expected), `semantic runbook lacks ${expected}`);
+  }
+});

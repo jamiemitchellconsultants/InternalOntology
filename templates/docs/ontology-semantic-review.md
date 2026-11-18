@@ -78,6 +78,27 @@ that figure has not been measured with prompts near the budget against any gatew
 `ONTOLOGY_MODEL_TIMEOUT_MS` if requests time out. A hung model call can hold a request for that long, and
 chunks are reviewed one after another. The semantic request sets no output cap of its own.
 
+## Reading "not reviewed" reasons
+
+When a file could not be assessed, the pull request comment lists it as "Not reviewed" with a fixed
+reason. The reasons never contain model output. Besides the budget reasons above:
+
+| Reason | Meaning |
+|---|---|
+| model reply was empty | the model returned nothing usable |
+| model reply was not valid JSON | the reply was not JSON, even after removing one surrounding code fence |
+| model reply had no findings list | valid JSON without a `findings` array |
+| model finding was incomplete | a finding lacked a quote, key, reason or suggestion |
+| finding quote not found in the file | the quoted passage is not an exact substring of the file |
+| finding cites an unknown evidence key | the item name is not in the ontology evidence |
+| finding cites an ambiguous evidence key | the name exists in several sections and the prefix does not pick one |
+| model timed out, model returned HTTP n | transport problems; see the timeout setting above |
+| model credential could not be obtained | the OIDC or static credential failed |
+
+The model's reply may be wrapped in one markdown code fence. An evidence key is accepted when it names a real
+ontology item: a wrong or singular section prefix is resolved to the unique matching item, and the
+finding is shown with the real key. The prompt lists every valid key.
+
 ## Respond to a finding
 
 The PR comment names the file, exact passage, ontology evidence, suggested correction, finding
