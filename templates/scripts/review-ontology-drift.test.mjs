@@ -279,3 +279,46 @@ test("reviewBatch rejects an empty completion rather than reporting no drift", a
     /empty response from model/,
   );
 });
+
+import {
+  MAX_REQUEST_CHARS,
+  readPositiveInteger,
+  resolveRequestBudget,
+} from "./review-ontology-drift.mjs";
+
+test("the default request budget is 200,000 characters and the default timeout 300,000 ms", () => {
+  assert.equal(MAX_REQUEST_CHARS, 200_000);
+  assert.deepEqual(resolveRequestBudget({}), { maxRequestChars: 200_000, modelTimeoutMs: 300_000 });
+});
+
+test("unset, empty and whitespace settings fall back to the defaults", () => {
+  for (const value of [undefined, "", "   "]) {
+    assert.deepEqual(
+      resolveRequestBudget({ ONTOLOGY_MAX_REQUEST_CHARS: value, ONTOLOGY_MODEL_TIMEOUT_MS: value }),
+      { maxRequestChars: 200_000, modelTimeoutMs: 300_000 },
+    );
+  }
+});
+
+test("valid settings override the defaults", () => {
+  assert.deepEqual(
+    resolveRequestBudget({ ONTOLOGY_MAX_REQUEST_CHARS: " 500000 ", ONTOLOGY_MODEL_TIMEOUT_MS: "900000" }),
+    { maxRequestChars: 500_000, modelTimeoutMs: 900_000 },
+  );
+  assert.equal(readPositiveInteger({ X: "7" }, "X", 1), 7);
+});
+
+test("junk settings are rejected naming the variable and the value", () => {
+  for (const junk of ["abc", "0", "-5", "1.5", "2e5", "200_000", "1000 chars", "9007199254740993"]) {
+    assert.throws(() => resolveRequestBudget({ ONTOLOGY_MAX_REQUEST_CHARS: junk }),
+      (error) => error.message.includes("ONTOLOGY_MAX_REQUEST_CHARS") && error.message.includes(junk), junk);
+    assert.throws(() => resolveRequestBudget({ ONTOLOGY_MODEL_TIMEOUT_MS: junk }),
+      (error) => error.message.includes("ONTOLOGY_MODEL_TIMEOUT_MS"), junk);
+  }
+});
+
+test("a 60,000-character projection plans batches with the default budget", () => {
+  const batches = buildBatches([{ file: "a.md", lines: [{ line: 1, text: "some added prose" }] }],
+    "x".repeat(60_000));
+  assert.equal(batches.length, 1);
+});
