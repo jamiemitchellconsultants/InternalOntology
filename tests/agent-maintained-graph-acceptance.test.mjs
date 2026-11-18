@@ -6,21 +6,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 
 import { install } from "../bin/install-ontology.mjs";
 import { withTempRepo } from "./helpers/temp-repo.mjs";
+import { NS, load, read, commit, symbolScenario, wideningBase, wideningScenario, lookupScenario } from "./helpers/agent-graph-scenarios.mjs";
 
-const NS = "https://ontology.example/widgets#";
-const HEADER = `@prefix : <${NS}> .\n@prefix kit: <https://ontology-kit.dev/schema#> .\n@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n`;
 const OFFLINE = "data:text/javascript,globalThis.fetch=()=>{throw new Error('network call')}";
 const flat = (text) => text.replace(/\s+/g, " ");
-
-const load = (repo, name) => import(pathToFileURL(join(repo.dir, "scripts", name)).href);
-const read = (repo, rel) => readFileSync(join(repo.dir, rel), "utf8");
-const commit = (repo, message) => { repo.git("add", "-A"); repo.git("commit", "-q", "-m", message); return repo.git("rev-parse", "HEAD").trim(); };
 
 function offline(repo, args) {
   const result = spawnSync(process.execPath, ["--import", OFFLINE, ...args], { cwd: repo.dir, encoding: "utf8", env: { PATH: process.env.PATH } });
@@ -30,48 +24,9 @@ function offline(repo, args) {
 async function installedGraph(body) {
   await withTempRepo(async (repo) => {
     install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
-    await body(repo, await load(repo, "source-graph-test-helpers.mjs"), await load(repo, "source-graph-turtle.mjs"), await load(repo, "source-graph-model.mjs"));
+    await body(repo);
   });
 }
-
-function runbookFences(repo, heading, { parseGraphTurtle }) {
-  const doc = read(repo, "docs/source-knowledge-graph.md");
-  const start = doc.indexOf(`### ${heading}`);
-  assert.notEqual(start, -1, heading);
-  const next = doc.indexOf("\n### ", start + 4);
-  const section = doc.slice(start, next === -1 ? doc.length : next);
-  return [...section.matchAll(/```turtle\n([\s\S]*?)```/g)].map((m) => parseGraphTurtle(HEADER + m[1]).blocks);
-}
-
-function stampBlobs(repo, blocks, { blobId }) {
-  for (const b of blocks) {
-    const path = b.pairs.find((p) => p.predicate === "kit:path")?.object;
-    for (const pair of b.pairs) if (pair.predicate === "kit:blobId") pair.object = blobId(repo.dir, path);
-  }
-  return blocks;
-}
-
-function place(spec, blocks) {
-  for (const b of blocks) {
-    if (b.type === "kit:GraphNode") spec.nodes.push(b);
-    else if (b.type === "kit:GraphAssertion") spec.assertions.push(b);
-    else if (b.type === "kit:GraphEvidence") spec.evidence.push(b);
-    else if (b.type === "kit:GraphCoverage") spec.coverage.push(b);
-    else if (b.type === "kit:GraphRefreshRecord") spec.records.push(b);
-    else throw new Error(`unexpected block ${b.type}`);
-  }
-}
-
-function addTerm(repo, term) {
-  repo.write("docs/ontology.ttl", `${read(repo, "docs/ontology.ttl")}\n:${term} a owl:Class .\n`);
-}
-
-function replaceRecord(repo, spec, h, path) {
-  spec.records = spec.records.filter((r) => !r.pairs.some((p) => p.predicate === "kit:path" && p.object === path));
-  spec.records.push(h.refreshRecord(repo, path, "kit:graph-updated"));
-}
-
-const lines = (count, at, text) => Array.from({ length: count }, (_, i) => (i + 1 === at ? text : `// line ${i + 1}`)).join("\n") + "\n";
 
 // ---------- Agent half: the protocol block and the runbook an agent follows ----------
 
@@ -112,19 +67,8 @@ test("B6 B7 B8 B10 B11 B12 B45: the installed protocol covers recording, scope, 
 });
 
 test("B6 B7 B15 B16: the runbook's symbol example passes the installed check and the lookup finds the symbol", async () => {
-  await installedGraph(async (repo, h, turtle) => {
-    const spec = h.widgets(repo);
-    const base = commit(repo, "base graph");
-    const path = "src/Sessions/SessionRemovalService.cs";
-    repo.write(path, lines(12, 12, "public sealed class SessionRemovalService { }"));
-    addTerm(repo, "SessionRemoval");
-    const [blocks] = runbookFences(repo, "Example: a symbol that implements a concept", turtle);
-    place(spec, stampBlobs(repo, blocks, h));
-    spec.nodes.push(h.block(":node-session-removal-file", "kit:GraphNode", [["kit:kind", "kit:source-file"], ["rdfs:label", h.S(path)]]));
-    spec.records.push(h.refreshRecord(repo, path, "kit:graph-updated"));
-    replaceRecord(repo, spec, h, "docs/ontology.ttl");
-    h.writeGraph(repo, spec);
-    repo.git("add", "-A");
+  await installedGraph(async (repo) => {
+    const { base, path } = await symbolScenario(repo);
     const check = offline(repo, ["scripts/check-source-graph.mjs", "--staged", "--base", base]);
     assert.equal(check.code, 0, check.out + check.err);
     commit(repo, "record SessionRemovalService");
@@ -136,31 +80,16 @@ test("B6 B7 B15 B16: the runbook's symbol example passes the installed check and
 });
 
 test("B9: the runbook's widening example for code in unknown scope passes the installed check", async () => {
-  await installedGraph(async (repo, h, turtle, model) => {
-    const spec = h.widgets(repo);
-    h.setPair(h.find(spec.coverage, ":coverage-c0"), "kit:pathSelector", h.S("src/Invoice.cs"));
-    spec.config.sourceGraph.evidence.implementation = ["src/Invoice.cs", spec.paths.dep];
-    repo.write("ontology.config.json", JSON.stringify(spec.config, null, 2) + "\n");
-    h.writeGraph(repo, spec);
-    const base = commit(repo, "base graph with narrow coverage");
-    const path = "src/Downloads/AssetDownloadRetryPolicy.cs";
-    repo.write(path, lines(8, 8, "public sealed class AssetDownloadRetryPolicy { }"));
-    addTerm(repo, "AssetDownloadRetry");
-    const unknown = JSON.parse(offline(repo, ["scripts/query-source-graph.mjs", "coverage", path, "--json"]).out);
+  await installedGraph(async (repo) => {
+    const scenario = await wideningBase(repo);
+    const unknown = JSON.parse(offline(repo, ["scripts/query-source-graph.mjs", "coverage", scenario.path, "--json"]).out);
     assert.equal(unknown.coverage.files[0].status, "kit:unknown");
-    const [manifest, entries] = runbookFences(repo, "Example: widening coverage for new code", turtle);
-    const record = manifest.find((b) => b.type === "kit:GraphRefreshRecord");
-    assert.equal(record.subject, model.refreshIdFor(path));
-    place(spec, stampBlobs(repo, [...manifest, ...entries], h));
-    spec.config.sourceGraph.evidence.implementation.push("src/Downloads/**");
-    repo.write("ontology.config.json", JSON.stringify(spec.config, null, 2) + "\n");
-    replaceRecord(repo, spec, h, "docs/ontology.ttl");
-    h.writeGraph(repo, spec);
-    repo.git("add", "-A");
-    const check = offline(repo, ["scripts/check-source-graph.mjs", "--staged", "--base", base]);
+    const { recordIri, expectedIri } = await wideningScenario(repo, scenario);
+    assert.equal(recordIri, expectedIri);
+    const check = offline(repo, ["scripts/check-source-graph.mjs", "--staged", "--base", scenario.base]);
     assert.equal(check.code, 0, check.out + check.err);
     commit(repo, "widen coverage for AssetDownloadRetryPolicy");
-    const covered = JSON.parse(offline(repo, ["scripts/query-source-graph.mjs", "coverage", path, "--json"]).out);
+    const covered = JSON.parse(offline(repo, ["scripts/query-source-graph.mjs", "coverage", scenario.path, "--json"]).out);
     assert.equal(covered.coverage.files[0].status, "kit:covered");
     const found = JSON.parse(offline(repo, ["scripts/query-source-graph.mjs", "concept", "AssetDownloadRetry", "--json"]).out);
     assert.deepEqual(found.implements.map((a) => a.subject.label), ["AssetDownloadRetryPolicy"]);
@@ -193,19 +122,8 @@ test("B26 B37: the installed protocol says agents never settle results and apply
 // ---------- Outcome 4: the concept-first lookup ----------
 
 async function lookupGraph(body) {
-  await installedGraph(async (repo, h) => {
-    const spec = h.widgets(repo);
-    addTerm(repo, "Payment");
-    spec.nodes.push(h.block(":node-invoice-service", "kit:GraphNode", [["kit:kind", "kit:source-symbol"], ["rdfs:label", h.S("InvoiceService")]]),
-      h.block(":node-billing", "kit:GraphNode", [["kit:kind", "kit:component"], ["rdfs:label", h.S("Billing")]]));
-    spec.assertions.push(
-      h.block(":assertion-a7", "kit:GraphAssertion", [["kit:basis", "kit:inferred"], ["kit:evidence", ":evidence-e1"],
-        ["kit:object", ":node-invoice"], ["kit:relationship", "kit:implements"], ["kit:subject", ":node-invoice-service"]]),
-      h.block(":assertion-a8", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-e5"],
-        ["kit:object", ":node-invoice-service"], ["kit:relationship", "kit:contains"], ["kit:subject", ":node-billing"]]));
-    replaceRecord(repo, spec, h, "docs/ontology.ttl");
-    h.writeGraph(repo, spec);
-    const pinned = commit(repo, "graph");
+  await installedGraph(async (repo) => {
+    const { spec, pinned } = await lookupScenario(repo);
     await body(repo, spec, pinned);
   });
 }
