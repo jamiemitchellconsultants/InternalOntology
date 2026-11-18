@@ -17,6 +17,8 @@ export function catalogOntology(markdown, sections) {
   const content = new Map();
   const evidenceKeys = new Set();
   const entries = [];
+  const rows = new Map();
+  let invariantKey = null;
   const output = ["# Canonical ontology evidence"];
   let current = null;
   let headerSeen = false;
@@ -43,17 +45,20 @@ export function catalogOntology(markdown, sections) {
         if (name) {
           evidenceKeys.add(`${current}:${name}`);
           entries.push({ section: current, name });
+          rows.set(`${current}:${name}`, line);
           content.set(current, (content.get(current) ?? 0) + 1);
         }
       }
     } else if (line.startsWith("- **")) {
       output.push(line);
       const name = /^- \*\*(.+?)\*\*/.exec(line)?.[1]?.replace(/^`|`$/g, "");
-      if (name) { evidenceKeys.add(`${current}:${name}`); entries.push({ section: current, name }); }
+      invariantKey = name ? `${current}:${name}` : null;
+      if (name) { evidenceKeys.add(invariantKey); entries.push({ section: current, name }); rows.set(invariantKey, line); }
       content.set(current, (content.get(current) ?? 0) + 1);
       inInvariant = true;
     } else if (inInvariant && /^\s{2,}\S/.test(line)) {
       output.push(line);
+      if (invariantKey) rows.set(invariantKey, `${rows.get(invariantKey)}\n${line}`);
     } else if (line.trim()) {
       inInvariant = false;
     }
@@ -67,7 +72,7 @@ export function catalogOntology(markdown, sections) {
   }
   // The valid keys are part of the projection, so the request budget counts them.
   output.push("", "## Evidence keys", "", ...[...evidenceKeys].map((key) => `- ${key}`));
-  return { projection: output.join("\n"), evidenceKeys, entries };
+  return { projection: output.join("\n"), evidenceKeys, entries, rows };
 }
 
 function chunkEnd(text, start, capacity) {

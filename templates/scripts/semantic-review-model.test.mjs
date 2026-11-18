@@ -318,3 +318,10 @@ test("the system prompt lists the exact evidence keys and the request budget cou
   const catalog = catalogOntology(ENUM_ONTOLOGY, { required: ["Enums"], optional: [] });
   assert.ok(catalog.projection.includes("Enums:RemovalReason"), "keys are part of the projection the budget counts");
 });
+
+test("catalog rows keep each entry's source line by evidence key", () => {
+  const value = catalogOntology("## Entities\n\n| Name | Description |\n| --- | --- |\n| `Invoice` | canonical bill |\n\n## Business Rules & Invariants\n\n- **`Invoice`** — must have an owner\n  before it is approved.\n",
+    { required: ["Entities", "Business Rules & Invariants"], optional: [] });
+  assert.equal(value.rows.get("Entities:Invoice"), "| `Invoice` | canonical bill |");
+  assert.equal(value.rows.get("Business Rules & Invariants:Invoice"), "- **`Invoice`** — must have an owner\n  before it is approved.");
+});
