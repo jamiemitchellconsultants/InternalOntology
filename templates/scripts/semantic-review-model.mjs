@@ -1,5 +1,6 @@
 // Complete-file inputs for the semantic ontology reviewer. No diff hunk is used here.
 import { createHash } from "node:crypto";
+import { authorizedFetch, AuthConfigError, TokenRequestError } from "./llm-auth.mjs";
 
 // Reserve space for the request wrapper and prompt before splitting any source text.
 export const REQUEST_OVERHEAD = 1_000;
@@ -129,7 +130,7 @@ function splitChunk(chunk) {
   ];
 }
 
-export async function reviewFiles({ files, ontologyText, sections, model, baseUrl, apiKey, headSha,
+export async function reviewFiles({ files, ontologyText, sections, model, baseUrl, auth, headSha,
   fetchImpl = fetch, timeoutMs = 30_000 }) {
   const catalog = catalogOntology(ontologyText, sections);
   const prepared = chunkFiles(files, catalog);
@@ -143,9 +144,9 @@ export async function reviewFiles({ files, ontologyText, sections, model, baseUr
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response;
     try {
-      response = await fetchImpl(endpoint, {
+      response = await authorizedFetch(auth, fetchImpl, endpoint, {
         method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model, messages: [
           { role: "system", content: `${SYSTEM_PROMPT}\n\n${catalog.projection}` },
           { role: "user", content: `File: ${chunk.path}\nOffset: ${chunk.offset}\nText:\n${chunk.text}` },
@@ -166,6 +167,9 @@ export async function reviewFiles({ files, ontologyText, sections, model, baseUr
       return { complete: true, findings: validateFindings(content, chunk, catalog, headSha) };
     } catch (error) {
       // Model content and raw responses must not appear in CI logs or status descriptions.
+      if (error instanceof AuthConfigError || error instanceof TokenRequestError) {
+        return { complete: false, findings: [], reason: "model credential could not be obtained" };
+      }
       return { complete: false, findings: [], reason: error?.name === "AbortError" ? "model timed out" : "model assessment was unusable" };
     } finally {
       clearTimeout(timer);

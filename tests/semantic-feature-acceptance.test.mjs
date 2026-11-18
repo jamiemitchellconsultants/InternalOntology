@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createModelAuth } from "../templates/scripts/llm-auth.mjs";
+
+const authFor = (key) => createModelAuth({ env: key ? { K: key } : {}, staticKeyVar: "K" });
 
 // Set this to an adopter checkout's scripts directory to exercise the installed copy.
 const scriptRoot = process.env.ONTOLOGY_ACCEPTANCE_SCRIPT_ROOT
@@ -105,7 +108,7 @@ test("B2 sends unchanged lines within a changed Markdown file to the model", asy
   let request;
   const result = await model.reviewFiles({ files: [{ path: "docs/spec.md", text: fullText }],
     ontologyText: ontology, sections: config.sections, model: config.semanticReview.model,
-    baseUrl: config.semanticReview.baseUrl, apiKey: "test-key", headSha: head,
+    baseUrl: config.semanticReview.baseUrl, auth: authFor("test-key"), headSha: head,
     fetchImpl: async (_url, options) => { request = JSON.parse(options.body); return modelResponse(); } });
   assert.deepEqual(result.reviewed, ["docs/spec.md"]);
   assert.match(request.messages[1].content, /An unchanged line with the wrong description/);
@@ -121,7 +124,7 @@ test("B3 assesses changed Markdown against the PR's proposed ontology", async ()
   let prompt;
   await model.reviewFiles({ files: selected.files, ontologyText: selected.ontologyText,
     sections: config.sections, model: config.semanticReview.model, baseUrl: config.semanticReview.baseUrl,
-    apiKey: "test-key", headSha: head, fetchImpl: async (_url, options) => {
+    auth: authFor("test-key"), headSha: head, fetchImpl: async (_url, options) => {
       prompt = JSON.parse(options.body).messages[0].content;
       return modelResponse();
     } });
@@ -231,7 +234,7 @@ test("B10 a later unavailable run permits merge while retaining the earlier find
 
 test("B11 a partial review retains a finding and lists the unreviewed file", async () => {
   const client = makeClient();
-  const run = await worker.runSemanticReview({ client, pull, config, secret: "test-key",
+  const run = await worker.runSemanticReview({ client, pull, config, auth: authFor("test-key"),
     deps: { triggerRunId: "81:1", collectReviewInput: async () => ({ ...input,
       unreviewed: [{ path: "docs/second.md", reason: "GitHub blob unavailable" }] }),
       reviewFiles: async () => ({ reviewed: [finding.path], unreviewed: [], findings: [finding] }) } });
@@ -243,7 +246,7 @@ test("B11 a partial review retains a finding and lists the unreviewed file", asy
 
 test("B12 incomplete review without findings permits merge and reports missing coverage", async () => {
   const client = makeClient();
-  const run = await worker.runSemanticReview({ client, pull, config, secret: "test-key",
+  const run = await worker.runSemanticReview({ client, pull, config, auth: authFor("test-key"),
     deps: { triggerRunId: "81:1", collectReviewInput: async () => ({ ...input,
       unreviewed: [{ path: "docs/second.md", reason: "model timed out" }] }),
       reviewFiles: async () => ({ reviewed: [finding.path], unreviewed: [], findings: [] }) } });
@@ -261,7 +264,7 @@ test("B13 a PR-supplied model setting cannot replace the trusted configuration",
   let requestUrl;
   let requestBody;
   const reviewed = await worker.runSemanticReview({ client, pull: attackerPull, config,
-    secret: "trusted-key", modelFetch: async (url, options) => {
+    auth: authFor("trusted-key"), modelFetch: async (url, options) => {
       requestUrl = url;
       requestBody = JSON.parse(options.body);
       return modelResponse();
@@ -271,7 +274,7 @@ test("B13 a PR-supplied model setting cannot replace the trusted configuration",
   assert.equal(requestBody.model, "maintainer-model");
   let called = false;
   const unavailable = await worker.runSemanticReview({ client: makeClient(), pull, config: null,
-    secret: "trusted-key", modelFetch: async () => { called = true; return modelResponse(); },
+    auth: authFor("trusted-key"), modelFetch: async () => { called = true; return modelResponse(); },
     deps: { triggerRunId: "82:1" } });
   assert.equal(unavailable.outcome, "unavailable");
   assert.equal(called, false);
@@ -281,7 +284,7 @@ test("B14 disabling the pilot reports disabled while the deterministic checker s
   const client = makeClient();
   const disabled = { ...config, semanticReview: { enabled: false } };
   let called = false;
-  const run = await worker.runSemanticReview({ client, pull, config: disabled, secret: "test-key",
+  const run = await worker.runSemanticReview({ client, pull, config: disabled, auth: authFor("test-key"),
     modelFetch: async () => { called = true; return modelResponse(); }, deps: { triggerRunId: "81:1" } });
   assert.equal(run.outcome, "disabled");
   assert.equal(called, false);

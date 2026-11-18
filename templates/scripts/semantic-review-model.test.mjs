@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createModelAuth } from "./llm-auth.mjs";
 import { catalogOntology, chunkFiles, reviewFiles, REQUEST_OVERHEAD } from "./semantic-review-model.mjs";
 
 const ontology = "# Ontology\n\n## Entities\n\n| Name | Description |\n| --- | --- |\n| `Invoice` | canonical bill |\n";
@@ -57,7 +58,7 @@ test("an oversized ontology is unavailable rather than a clean review", () => {
 
 const completion = (content) => ({ ok: true, json: async () => ({ choices: [{ message: { content } }] }) });
 const options = (files, fetchImpl) => ({ files, ontologyText: ontology, sections, model: "test-model",
-  baseUrl: "https://model.example/v1", apiKey: "test-key", headSha: "a".repeat(40), fetchImpl });
+  baseUrl: "https://model.example/v1", auth: createModelAuth({ env: { K: "test-key" }, staticKeyVar: "K" }), headSha: "a".repeat(40), fetchImpl });
 
 test("a grounded finding has a stable ID and a correction", async () => {
   const fetchImpl = async (url, request) => {
@@ -136,4 +137,32 @@ test("timeout marks only the affected file unreviewed", async () => {
     (_url, request) => new Promise((_resolve, reject) => request.signal.addEventListener("abort", () => reject(new Error("aborted"))))),
     timeoutMs: 5 });
   assert.deepEqual(result.unreviewed.map((item) => item.path), ["docs/a.md"]);
+});
+
+const OIDC_ENV = { ONTOLOGY_OIDC_TOKEN_URL: "https://kc.example/token", ONTOLOGY_OIDC_CLIENT_ID: "cid",
+  ONTOLOGY_OIDC_CLIENT_SECRET: "s3cr3t-value" };
+
+test("an OIDC bearer is used and a 401 is retried once with a fresh token", async () => {
+  let issued = 0;
+  const auth = createModelAuth({ env: OIDC_ENV, staticKeyVar: "K",
+    fetchImpl: async () => Response.json({ access_token: `tok${++issued}`, expires_in: 300 }) });
+  const seen = [];
+  const fetchImpl = async (_url, request) => {
+    seen.push(request.headers.Authorization);
+    return seen.length === 1 ? { ok: false, status: 401 } : completion(JSON.stringify({ findings: [] }));
+  };
+  const result = await reviewFiles({ ...options([{ path: "docs/a.md", text: "text" }], fetchImpl), auth });
+  assert.deepEqual(seen, ["Bearer tok1", "Bearer tok2"]);
+  assert.deepEqual(result.reviewed, ["docs/a.md"]);
+});
+
+test("a token failure leaves the file unreviewed with a fixed reason and no secret text", async () => {
+  const auth = createModelAuth({ env: OIDC_ENV, staticKeyVar: "K",
+    fetchImpl: async () => new Response("LEAK-BODY", { status: 500 }) });
+  const result = await reviewFiles({ ...options([{ path: "docs/a.md", text: "text" }],
+    async () => { throw new Error("must not call"); }), auth });
+  assert.deepEqual(result.reviewed, []);
+  const text = JSON.stringify(result);
+  assert.match(text, /model credential could not be obtained/);
+  assert.doesNotMatch(text, /LEAK-BODY|s3cr3t-value/);
 });
