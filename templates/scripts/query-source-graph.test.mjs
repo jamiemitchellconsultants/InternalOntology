@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { openGraph, search, neighbors, findPaths, coverageReport, annotate, main } from "./query-source-graph.mjs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { openGraph, search, neighbors, findPaths, coverageReport, annotate, main, resolveTerm, conceptImplementations } from "./query-source-graph.mjs";
 import { treeFromRevision } from "./source-graph-git.mjs";
-import { withScratchRepo, widgets } from "./source-graph-test-helpers.mjs";
+import { withScratchRepo, widgets, block, S, writeGraph } from "./source-graph-test-helpers.mjs";
 
 // The graph is parsed into memory before the scratch repository is removed, so tests that only
 // query the graph can use it afterwards. Tests that run git or the command stay inside the callback.
@@ -111,4 +113,113 @@ test("B13: the same questions give the same answers whatever the source language
   };
   const baseline = await shape("csharp");
   for (const language of ["typescript", "java", "python"]) assert.equal(await shape(language), baseline, language);
+});
+
+function run(repo, argv) {
+  let out = "", err = "";
+  const code = main(argv, { cwd: repo.dir, stdout: { write: (t) => { out += t; } }, stderr: { write: (t) => { err += t; } } });
+  return { code, out, err };
+}
+const EXTRA_TERMS = "\n:Payment a owl:Class .\n\n:Refund a owl:Class .\n\n:InvoiceStatus a owl:Class .\n\n:InvoiceOpen a :InvoiceStatus .\n";
+function conceptFixture(repo, { inferred = false } = {}) {
+  const spec = widgets(repo);
+  repo.write("docs/ontology.ttl", readFileSync(join(repo.dir, "docs/ontology.ttl"), "utf8") + EXTRA_TERMS);
+  spec.nodes.push(
+    block(":node-invoice-service", "kit:GraphNode", [["kit:kind", "kit:source-symbol"], ["rdfs:label", S("InvoiceService")]]),
+    block(":node-refund", "kit:GraphNode", [["kit:denotes", ":Refund"], ["kit:kind", "kit:concept"], ["rdfs:label", S("Refund")]]),
+    block(":node-invoice-open", "kit:GraphNode", [["kit:denotes", ":InvoiceOpen"], ["kit:kind", "kit:concept"], ["rdfs:label", S("InvoiceOpen")]]));
+  spec.assertions.push(
+    block(":assertion-a7", "kit:GraphAssertion", [["kit:basis", inferred ? "kit:inferred" : "kit:direct"], ["kit:evidence", ":evidence-e1"],
+      ["kit:object", ":node-invoice"], ["kit:relationship", "kit:implements"], ["kit:subject", ":node-invoice-service"]]),
+    block(":assertion-a8", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-e5"],
+      ["kit:object", ":node-invoice-service"], ["kit:relationship", "kit:contains"], ["kit:subject", ":node-ledger"]]));
+  writeGraph(repo, spec);
+  return spec;
+}
+
+test("B20 and B23: a term resolves from its name, :Name form or full IRI, and nothing else", async () => {
+  await withScratchRepo(async (repo) => {
+    conceptFixture(repo); repo.commit("graph");
+    const { tree, config } = openGraph(repo.dir, "HEAD");
+    for (const input of ["Invoice", ":Invoice", "https://ontology.example/widgets#Invoice"]) {
+      assert.deepEqual(resolveTerm(tree, config, input), { iri: ":Invoice", name: "Invoice" }, input);
+    }
+    assert.deepEqual(resolveTerm(tree, config, "InvoiceOpen"), { iri: ":InvoiceOpen", name: "InvoiceOpen" });
+    for (const input of ["invoice", "Invoices", "Inv", "https://other.example/x#Invoice", ":", "", "Invoice Service"]) {
+      assert.equal(resolveTerm(tree, config, input), null, JSON.stringify(input));
+    }
+  });
+});
+
+test("B20 and B21: denoting nodes and implementing file and symbol nodes are grouped, one hop only", async () => {
+  await withScratchRepo(async (repo) => {
+    conceptFixture(repo); repo.commit("graph");
+    const { graph } = openGraph(repo.dir, "HEAD");
+    const result = conceptImplementations(graph, ":Invoice");
+    assert.deepEqual(result.term, { iri: ":Invoice", name: "Invoice" });
+    assert.deepEqual(result.denotes.map((n) => n.iri), [":node-invoice"]);
+    assert.deepEqual(result.implements.map((a) => a.subject.iri), [":node-impl", ":node-invoice-service"]);
+    assert.ok(result.implements.every((a) => a.relationship === "kit:implements" && a.object.iri === ":node-invoice" && a.evidence.length > 0));
+    assert.equal(result.implements.some((a) => a.subject.iri === ":node-ledger"), false);
+  });
+});
+
+test("B20: text and JSON output carry basis, tentative marks, evidence status and staleness", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = conceptFixture(repo, { inferred: true });
+    const pinned = repo.commit("graph");
+    const text = run(repo, ["concept", "Invoice"]);
+    assert.equal(text.code, 0);
+    assert.match(text.out, /^concept :Invoice$/m);
+    assert.match(text.out, /^denotes\n:node-invoice Invoice$/m);
+    assert.match(text.out, /^implements$/m);
+    assert.match(text.out, /^:assertion-a7 basis: inferred \(tentative\)$/m);
+    assert.match(text.out, /^:node-invoice-service kit:implements :node-invoice$/m);
+    assert.doesNotMatch(text.out, /STALE/);
+    const json = JSON.parse(run(repo, ["concept", ":Invoice", "--json"]).out);
+    assert.equal(json.term.iri, ":Invoice");
+    assert.equal(json.implements.find((a) => a.iri === ":assertion-a7").tentative, true);
+    assert.ok(json.implements.flatMap((a) => a.evidence).every((e) => e.status === "current"));
+    assert.ok(json.coverage.inventory.length > 0);
+    repo.write(spec.paths.impl, "later edit\n");
+    repo.commit("later");
+    const stale = run(repo, ["concept", "Invoice", "--rev", pinned]);
+    assert.match(stale.out, /^STALE$/m);
+    assert.match(stale.out, / changed$/m);
+  });
+});
+
+test("B22: a known term with nothing linked says so without calling it unimplemented and prints coverage", async () => {
+  await withScratchRepo(async (repo) => {
+    conceptFixture(repo); repo.commit("graph");
+    const none = run(repo, ["concept", "Payment"]);
+    assert.equal(none.code, 0);
+    assert.match(none.out, /^No graph node denotes :Payment; that does not mean the concept is unimplemented\.$/m);
+    assert.match(none.out, /kit:covered/);
+    const unlinked = run(repo, ["concept", "Refund"]);
+    assert.match(unlinked.out, /^:node-refund Refund$/m);
+    assert.match(unlinked.out, /^No kit:implements assertion links a source element to :Refund; that does not mean the concept is unimplemented\.$/m);
+    assert.match(unlinked.out, /kit:covered/);
+    for (const out of [none.out, unlinked.out]) assert.doesNotMatch(out, /is not implemented|does not exist/i);
+  });
+});
+
+test("B23: an input that is not an ontology term exits 2 and suggests search", async () => {
+  await withScratchRepo(async (repo) => {
+    conceptFixture(repo); repo.commit("graph");
+    const result = run(repo, ["concept", "Invoices"]);
+    assert.equal(result.code, 2);
+    assert.equal(result.out, "");
+    assert.match(result.err, /^Invoices is not a term in docs\/ontology\.ttl; try: node scripts\/query-source-graph\.mjs search Invoices$/m);
+    for (const argv of [["concept"], ["concept", "Invoice", "Payment"]]) assert.equal(run(repo, argv).code, 2);
+  });
+});
+
+test("B24: the lookup makes no network call", async () => {
+  await withScratchRepo(async (repo) => {
+    conceptFixture(repo); repo.commit("graph");
+    const original = globalThis.fetch;
+    globalThis.fetch = () => { throw new Error("network call"); };
+    try { assert.equal(run(repo, ["concept", "Invoice"]).code, 0); } finally { globalThis.fetch = original; }
+  });
 });
