@@ -98,6 +98,7 @@ enum lock test catches.
 | Name | Values | Description |
 |------|--------|-------------|
 | `Ownership` | `Kit`, `Adopter` | Who owns a `PlanEntry`'s destination file. `Kit`-owned files (the scripts, the CI workflow) are replaced wholesale by `--force`; `Adopter`-owned files (`OntologyConfig`, `Ontology`, the enum test) survive `--force` and are discarded only by the separate `--reset-content`. Spelled `"kit"` / `"adopter"` in code. |
+| `SemanticOutcome` | `reviewed`, `partial`, `unavailable`, `disabled`, `out-of-scope`, `no-eligible`, `too-large` | The outcome of one `SemanticReviewRun`, which controls the fixed status. `too-large` is non-blocking like `unavailable`, but records that the `RequestBudget` left no room for the ontology projection, so the status and the pull request record name the budget instead of an outage. |
 | `AuthMode` | `Oidc`, `Static`, `None` | Which credential a `ModelAuthProvider` resolved: a complete `OidcClientConfig`, the static key variable, or nothing. `Oidc` wins over `Static`; a partial `OidcClientConfig` is an error, not `Static`. |
 
 ---

@@ -187,3 +187,74 @@ Markdown to be sent.
 | U9 | Cap the semantic output (max_tokens)? | Out of scope; not changed. |
 | U10 | Split the ontology projection across requests? | Out of scope (vision). |
 | U11 | Is the budget right for the live gateway? | Cannot be decided here; unverified until a large-ontology consumer runs the semantic reviewer. |
+
+## Architect: structure
+
+OQ1 to OQ3 are settled in ADRs 0016, 0017 and 0018 below; each ADR states what the options mean for a
+blocking reviewer, and the user reviews the choices on the design pull request.
+
+### Components
+
+| Component | Responsibility | Serves |
+| --- | --- | --- |
+| `request-budget.mjs` (new, installed with either reviewer) | `readPositiveInteger`, `resolveRequestBudget`, the 200,000-character and 300,000 ms defaults; the one copy of the parsing and error text | B3, B4, B5, B12 |
+| `review-ontology-drift.mjs` (`DriftReviewer`) | Imports and re-exports the settings code, so existing behaviour and imports are unchanged | B11, B17 |
+| `semantic-review-model.mjs` | `reviewFiles` takes `maxRequestChars` and `timeoutMs`, passes the budget to `chunkFiles`; marks unreviewed entries with a code `too-large` when capacity is below one character or a persistent 413 cannot be split; the 413 split is unchanged | B1, B2, B7, B9, B10, B12 |
+| `semantic-review-worker.mjs` (`SemanticReviewWorker`) | `runSemanticReview` resolves the budget first; on junk it publishes an explained `unavailable` run and rethrows (ADR 0017); assigns outcome `too-large` when no file was reviewed, no finding exists and every unreviewed file has the `too-large` code (ADR 0016); passes the budget and timeout to `reviewFiles`; finalize path unchanged | B3, B5, B7, B8, B9, B11, B12 |
+| `semantic-review-ledger.mjs` (`SemanticStatusPublisher`) | `statusFor` maps `too-large` to `success` with the description naming the budget variable; the pull request record adds the "permits merge" line for it | B7, B8 |
+| Semantic review workflow template | Review step passes the two variables from repository variables; credential stays an environment secret | B6 |
+| `Installer` | Plans `request-budget.mjs` and its test whenever either reviewer is installed | B17 |
+| Runbooks, README | State default, override, outcome, timeout default and caveat | B13, B16 |
+| Tests | Unit tests beside the scripts and `tests/` acceptance, including a roughly 60 KB ontology with a local stand-in for the model | B1-B17 |
+| Ontology | `SemanticOutcome` enum (with `too-large`), `RequestBudget` relationships | B8 |
+
+### Structure
+
+```mermaid
+flowchart LR
+  V[Repository variables] --> W[Semantic review workflow step]
+  W --> R[runSemanticReview]
+  R --> P[request-budget.mjs]
+  P -->|junk| X[Publish unavailable with reason, rethrow]
+  R --> F[reviewFiles / chunkFiles]
+  F -->|capacity under 1, or 413 at minimum chunk| T[unreviewed with code too-large]
+  F --> G[Model endpoint]
+  T --> O{no reviewed, no findings, all too-large}
+  O --> L[ledger: outcome too-large, success, names the budget]
+  D[DriftReviewer] --> P
+```
+
+### Deployment and runtime
+
+No new service. The change ships in installed scripts, the workflow template and the runbook. A
+consumer re-runs the installer with `--force`, which now also copies `request-budget.mjs`; the two
+repository variables are optional. The semantic review job reads them from repository variables; the
+model credential stays an environment secret.
+
+### Traceability
+
+| Behaviour | Components |
+| --- | --- |
+| B1 | `request-budget.mjs`, `semantic-review-model.mjs`, `semantic-review-worker.mjs` |
+| B2 | `semantic-review-model.mjs` |
+| B3 | `request-budget.mjs`, `semantic-review-worker.mjs` |
+| B4 | `request-budget.mjs` |
+| B5 | `request-budget.mjs`, `semantic-review-worker.mjs` |
+| B6 | workflow template |
+| B7 | `semantic-review-model.mjs`, `semantic-review-worker.mjs`, `semantic-review-ledger.mjs` |
+| B8 | `semantic-review-worker.mjs`, `semantic-review-ledger.mjs`, ontology |
+| B9 | `semantic-review-model.mjs`, `semantic-review-worker.mjs` |
+| B10 | `semantic-review-model.mjs` |
+| B11 | `semantic-review-worker.mjs`, `semantic-review-ledger.mjs`, `review-ontology-drift.mjs` |
+| B12 | `request-budget.mjs`, `semantic-review-model.mjs`, `semantic-review-worker.mjs` |
+| B13 | runbook |
+| B14 | tests |
+| B15 | tests |
+| B16 | runbook, README |
+| B17 | `Installer`, `request-budget.mjs` |
+
+### Decisions
+
+- [ADR 0016: a too-large ontology is its own non-blocking outcome](../../adr/0016-too-large-ontology-outcome.md) (OQ1)
+- [ADR 0017: an invalid budget setting publishes an explained unavailable run, then fails the job](../../adr/0017-invalid-budget-setting-status.md) (OQ2)
+- [ADR 0018: one shared budget module and a 300,000 ms default timeout](../../adr/0018-shared-request-budget-module-and-timeout-default.md) (OQ3)
