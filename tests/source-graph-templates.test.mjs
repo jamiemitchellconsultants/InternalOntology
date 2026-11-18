@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { renderSchema } from "../templates/scripts/source-graph-model.mjs";
+import { renderSchema, refreshIdFor } from "../templates/scripts/source-graph-model.mjs";
+import { canonicalProblems, parseGraphTurtle, GRAPH_PREFIXES } from "../templates/scripts/source-graph-turtle.mjs";
 
 const template = (rel) => readFileSync(fileURLToPath(new URL(`../templates/${rel}`, import.meta.url)), "utf8");
 
@@ -81,4 +82,40 @@ test("B5: an install splices the stronger protocol into AGENTS.md", async () => 
     has(agents, ["query-source-graph.mjs concept <Term>", "Never accept, reject or defer a graph naming result", "docs/source-knowledge-graph/README.md"]);
     assert.doesNotMatch(agents, /\{\{GRAPH_ROOT\}\}/);
   });
+});
+
+const runbook = template("docs/source-knowledge-graph.md");
+const authoring = runbook.slice(runbook.indexOf("## Authoring graph entries"), runbook.indexOf("## Recover a source snapshot"));
+
+test("B13–B19: the authoring section covers label, kind, link, evidence, refinement, declining and the reply", () => {
+  assert.ok(runbook.indexOf("## Author and review in one PR") < runbook.indexOf("## Authoring graph entries"));
+  for (const heading of ["### Label", "### Kind", "### Concept link", "### Evidence", "### Refine without changing identity",
+    "### Decline what has no source", "### Write, check, then render", "### Reply",
+    "### Example: a symbol that implements a concept", "### Example: widening coverage for new code"]) {
+    assert.ok(authoring.includes(`\n${heading}\n`), heading);
+  }
+  has(authoring, ["the ontology term exactly", "exactly as written in source", "its repository-relative path", "Declare a local kind",
+    "keep its node or assertion IRI", "the graph records only implemented source", "Never write or edit the generated Markdown by hand"]);
+  for (const line of ["Label:", "Kind:", "Concept link:", "Evidence:", "Check:"]) assert.match(authoring, new RegExp(`^${line} `, "m"));
+});
+
+test("B7 and B9: every Turtle example is canonical graph Turtle and refresh IDs match their paths", () => {
+  const header = `@prefix : <${NS}> .\n@prefix kit: <${GRAPH_PREFIXES.kit}> .\n@prefix rdfs: <${GRAPH_PREFIXES.rdfs}> .\n`;
+  const examples = [...authoring.matchAll(/```turtle\n([\s\S]*?)```/g)].map((m) => m[1]);
+  assert.equal(examples.length, 3);
+  for (const example of examples) {
+    const text = `${header}\n${example}`;
+    assert.deepEqual(canonicalProblems(text), [], example.split("\n")[0]);
+    for (const b of parseGraphTurtle(text).blocks.filter((b) => b.type === "kit:GraphRefreshRecord")) {
+      assert.equal(b.subject, refreshIdFor(b.pairs.find((p) => p.predicate === "kit:path").object));
+    }
+  }
+  for (const pattern of [/kit:source-symbol/, /kit:contains/, /"src\/Downloads\/\*\*"/, /kit:covered/]) assert.match(authoring, pattern);
+});
+
+test("B45: the authoring order is Turtle, check, then render, and both examples end with it", () => {
+  const order = authoring.slice(authoring.indexOf("### Write, check, then render"), authoring.indexOf("### Reply"));
+  assert.ok(order.indexOf("check-source-graph.mjs --staged --base") < order.indexOf("node scripts/render-source-graph.mjs"));
+  assert.ok(order.includes("render-source-graph.mjs --check --staged"));
+  for (const example of authoring.split("### Example:").slice(1)) assert.match(example, /write, check and render order/);
 });

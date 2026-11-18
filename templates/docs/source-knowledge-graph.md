@@ -30,6 +30,136 @@ For each task, query the reader and inspect the cited source. After editing cove
 
 The source commit and document commit are separate because the document embeds the full source commit ID. Canonical inputs must not change between them. `--check` checks committed HEAD, `--check --rev <revision>` checks a historical commit, and `--check --staged` checks the candidate index tree. Checks are read-only and compare exact rendered bytes as well as the current and recorded source inputs. Exit 0 means current, 1 means missing or stale output, and 2 means invalid input, configuration, mode or an unavailable source snapshot.
 
+## Authoring graph entries
+
+Follow this section for every request to add or refine a graph entry. Every entry cites source that exists at the pull request's revision.
+
+### Label
+
+- A concept node's label is the ontology term exactly.
+- A `kit:source-symbol` node's label is the symbol's name exactly as written in source.
+- A source file, test or document node's label is its repository-relative path.
+- A component or system node's label is the name the source uses for it: the project, package or assembly name.
+
+### Kind
+
+Pick a core kind from `{{GRAPH_ROOT}}/graph-schema.ttl`. Declare a local kind in the manifest, with a definition, only when no core kind fits, and say in your reply why none fitted.
+
+### Concept link
+
+When the entry names or realises an ontology concept, give the concept node `kit:denotes` to the ontology IRI and link the source element to that concept node by `kit:implements`. When the concept is missing from the ontology, add it to the ontology first. Record a `kit:source-symbol` when one named type or function realises the concept; use a file-level `kit:implements` only when the concept is spread across several functions in the file.
+
+### Evidence
+
+Cite the narrowest line range that shows the fact (for a symbol, its declaration), the role whose `sourceGraph.evidence` selector matches the path, and the staged blob ID from `git rev-parse :<path>`. Use `kit:direct` unless the claim is an inference; an inferred claim uses `kit:inferred` and cites the observations it rests on. If the path is in unknown scope, widen coverage as the second example shows; if it is in excluded scope, record nothing and say so, quoting the exclusion's reason.
+
+### Refine without changing identity
+
+When you refine an entry, keep its node or assertion IRI and change only its label, kind, link or evidence. Say in your reply what changed and why. Converting an existing file-level `kit:implements` into a symbol entry is a refinement, made only when asked.
+
+### Decline what has no source
+
+Decline a request for an entry about something with no source in the repository, such as a planned component. Say that the graph records only implemented source, and suggest adding the vocabulary to the ontology instead.
+
+### Write, check, then render
+
+Write every change in Turtle under `{{GRAPH_ROOT}}` and in `ontology.config.json`, inserting each block at its sorted position in its file. Stage the change and run `node scripts/check-source-graph.mjs --staged --base <merge-base>` until it passes. Then follow "Author and review in one PR": commit the source, run `node scripts/render-source-graph.mjs`, and check the output with `node scripts/render-source-graph.mjs --check --staged` before committing it. Never write or edit the generated Markdown by hand.
+
+### Reply
+
+Report each choice with one line of reasoning, then the check result:
+
+```text
+Label: SessionRemovalService, the class name as declared in source.
+Kind: kit:source-symbol, because one class realises the concept.
+Concept link: kit:implements to :node-session-removal, which denotes :SessionRemoval.
+Evidence: src/Sessions/SessionRemovalService.cs lines 12-12, role implementation, the class declaration.
+Check: node scripts/check-source-graph.mjs --staged --base <merge-base> passed.
+```
+
+### Example: a symbol that implements a concept
+
+The class SessionRemovalService in `src/Sessions/SessionRemovalService.cs` realises the ontology concept SessionRemoval, and the file already has the node `:node-session-removal-file`. Add these blocks, with the staged blob ID in place of the example one, and reuse an existing concept node for the term if the graph has one:
+
+```turtle
+:assertion-session-removal-service-contained a kit:GraphAssertion ;
+    kit:basis kit:direct ;
+    kit:evidence :evidence-session-removal-service-declaration ;
+    kit:object :node-session-removal-service ;
+    kit:relationship kit:contains ;
+    kit:subject :node-session-removal-file .
+
+:assertion-session-removal-service-implements a kit:GraphAssertion ;
+    kit:basis kit:direct ;
+    kit:evidence :evidence-session-removal-service-declaration ;
+    kit:object :node-session-removal ;
+    kit:relationship kit:implements ;
+    kit:subject :node-session-removal-service .
+
+:evidence-session-removal-service-declaration a kit:GraphEvidence ;
+    kit:blobId "0123456789abcdef0123456789abcdef01234567" ;
+    kit:endLine 12 ;
+    kit:path "src/Sessions/SessionRemovalService.cs" ;
+    kit:role kit:role-implementation ;
+    kit:startLine 12 .
+
+:node-session-removal a kit:GraphNode ;
+    kit:denotes :SessionRemoval ;
+    kit:kind kit:concept ;
+    rdfs:label "SessionRemoval" .
+
+:node-session-removal-service a kit:GraphNode ;
+    kit:kind kit:source-symbol ;
+    rdfs:label "SessionRemovalService" .
+```
+
+Finish with the write, check and render order above.
+
+### Example: widening coverage for new code
+
+The change adds `src/Downloads/AssetDownloadRetryPolicy.cs` in a new directory that is in unknown scope, and the class AssetDownloadRetryPolicy realises the concept AssetDownloadRetry. Propose the narrowest widening, the new directory. In the manifest, add a covered coverage entry and the refresh record for the new file, and reference both from the graph resource with `kit:coverage :coverage-src-downloads` and `kit:refreshRecord :refresh-520189267322`:
+
+```turtle
+:coverage-src-downloads a kit:GraphCoverage ;
+    kit:pathSelector "src/Downloads/**" ;
+    kit:priority 10 ;
+    kit:status kit:covered .
+
+:refresh-520189267322 a kit:GraphRefreshRecord ;
+    kit:blobId "0123456789abcdef0123456789abcdef01234567" ;
+    kit:path "src/Downloads/AssetDownloadRetryPolicy.cs" ;
+    kit:reviewOutcome kit:graph-updated .
+```
+
+A refresh record's IRI is `:refresh-` followed by the first 12 hexadecimal characters of the SHA-1 of its path, which `node -e 'console.log(require("crypto").createHash("sha1").update(process.argv[1]).digest("hex").slice(0, 12))' <path>` prints. Where no `sourceGraph.evidence` selector matches the path for its role, add one in `ontology.config.json`, for example `"implementation": ["src/Domain/**", "src/Downloads/**"]`. Then add the entries, as in the first example:
+
+```turtle
+:assertion-asset-download-retry-policy-implements a kit:GraphAssertion ;
+    kit:basis kit:direct ;
+    kit:evidence :evidence-asset-download-retry-policy-declaration ;
+    kit:object :node-asset-download-retry ;
+    kit:relationship kit:implements ;
+    kit:subject :node-asset-download-retry-policy .
+
+:evidence-asset-download-retry-policy-declaration a kit:GraphEvidence ;
+    kit:blobId "0123456789abcdef0123456789abcdef01234567" ;
+    kit:endLine 8 ;
+    kit:path "src/Downloads/AssetDownloadRetryPolicy.cs" ;
+    kit:role kit:role-implementation ;
+    kit:startLine 8 .
+
+:node-asset-download-retry a kit:GraphNode ;
+    kit:denotes :AssetDownloadRetry ;
+    kit:kind kit:concept ;
+    rdfs:label "AssetDownloadRetry" .
+
+:node-asset-download-retry-policy a kit:GraphNode ;
+    kit:kind kit:source-symbol ;
+    rdfs:label "AssetDownloadRetryPolicy" .
+```
+
+If the new selector also covers existing files, review each and add its refresh record. List the widened selector, the number of files it newly covers and why in the pull request's "Graph changes" section. Finish with the write, check and render order above.
+
 ## Recover a source snapshot
 
 The renderer is offline. After squash or rebase, a fresh checkout may lack the recorded source commit even though the Git host retains it. The workflow reads only the bounded, validated SHA from `node scripts/render-source-graph.mjs --print-source-rev --rev HEAD`, then fetches a missing commit from fixed remote `origin` before the real check. Metadata is data and cannot supply Git options, a remote or executable commands.
