@@ -52,6 +52,7 @@ by rewriting the original.
 | [36](#entry-feat-configurable-drift-reviewer-request-budget-100) | 2026-11-18 | feat: configurable drift reviewer request budget (#100) | product | Default 200,000 characters, configurable by environment variable with strict validation ([ADR 0014](docs/adr/0014-configurable-request-budget.md)); an oversized ontology is a neutral skipped outcome with a comment, notice and exit 0 ([ADR… |
 | [37](#entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow) | 2026-11-18 | fix: reviewer tests on Node 20/22 and a kit test workflow | product | Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. |
 | [38](#entry-docs-design-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | docs: design configurable semantic reviewer request budget (#111) | product | Raise the default to 200,000 characters and make budget and timeout configurable with the #100 variables and validation, through one shared module ([ADR 0018](docs/adr/0018-shared-request-budget-module-and-timeout-default.md), which also… |
+| [39](#entry-docs-plan-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | docs: plan configurable semantic reviewer request budget (#111) | product | Eight tasks ordered so every commit leaves the suite green: the shared settings module with its installer entries first (a script must never import a file the installer does not copy, the mistake that left an earlier commit red in #92)… |
 
 ---
 
@@ -878,3 +879,23 @@ Raise the default to 200,000 characters and make budget and timeout configurable
 ## Consequences
 
 Large-ontology adopters can review after a reinstall with `--force`. A hung model call can now hold a semantic request for up to five minutes. The 300,000 ms figure and the 200,000 default are unmeasured for the semantic reviewer on the live gateway. Splitting the projection and capping semantic output stay out of scope.
+
+---
+
+<a id="entry-docs-plan-configurable-semantic-reviewer-request-budget-111"></a>
+
+## Entry 39 — 2026-11-18 — docs: plan configurable semantic reviewer request budget (#111)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The design is merged, including the decision that a too-large ontology is a distinct non-blocking outcome. The plan turns it into reviewable tasks before any code exists.
+
+## Decision
+
+Eight tasks ordered so every commit leaves the suite green: the shared settings module with its installer entries first (a script must never import a file the installer does not copy, the mistake that left an earlier commit red in #92), then the ledger (it must know `too-large` before the worker can publish it), the model module, the worker, workflow, docs, a large-ontology acceptance test shown failing on the old code, and wrap-up including a Node 20, 22 and 24 Docker run. The plan reminds the builder to check `npm test`'s exit status and to keep simulated hangs on a ref'd timer. Rejected: one large commit, and putting the installer change last.
+
+## Consequences
+
+The build cannot start until this plan is reviewed and merged. Existing drift tests keep working through the re-exports. The semantic request timeout default change from 30,000 ms to 300,000 ms is carried into the docs and the per-consumer notes.
