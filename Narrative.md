@@ -51,6 +51,7 @@ by rewriting the original.
 | [35](#entry-docs-plan-configurable-drift-request-budget-100) | 2026-11-18 | docs: plan configurable drift request budget (#100) | product | Seven tasks in an order that keeps every commit green: setting parser and default, typed budget error, timeout and skip path in `main`, workflow variables, docs, a large-ontology acceptance test run first against the old code to prove it… |
 | [36](#entry-feat-configurable-drift-reviewer-request-budget-100) | 2026-11-18 | feat: configurable drift reviewer request budget (#100) | product | Default 200,000 characters, configurable by environment variable with strict validation ([ADR 0014](docs/adr/0014-configurable-request-budget.md)); an oversized ontology is a neutral skipped outcome with a comment, notice and exit 0 ([ADR… |
 | [37](#entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow) | 2026-11-18 | fix: reviewer tests on Node 20/22 and a kit test workflow | product | Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. |
+| [38](#entry-docs-design-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | docs: design configurable semantic reviewer request budget (#111) | product | Raise the default to 200,000 characters and make budget and timeout configurable with the #100 variables and validation, through one shared module ([ADR 0018](docs/adr/0018-shared-request-budget-module-and-timeout-default.md), which also… |
 
 ---
 
@@ -857,3 +858,23 @@ Fix the tests, not the runtime: the hanging-call simulation now keeps the event 
 ## Consequences
 
 Test regressions on the supported Node versions now fail the pull request. The workflow's check names (`test (20)`, `test (22)`, `test (24)`) can be made required once it has run. Adopters need `--force` to receive the corrected test file.
+
+---
+
+<a id="entry-docs-design-configurable-semantic-reviewer-request-budget-111"></a>
+
+## Entry 38 — 2026-11-18 — docs: design configurable semantic reviewer request budget (#111)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The semantic reviewer plans requests against a fixed 24,000-character budget, so for ontologies as large as JEPA-Speech's (58,094 characters) or Grooveloom's (73,517) it never calls the model and publishes a success status reading "service or configuration unavailable", which blames the wrong thing and says nothing about the size. Feature #100 fixed only the advisory drift reviewer.
+
+## Decision
+
+Raise the default to 200,000 characters and make budget and timeout configurable with the #100 variables and validation, through one shared module ([ADR 0018](docs/adr/0018-shared-request-budget-module-and-timeout-default.md), which also raises the semantic request timeout default from 30,000 ms to 300,000 ms). A too-large ontology becomes its own non-blocking outcome ([ADR 0016](docs/adr/0016-too-large-ontology-outcome.md)). A junk setting publishes an explained unavailable run and then fails the job ([ADR 0017](docs/adr/0017-invalid-budget-setting-status.md)). Rejected: a failing status, a semantic-only variable name, keeping the 30,000 ms timeout.
+
+## Consequences
+
+Large-ontology adopters can review after a reinstall with `--force`. A hung model call can now hold a semantic request for up to five minutes. The 300,000 ms figure and the 200,000 default are unmeasured for the semantic reviewer on the live gateway. Splitting the projection and capping semantic output stay out of scope.
