@@ -18,10 +18,18 @@
 # Required repository configuration:
 #   vars.ONTOLOGY_LLM_BASE_URL  — an OpenAI-compatible base URL, e.g. https://host/v1
 #   vars.ONTOLOGY_MODEL         — the model name to request
-#   secrets.ONTOLOGY_LLM_API_KEY — bearer token for that endpoint
 #
-# If your endpoint is not reachable from a hosted runner, either use a self-hosted runner or add
-# your own network step immediately before "Review drift and upsert PR comment".
+# Authentication — set either mode (scripts/llm-auth.mjs picks OIDC when all three OIDC values are
+# present, and refuses a partial set):
+#   OIDC client credentials (short-lived token, preferred):
+#     vars.ONTOLOGY_OIDC_TOKEN_URL     — the identity provider's token endpoint
+#     vars.ONTOLOGY_OIDC_CLIENT_ID     — the client id
+#     secrets.KEYCLOAK_CLIENT_SECRET   — that client's secret, mapped below to
+#                                        ONTOLOGY_OIDC_CLIENT_SECRET
+#   Static key (legacy, optional):
+#     secrets.ONTOLOGY_LLM_API_KEY     — bearer token for that endpoint
+#
+# The endpoint must be reachable from a hosted runner; use a self-hosted runner otherwise.
 
 name: Ontology drift review
 
@@ -93,6 +101,10 @@ jobs:
         env:
           ONTOLOGY_LLM_BASE_URL: ${{ vars.ONTOLOGY_LLM_BASE_URL }}
           ONTOLOGY_MODEL: ${{ vars.ONTOLOGY_MODEL }}
+          ONTOLOGY_OIDC_TOKEN_URL: ${{ vars.ONTOLOGY_OIDC_TOKEN_URL }}
+          ONTOLOGY_OIDC_CLIENT_ID: ${{ vars.ONTOLOGY_OIDC_CLIENT_ID }}
+          ONTOLOGY_OIDC_CLIENT_SECRET: ${{ secrets.KEYCLOAK_CLIENT_SECRET }}
+          ONTOLOGY_LLM_API_KEY: ${{ secrets.ONTOLOGY_LLM_API_KEY }}
         run: |
           missing=0
           for name in ONTOLOGY_LLM_BASE_URL ONTOLOGY_MODEL; do
@@ -101,9 +113,18 @@ jobs:
               missing=1
             fi
           done
+          oidc=0
+          for name in ONTOLOGY_OIDC_TOKEN_URL ONTOLOGY_OIDC_CLIENT_ID ONTOLOGY_OIDC_CLIENT_SECRET; do
+            if [ -n "${!name}" ]; then oidc=$((oidc + 1)); fi
+          done
+          if [ "$oidc" -gt 0 ] && [ "$oidc" -lt 3 ]; then
+            echo "::error::OIDC settings are incomplete — set ONTOLOGY_OIDC_TOKEN_URL, ONTOLOGY_OIDC_CLIENT_ID and the KEYCLOAK_CLIENT_SECRET secret together, or none of them"
+            missing=1
+          elif [ "$oidc" -eq 0 ] && [ -z "$ONTOLOGY_LLM_API_KEY" ]; then
+            echo "::error::no model credential — set the OIDC settings or the ONTOLOGY_LLM_API_KEY secret, see docs/ontology-drift-review.md"
+            missing=1
+          fi
           exit $missing
-
-      # If your endpoint is not reachable from a hosted runner, add your network step here.
 
       - name: Review drift and upsert PR comment
         if: steps.changed.outputs.has_files == 'true'
@@ -114,6 +135,9 @@ jobs:
           ONTOLOGY_LLM_BASE_URL: ${{ vars.ONTOLOGY_LLM_BASE_URL }}
           ONTOLOGY_MODEL: ${{ vars.ONTOLOGY_MODEL }}
           ONTOLOGY_LLM_API_KEY: ${{ secrets.ONTOLOGY_LLM_API_KEY }}
+          ONTOLOGY_OIDC_TOKEN_URL: ${{ vars.ONTOLOGY_OIDC_TOKEN_URL }}
+          ONTOLOGY_OIDC_CLIENT_ID: ${{ vars.ONTOLOGY_OIDC_CLIENT_ID }}
+          ONTOLOGY_OIDC_CLIENT_SECRET: ${{ secrets.KEYCLOAK_CLIENT_SECRET }}
           CHANGED_FILES_PATH: ${{ runner.temp }}/ontology-changed-files.txt
         # mapfile -d '' reads the NUL-separated list without word-splitting, so a filename
         # containing a space (or any other shell-special character) survives as one argv entry;
