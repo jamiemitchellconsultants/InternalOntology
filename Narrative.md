@@ -51,6 +51,7 @@ by rewriting the original.
 | [35](#entry-docs-plan-configurable-drift-request-budget-100) | 2026-11-18 | docs: plan configurable drift request budget (#100) | product | Seven tasks in an order that keeps every commit green: setting parser and default, typed budget error, timeout and skip path in `main`, workflow variables, docs, a large-ontology acceptance test run first against the old code to prove it… |
 | [36](#entry-feat-configurable-drift-reviewer-request-budget-100) | 2026-11-18 | feat: configurable drift reviewer request budget (#100) | product | Default 200,000 characters, configurable by environment variable with strict validation ([ADR 0014](docs/adr/0014-configurable-request-budget.md)); an oversized ontology is a neutral skipped outcome with a comment, notice and exit 0 ([ADR… |
 | [37](#entry-fix-reviewer-tests-on-node-20-22-and-a-kit-test-workflow) | 2026-11-18 | fix: reviewer tests on Node 20/22 and a kit test workflow | product | Fix the tests, not the runtime: the hanging-call simulation now keeps the event loop alive itself. Add a kit CI workflow that runs the suite on Node 20, 22 and 24 and runs shipped test files alone from the shipped directory. |
+| [38](#entry-docs-plan-configurable-semantic-reviewer-request-budget-111) | 2026-11-18 | docs: plan configurable semantic reviewer request budget (#111) | product | Eight tasks ordered so every commit leaves the suite green: the shared settings module with its installer entries first (a script must never import a file the installer does not copy, the mistake that left an earlier commit red in #92)… |
 
 ---
 
@@ -857,3 +858,23 @@ Fix the tests, not the runtime: the hanging-call simulation now keeps the event 
 ## Consequences
 
 Test regressions on the supported Node versions now fail the pull request. The workflow's check names (`test (20)`, `test (22)`, `test (24)`) can be made required once it has run. Adopters need `--force` to receive the corrected test file.
+
+---
+
+<a id="entry-docs-plan-configurable-semantic-reviewer-request-budget-111"></a>
+
+## Entry 38 — 2026-11-18 — docs: plan configurable semantic reviewer request budget (#111)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The design is merged, including the decision that a too-large ontology is a distinct non-blocking outcome. The plan turns it into reviewable tasks before any code exists.
+
+## Decision
+
+Eight tasks ordered so every commit leaves the suite green: the shared settings module with its installer entries first (a script must never import a file the installer does not copy, the mistake that left an earlier commit red in #92), then the ledger (it must know `too-large` before the worker can publish it), the model module, the worker, workflow, docs, a large-ontology acceptance test shown failing on the old code, and wrap-up including a Node 20, 22 and 24 Docker run. The plan reminds the builder to check `npm test`'s exit status and to keep simulated hangs on a ref'd timer. Rejected: one large commit, and putting the installer change last.
+
+## Consequences
+
+The build cannot start until this plan is reviewed and merged. Existing drift tests keep working through the re-exports. The semantic request timeout default change from 30,000 ms to 300,000 ms is carried into the docs and the per-consumer notes.
