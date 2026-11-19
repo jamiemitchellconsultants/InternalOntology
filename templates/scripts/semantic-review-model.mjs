@@ -102,14 +102,18 @@ function chunkEnd(text, start, capacity) {
   return end;
 }
 
-export function chunkFiles(files, catalog, maxRequestChars = MAX_REQUEST_CHARS) {
+const tooLargeReason = (projectionChars, maxRequestChars) =>
+  `ontology too large for the configured budget (projection ${projectionChars} characters, budget ${maxRequestChars})`;
+
+// projectionChars: optional Map from file path to the length of that file's own projection (B17).
+export function chunkFiles(files, catalog, maxRequestChars = MAX_REQUEST_CHARS, projectionChars = new Map()) {
   const chunks = [];
   const unreviewed = [];
   for (const file of files) {
-    const capacity = maxRequestChars - REQUEST_OVERHEAD - catalog.projection.length - file.path.length;
+    const projected = projectionChars.get(file.path) ?? catalog.projection.length;
+    const capacity = maxRequestChars - REQUEST_OVERHEAD - projected - file.path.length;
     if (capacity < 1) {
-      unreviewed.push({ path: file.path, code: "too-large",
-        reason: `ontology too large for the configured budget (projection ${catalog.projection.length} characters, budget ${maxRequestChars})` });
+      unreviewed.push({ path: file.path, code: "too-large", reason: tooLargeReason(projected, maxRequestChars) });
       continue;
     }
     if (file.text.length === 0) {
@@ -182,16 +186,40 @@ function splitChunk(chunk) {
   ];
 }
 
+// The default projector: today's whole projection, byte for byte (B21, ADR 0026).
+const fullProjector = Object.assign((catalog) => ({ text: catalog.projection, keys: [...catalog.evidenceKeys] }), { mode: "full" });
+
 export async function reviewFiles({ files, ontologyText, sections, model, baseUrl, auth, headSha,
-  fetchImpl = fetch, timeoutMs = MODEL_TIMEOUT_MS, maxRequestChars = MAX_REQUEST_CHARS }) {
+  fetchImpl = fetch, timeoutMs = MODEL_TIMEOUT_MS, maxRequestChars = MAX_REQUEST_CHARS, project = fullProjector }) {
   const catalog = catalogOntology(ontologyText, sections);
-  const prepared = chunkFiles(files, catalog, maxRequestChars);
+  const projectionChars = new Map();
+  for (const file of files) projectionChars.set(file.path, (await project(catalog, file.text)).text.length);
+  const prepared = chunkFiles(files, catalog, maxRequestChars, projectionChars);
+  const sent = new Map();
   const unreviewed = [...prepared.unreviewed];
   const findings = new Map();
   const incomplete = new Set(unreviewed.map((item) => item.path));
   const endpoint = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
 
+  async function halves(chunk, reason) {
+    const parts = splitChunk(chunk);
+    if (!parts) return { complete: false, findings: [], code: "too-large", reason };
+    const left = await assess(parts[0]);
+    const right = await assess(parts[1]);
+    return { complete: left.complete && right.complete, findings: [...left.findings, ...right.findings],
+      reason: left.reason ?? right.reason, code: left.code ?? right.code };
+  }
+
   async function assess(chunk) {
+    const projection = await project(catalog, chunk.text);
+    // A chunk cut inside a word can select more than its whole file did (B17); never send it over budget.
+    if (REQUEST_OVERHEAD + projection.text.length + chunk.path.length + chunk.text.length > maxRequestChars) {
+      return halves(chunk, tooLargeReason(projection.text.length, maxRequestChars));
+    }
+    const record = sent.get(chunk.path) ?? { keys: new Set(), largestChars: 0 };
+    for (const key of projection.keys) record.keys.add(key);
+    record.largestChars = Math.max(record.largestChars, projection.text.length);
+    sent.set(chunk.path, record);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response;
@@ -200,22 +228,12 @@ export async function reviewFiles({ files, ontologyText, sections, model, baseUr
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model, messages: [
-          { role: "system", content: `${SYSTEM_PROMPT}\n\n${catalog.projection}` },
+          { role: "system", content: `${SYSTEM_PROMPT}\n\n${projection.text}` },
           { role: "user", content: `File: ${chunk.path}\nOffset: ${chunk.offset}\nText:\n${chunk.text}` },
         ] }),
         signal: controller.signal,
       });
-      if (response.status === 413) {
-        const parts = splitChunk(chunk);
-        if (!parts) {
-          return { complete: false, findings: [], code: "too-large",
-            reason: "ontology too large: the model rejected the smallest request" };
-        }
-        const left = await assess(parts[0]);
-        const right = await assess(parts[1]);
-        return { complete: left.complete && right.complete, findings: [...left.findings, ...right.findings],
-          reason: left.reason ?? right.reason, code: left.code ?? right.code };
-      }
+      if (response.status === 413) return halves(chunk, "ontology too large: the model rejected the smallest request");
       if (!response.ok) return { complete: false, findings: [], reason: `model returned HTTP ${response.status}` };
       const body = await response.json();
       const content = body?.choices?.[0]?.message?.content;
@@ -242,6 +260,9 @@ export async function reviewFiles({ files, ontologyText, sections, model, baseUr
     }
     for (const finding of result.findings) findings.set(finding.id, finding);
   }
-  return { reviewed: files.map((file) => file.path).filter((path) => !incomplete.has(path)),
-    unreviewed, findings: [...findings.values()] };
+  const reviewed = files.map((file) => file.path).filter((path) => !incomplete.has(path));
+  const projections = reviewed.map((path) => ({ path, mode: project.mode,
+    entriesSent: sent.get(path)?.keys.size ?? 0, entriesTotal: catalog.evidenceKeys.size,
+    largestChars: sent.get(path)?.largestChars ?? 0, fullChars: catalog.projection.length }));
+  return { reviewed, unreviewed, findings: [...findings.values()], projections };
 }
