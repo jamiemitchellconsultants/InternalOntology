@@ -307,6 +307,20 @@ test("a name present in two sections is ambiguous unless the prefix picks one", 
   assert.equal((await run("Entities:Session")).findings[0].evidenceKey, "Entities:Session");
 });
 
+test("several rows under one evidence key are one candidate, not an ambiguity", async () => {
+  const ontologyText = ["## Relationships", "", "| From | Relationship | To |", "| --- | --- | --- |",
+    "| `Analysis` | reads | `Session` |", "| `Analysis` | writes | `Report` |", ""].join("\n");
+  const reply = (key) => JSON.stringify({ findings: [{ quote: "pending, running, done and failed", evidenceKey: key,
+    reason: "r", suggestion: "s" }] });
+  const run = (key) => reviewFiles({ ...liveOptions(reply(key)), ontologyText,
+    sections: { required: ["Relationships"], optional: [] } });
+  for (const key of ["Analysis", "Relationship:Analysis", "Thing:Analysis"]) {
+    const result = await run(key);
+    assert.deepEqual(result.unreviewed, [], key);
+    assert.equal(result.findings[0]?.evidenceKey, "Relationships:Analysis", key);
+  }
+});
+
 test("the system prompt lists the exact evidence keys and the request budget counts them", async () => {
   let system;
   await reviewFiles(liveOptions(LIVE_REPLY, { fetchImpl: async (_url, request) => {
