@@ -61,6 +61,7 @@ by rewriting the original.
 | [45](#entry-fix-and-acceptance-agent-maintained-knowledge-graph-user-step-122) | 2026-11-18 | fix and acceptance: agent-maintained knowledge graph user step (#122) | product | - A disabled run publishes only the status, on head and merge, and posts no comment. A run that cannot read the trusted configuration at all stays `unavailable`. |
 | [46](#entry-docs-design-for-matched-ontology-projection-135) | 2026-11-19 | docs: design for matched ontology projection (#135) | product | The semantic reviewer now sends, by default, only the entries deterministically matched to the Markdown. |
 | [47](#entry-docs-implementation-plans-for-matched-ontology-projection-135) | 2026-11-19 | docs: implementation plans for matched ontology projection (#135) | product | - **Guard against over-budget chunks.** `reviewFiles` checks each request's size after projecting its chunk. A chunk that would exceed the `RequestBudget` is split before it is sent, exactly as on a 413. |
+| [48](#entry-feat-matched-ontology-projection-for-the-semantic-reviewer-135) | 2026-11-19 | feat: matched ontology projection for the semantic reviewer (#135) | product | Each request carries a deterministic matched projection by default: the full rows of the entries its chunk selects, plus the name index, so the model can still cite any entry and every citation is checked against the whole catalog ([ADR… |
 
 ---
 
@@ -1119,5 +1120,27 @@ The design for #135 (PR #136, ADRs 0026–0028) settled what a matched `Ontology
 - The build can proceed from the detailed plan without design questions. A smaller model can run it task by task, because every test it needs is written out and has already been run.
 - The guard adds one size check per request and changes nothing when a chunk's projection fits, which is every case in `full` mode.
 - The #111 acceptance suite now names its mode explicitly. A later change to the default does not silently change what it tests.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-feat-matched-ontology-projection-for-the-semantic-reviewer-135"></a>
+
+## Entry 48 — 2026-11-19 — feat: matched ontology projection for the semantic reviewer (#135)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The semantic reviewer sent the whole ontology projection with every request. The kit is to be rolled out to repositories with much larger ontologies, where the whole projection would no longer fit the request budget and every review would be too large. Today's repositories are small enough that the difference is slight.
+
+## Decision
+
+Each request carries a deterministic matched projection by default: the full rows of the entries its chunk selects, plus the name index, so the model can still cite any entry and every citation is checked against the whole catalog ([ADR 0026](docs/adr/0026-matched-projection-as-an-injected-projector.md), [ADR 0027](docs/adr/0027-deterministic-matching-rule-and-fixed-stop-list.md)). `"full"` restores the old request byte for byte, and the record shows each file's projection ([ADR 0028](docs/adr/0028-projection-setting-and-run-record-summary.md)). Rejected for now: embedding-based retrieval, which is deferred to a later feature.
+
+## Consequences
+
+Request size now grows with the entries a chunk selects rather than with the whole ontology, so larger ontologies stay reviewable. A matched review can miss a paraphrase that shares no name word with its entry; repositories that care more about that than about request size can set `"full"`. The stop list is fixed in the script for every adopter, so changing it changes every repository's requests.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
