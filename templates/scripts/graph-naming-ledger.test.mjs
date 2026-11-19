@@ -142,6 +142,21 @@ test("B39: one defer action creates exactly one labelled issue with each result 
   assert.match(summaryOf(client).body, /Open deferral issues: 1 — /);
 });
 
+test("B35: the open deferral count includes an issue created in the same run when GitHub's list has not caught up", async () => {
+  const client = await setup([r1, r2]);
+  client.state.issues.push({ number: 400, state: "open", title: "earlier", body: "", labels: [{ name: "graph-naming-deferred" }] });
+  const listed = new Set([400]);
+  const getAll = client.getAll;
+  client.getAll = async (path) => (path.startsWith("/issues?") ? (await getAll(path)).filter((issue) => listed.has(issue.number)) : getAll(path));
+  client.comment("/graph-naming defer R1 later", "lead");
+  await recompute(client);
+  assert.equal(client.state.issues.length, 2);
+  assert.match(summaryOf(client).body, /Open deferral issues: 2 — /);
+  listed.add(client.state.issues.at(-1).number);
+  await recompute(client);
+  assert.match(summaryOf(client).body, /Open deferral issues: 2 — /);
+});
+
 test("B40: settlements survive a push that reports the same results, with no second issue or notification", async () => {
   const client = await setup([r1, r2]);
   client.comment("/graph-naming defer R1 later");
