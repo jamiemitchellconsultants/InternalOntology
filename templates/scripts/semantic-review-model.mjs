@@ -18,7 +18,14 @@ export function catalogOntology(markdown, sections) {
   const evidenceKeys = new Set();
   const entries = [];
   const rows = new Map();
+  const groups = new Map();
+  const groupFor = (section, name) => {
+    const key = `${section}:${name}`;
+    if (!groups.has(key)) groups.set(key, { section, name, rows: [] });
+    return groups.get(key);
+  };
   let invariantKey = null;
+  let invariantRow = null;
   const output = ["# Canonical ontology evidence"];
   let current = null;
   let headerSeen = false;
@@ -46,6 +53,7 @@ export function catalogOntology(markdown, sections) {
           evidenceKeys.add(`${current}:${name}`);
           entries.push({ section: current, name });
           rows.set(`${current}:${name}`, line);
+          groupFor(current, name).rows.push(line);
           content.set(current, (content.get(current) ?? 0) + 1);
         }
       }
@@ -53,12 +61,19 @@ export function catalogOntology(markdown, sections) {
       output.push(line);
       const name = /^- \*\*(.+?)\*\*/.exec(line)?.[1]?.replace(/^`|`$/g, "");
       invariantKey = name ? `${current}:${name}` : null;
-      if (name) { evidenceKeys.add(invariantKey); entries.push({ section: current, name }); rows.set(invariantKey, line); }
+      invariantRow = null;
+      if (name) {
+        evidenceKeys.add(invariantKey); entries.push({ section: current, name }); rows.set(invariantKey, line);
+        const group = groupFor(current, name);
+        group.rows.push(line);
+        invariantRow = { group, index: group.rows.length - 1 };
+      }
       content.set(current, (content.get(current) ?? 0) + 1);
       inInvariant = true;
     } else if (inInvariant && /^\s{2,}\S/.test(line)) {
       output.push(line);
       if (invariantKey) rows.set(invariantKey, `${rows.get(invariantKey)}\n${line}`);
+      if (invariantRow) invariantRow.group.rows[invariantRow.index] += `\n${line}`;
     } else if (line.trim()) {
       inInvariant = false;
     }
@@ -72,7 +87,7 @@ export function catalogOntology(markdown, sections) {
   }
   // The valid keys are part of the projection, so the request budget counts them.
   output.push("", "## Evidence keys", "", ...[...evidenceKeys].map((key) => `- ${key}`));
-  return { projection: output.join("\n"), evidenceKeys, entries, rows };
+  return { projection: output.join("\n"), evidenceKeys, entries, rows, groups };
 }
 
 function chunkEnd(text, start, capacity) {

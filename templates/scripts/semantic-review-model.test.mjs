@@ -339,3 +339,29 @@ test("catalog rows keep each entry's source line by evidence key", () => {
   assert.equal(value.rows.get("Entities:Invoice"), "| `Invoice` | canonical bill |");
   assert.equal(value.rows.get("Business Rules & Invariants:Invoice"), "- **`Invoice`** — must have an owner\n  before it is approved.");
 });
+
+const GROUPED = "## Entities\n\n| Name | Description |\n| --- | --- |\n| `Analysis` | a pass |\n| `Speaker` | a person |\n\n" +
+  "## Relationships\n\n| From | Relationship | To | Cardinality |\n| --- | --- | --- | --- |\n" +
+  "| `Analysis` | scores | `Speaker` | 1 → 1 |\n| `Analysis` | writes | `Speaker` | 1 → many |\n\n" +
+  "## Business Rules & Invariants\n\n- **`Analysis`** — first\n  continued.\n- **`Analysis`** — second.\n";
+const GROUPED_SECTIONS = { required: ["Entities", "Relationships", "Business Rules & Invariants"], optional: [] };
+
+test("B8 groups hold every row of an evidence key, in ontology order", () => {
+  const catalog = catalogOntology(GROUPED, GROUPED_SECTIONS);
+  assert.deepEqual([...catalog.groups.keys()], ["Entities:Analysis", "Entities:Speaker", "Relationships:Analysis",
+    "Business Rules & Invariants:Analysis"]);
+  assert.deepEqual(catalog.groups.get("Relationships:Analysis"), { section: "Relationships", name: "Analysis",
+    rows: ["| `Analysis` | scores | `Speaker` | 1 → 1 |", "| `Analysis` | writes | `Speaker` | 1 → many |"] });
+  assert.deepEqual(catalog.groups.get("Business Rules & Invariants:Analysis").rows,
+    ["- **`Analysis`** — first\n  continued.", "- **`Analysis`** — second."]);
+  assert.equal(catalog.rows.get("Relationships:Analysis"), "| `Analysis` | writes | `Speaker` | 1 → many |");
+});
+
+test("B21 the projection text is unchanged by grouping", () => {
+  assert.equal(catalogOntology(GROUPED, GROUPED_SECTIONS).projection,
+    "# Canonical ontology evidence\n\n## Entities\n| Name | Description |\n| --- | --- |\n| `Analysis` | a pass |\n" +
+    "| `Speaker` | a person |\n\n## Relationships\n| From | Relationship | To | Cardinality |\n| --- | --- | --- | --- |\n" +
+    "| `Analysis` | scores | `Speaker` | 1 → 1 |\n| `Analysis` | writes | `Speaker` | 1 → many |\n\n" +
+    "## Business Rules & Invariants\n- **`Analysis`** — first\n  continued.\n- **`Analysis`** — second.\n\n" +
+    "## Evidence keys\n\n- Entities:Analysis\n- Entities:Speaker\n- Relationships:Analysis\n- Business Rules & Invariants:Analysis");
+});
