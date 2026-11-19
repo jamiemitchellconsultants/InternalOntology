@@ -146,3 +146,30 @@ test("a too-large ontology is a non-blocking outcome that names the budget, not 
   assert.match(comment, /ontology is too large for the configured budget; this result permits merge/);
   assert.match(comment, /ONTOLOGY_MAX_REQUEST_CHARS/);
 });
+
+const projection = { path: "docs/a.md", mode: "matched", entriesSent: 3, entriesTotal: 9, largestChars: 812, fullChars: 2400 };
+
+test("B10 the record shows each reviewed file's projection and keeps it in the data", async () => {
+  const client = mockClient();
+  const value = { ...run, findings: [], projections: [projection] };
+  await publishRun(client, pull, value);
+  assert.match(client.comments[0].body, /- Ontology projection for `docs\/a\.md`: matched, 3 of 9 entries with full rows; largest 812 characters \(full projection 2400\)\./);
+  assert.deepEqual((await readLatestRun(client, pull)).projections, [projection]);
+});
+
+test("B15 projections change neither the status nor a record that has none", async () => {
+  const visible = async (value) => { const client = mockClient(); await publishRun(client, pull, value);
+    return client.comments[0].body.replace(/<!--[\s\S]*-->/, ""); };
+  for (const outcome of ["reviewed", "partial", "unavailable", "too-large", "no-eligible"]) {
+    const plain = { ...run, outcome, findings: [] };
+    assert.deepEqual(statusFor({ ...plain, projections: [projection] }), statusFor(plain));
+  }
+  assert.equal(await visible({ ...run, projections: [] }), await visible(run));
+  assert.equal(await visible({ ...run, projections: "junk" }), await visible(run));
+});
+
+test("a projection path cannot open a marker in the record", async () => {
+  const client = mockClient();
+  await publishRun(client, pull, { ...run, findings: [], projections: [{ ...projection, path: "docs/<!--x.md" }] });
+  assert.match(client.comments[0].body, /docs\/&lt;!--x\.md/);
+});
