@@ -82,7 +82,9 @@ test("a grounded finding has a stable ID and a correction", async () => {
 test("clean response reviews a file and duplicate findings collapse", async () => {
   const clean = await reviewFiles(options([{ path: "docs/a.md", text: "canonical" }],
     async () => completion('{"findings":[]}')));
-  assert.deepEqual(clean, { reviewed: ["docs/a.md"], unreviewed: [], findings: [] });
+  const fullChars = catalogOntology(ontology, sections).projection.length;
+  assert.deepEqual(clean, { reviewed: ["docs/a.md"], unreviewed: [], findings: [],
+    projections: [{ path: "docs/a.md", mode: "full", entriesSent: 1, entriesTotal: 1, largestChars: fullChars, fullChars }] });
   const finding = { quote: "wrong term", evidenceKey: "Entities:Invoice", reason: "wrong", suggestion: "use Invoice" };
   const duplicate = await reviewFiles(options([{ path: "docs/a.md", text: "wrong term" }],
     async () => completion(JSON.stringify({ findings: [finding, finding] }))));
@@ -338,4 +340,124 @@ test("catalog rows keep each entry's source line by evidence key", () => {
     { required: ["Entities", "Business Rules & Invariants"], optional: [] });
   assert.equal(value.rows.get("Entities:Invoice"), "| `Invoice` | canonical bill |");
   assert.equal(value.rows.get("Business Rules & Invariants:Invoice"), "- **`Invoice`** — must have an owner\n  before it is approved.");
+});
+
+const GROUPED = "## Entities\n\n| Name | Description |\n| --- | --- |\n| `Analysis` | a pass |\n| `Speaker` | a person |\n\n" +
+  "## Relationships\n\n| From | Relationship | To | Cardinality |\n| --- | --- | --- | --- |\n" +
+  "| `Analysis` | scores | `Speaker` | 1 → 1 |\n| `Analysis` | writes | `Speaker` | 1 → many |\n\n" +
+  "## Business Rules & Invariants\n\n- **`Analysis`** — first\n  continued.\n- **`Analysis`** — second.\n";
+const GROUPED_SECTIONS = { required: ["Entities", "Relationships", "Business Rules & Invariants"], optional: [] };
+
+test("B8 groups hold every row of an evidence key, in ontology order", () => {
+  const catalog = catalogOntology(GROUPED, GROUPED_SECTIONS);
+  assert.deepEqual([...catalog.groups.keys()], ["Entities:Analysis", "Entities:Speaker", "Relationships:Analysis",
+    "Business Rules & Invariants:Analysis"]);
+  assert.deepEqual(catalog.groups.get("Relationships:Analysis"), { section: "Relationships", name: "Analysis",
+    rows: ["| `Analysis` | scores | `Speaker` | 1 → 1 |", "| `Analysis` | writes | `Speaker` | 1 → many |"] });
+  assert.deepEqual(catalog.groups.get("Business Rules & Invariants:Analysis").rows,
+    ["- **`Analysis`** — first\n  continued.", "- **`Analysis`** — second."]);
+  assert.equal(catalog.rows.get("Relationships:Analysis"), "| `Analysis` | writes | `Speaker` | 1 → many |");
+});
+
+test("B21 the projection text is unchanged by grouping", () => {
+  assert.equal(catalogOntology(GROUPED, GROUPED_SECTIONS).projection,
+    "# Canonical ontology evidence\n\n## Entities\n| Name | Description |\n| --- | --- |\n| `Analysis` | a pass |\n" +
+    "| `Speaker` | a person |\n\n## Relationships\n| From | Relationship | To | Cardinality |\n| --- | --- | --- | --- |\n" +
+    "| `Analysis` | scores | `Speaker` | 1 → 1 |\n| `Analysis` | writes | `Speaker` | 1 → many |\n\n" +
+    "## Business Rules & Invariants\n- **`Analysis`** — first\n  continued.\n- **`Analysis`** — second.\n\n" +
+    "## Evidence keys\n\n- Entities:Analysis\n- Entities:Speaker\n- Relationships:Analysis\n- Business Rules & Invariants:Analysis");
+});
+
+const projector = (sizeFor, keysFor = () => []) =>
+  Object.assign(async (_catalog, text) => ({ text: "p".repeat(sizeFor(text)), keys: keysFor(text) }), { mode: "matched" });
+const clean = JSON.stringify({ findings: [] });
+
+test("B17 chunks are planned against the file's projection and sent with their own", async () => {
+  const text = "alpha line\n".repeat(12);
+  const calls = [];
+  const sizes = [];
+  const project = Object.assign(async (catalog, value) => { calls.push(value); return { text: value === text ? "p".repeat(40) : "p".repeat(10), keys: [] }; }, { mode: "matched" });
+  const budget = REQUEST_OVERHEAD + 40 + "docs/a.md".length + 60;
+  const result = await reviewFiles({ ...options([{ path: "docs/a.md", text }], async (_url, request) => {
+    sizes.push(JSON.parse(request.body).messages[0].content.length); return completion(clean); }), project, maxRequestChars: budget });
+  assert.equal(calls[0], text);
+  assert.ok(calls.length > 2);
+  assert.deepEqual(result.reviewed, ["docs/a.md"]);
+  assert.ok(sizes.every((size) => size === sizes[0]));
+});
+
+test("B17 a chunk whose own projection outgrows its file's is split before it is sent", async () => {
+  const text = "alpha line\n".repeat(12);
+  const sent = [];
+  const budget = REQUEST_OVERHEAD + 10 + "docs/a.md".length + 50;
+  const project = projector((value) => (value === text ? 10 : 30));
+  const result = await reviewFiles({ ...options([{ path: "docs/a.md", text }], async (_url, request) => {
+    sent.push(JSON.parse(request.body).messages[1].content); return completion(clean); }), project, maxRequestChars: budget });
+  assert.deepEqual(result.reviewed, ["docs/a.md"]);
+  assert.ok(sent.length > 3);
+  for (const body of sent) {
+    const chunk = body.slice(body.indexOf("Text:\n") + 6);
+    assert.ok(REQUEST_OVERHEAD + 30 + "docs/a.md".length + chunk.length <= budget);
+  }
+});
+
+test("B18 a chunk that cannot fit even at one character is too-large and never sent", async () => {
+  const text = "alpha line\n".repeat(12);
+  let called = false;
+  const budget = REQUEST_OVERHEAD + 10 + "docs/a.md".length + 50;
+  const result = await reviewFiles({ ...options([{ path: "docs/a.md", text }], async () => { called = true; return completion(clean); }),
+    project: projector((value) => (value === text ? 10 : 200)), maxRequestChars: budget });
+  assert.equal(called, false);
+  assert.equal(result.unreviewed[0].code, "too-large");
+  assert.equal(result.unreviewed[0].reason, `ontology too large for the configured budget (projection 200 characters, budget ${budget})`);
+});
+
+test("an empty file is sent once with its projection and records no entries", async () => {
+  let requests = 0;
+  const result = await reviewFiles({ ...options([{ path: "docs/empty.md", text: "" }], async () => { requests++; return completion(clean); }),
+    project: projector(() => 25) });
+  assert.equal(requests, 1);
+  assert.deepEqual(result.reviewed, ["docs/empty.md"]);
+  assert.deepEqual(result.projections, [{ path: "docs/empty.md", mode: "matched", entriesSent: 0, entriesTotal: 1, largestChars: 25,
+    fullChars: catalogOntology(ontology, sections).projection.length }]);
+});
+
+test("B21 without a projector the request and result are today's, with a full summary", async () => {
+  let system;
+  const result = await reviewFiles(options([{ path: "docs/a.md", text: "wrong term" }], async (_url, request) => {
+    system = JSON.parse(request.body).messages[0].content; return completion(clean); }));
+  const catalog = catalogOntology(ontology, sections);
+  assert.ok(system.endsWith(`\n\n${catalog.projection}`));
+  assert.deepEqual(result.projections, [{ path: "docs/a.md", mode: "full", entriesSent: 1, entriesTotal: 1,
+    largestChars: catalog.projection.length, fullChars: catalog.projection.length }]);
+});
+
+test("B10 entries are counted once across chunks and the largest projection is kept", async () => {
+  const text = "Invoice one\n\nplain two\n\nInvoice three\n";
+  const project = projector((value) => (value.includes("Invoice") ? 30 : 12), (value) => (value.includes("Invoice") ? ["Entities:Invoice"] : []));
+  const result = await reviewFiles({ ...options([{ path: "docs/a.md", text }], async () => completion(clean)), project,
+    maxRequestChars: REQUEST_OVERHEAD + 30 + "docs/a.md".length + 14 });
+  assert.deepEqual(result.projections.map(({ entriesSent, largestChars }) => ({ entriesSent, largestChars })), [{ entriesSent: 1, largestChars: 30 }]);
+});
+
+test("B19 each half of a 413 split is projected again", async () => {
+  const seen = [];
+  const project = Object.assign(async (_catalog, value) => { seen.push(value); return { text: "p", keys: [] }; }, { mode: "matched" });
+  let first = true;
+  const text = "a".repeat(40);
+  await reviewFiles({ ...options([{ path: "docs/a.md", text }], async () => {
+    if (first) { first = false; return { ok: false, status: 413 }; } return completion(clean); }), project });
+  assert.deepEqual(seen, [text, text, text.slice(0, 20), text.slice(20)]);
+});
+
+test("B12 B14 B16 citations resolve against the whole catalog whatever the projection sent", async () => {
+  const reply = (key) => async () => completion(JSON.stringify({ findings: [{ quote: "wrong term", evidenceKey: key, reason: "r", suggestion: "s" }] }));
+  const nameOnly = projector(() => 5);
+  const matched = await reviewFiles({ ...options([{ path: "docs/a.md", text: "wrong term" }], reply("Entities:Invoice")), project: nameOnly });
+  const full = await reviewFiles(options([{ path: "docs/a.md", text: "wrong term" }], reply("Entities:Invoice")));
+  assert.equal(matched.findings.length, 1);
+  assert.equal(matched.findings[0].id, full.findings[0].id);
+  const unknown = await reviewFiles({ ...options([{ path: "docs/a.md", text: "wrong term" }], reply("Entities:Nowhere")), project: nameOnly });
+  assert.deepEqual(unknown.unreviewed, [{ path: "docs/a.md", reason: "finding cites an unknown evidence key" }]);
+  assert.deepEqual(unknown.projections, []);
 });

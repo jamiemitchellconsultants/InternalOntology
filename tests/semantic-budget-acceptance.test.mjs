@@ -105,8 +105,9 @@ test("B7 B8 a too-large run publishes success naming the budget, never an outage
     install({ target: repo.dir, projectName: "Widgets", withSemanticReview: true });
     const { model, worker, auth } = await load(repo);
     const client = fakeClient();
+    // #111 proves the full projection's too-large path; #135's acceptance covers matched.
     const config = { ontologyPath: "docs/ontology.md", ignorePaths: [], sections,
-      semanticReview: { enabled: true, model: "m", baseUrl: "http://127.0.0.1:1/v1" } };
+      semanticReview: { enabled: true, model: "m", baseUrl: "http://127.0.0.1:1/v1", projection: "full" } };
     const run = await worker.runSemanticReview({ client, pull, config, auth, env: { ONTOLOGY_MAX_REQUEST_CHARS: "24000" },
       deps: { isEligiblePull: async () => true, triggerRunId: "81:1",
         collectReviewInput: async () => ({ files: [{ path: "docs/a.md", text: "A plain sentence." }],

@@ -36,7 +36,7 @@ const KNOWN_SECTION_KEYS = new Set(["required", "optional"]);
  * @typedef {{ phrase: string, nameInstead: string[] }} BannedAlias
  * @typedef {{ ontologyPath: string, namespaceUri: string, sections: { required: string[], optional: string[] },
  *             allowlist: AllowlistEntry[], bannedAliases: BannedAlias[], ignorePaths: string[],
- *             semanticReview: { enabled: boolean, model: string, baseUrl: string },
+ *             semanticReview: { enabled: boolean, model: string, baseUrl: string, projection: "matched" | "full" },
  *             sourceGraph: { enabled: boolean, root: string, evidence: Record<string, string[]>,
  *                            markdownPath: string, repositoryUrl: string,
  *                            namingReview: { enabled: boolean, model: string, baseUrl: string } } }} OntologyConfig
@@ -85,18 +85,25 @@ function requireEntryArray(value, label) {
   return value;
 }
 
-function validateModelReview(value, label) {
-  if (value === undefined) return { enabled: false, model: "", baseUrl: "" };
+// allowProjection: only semanticReview has a projection setting (ADR 0028); namingReview does not.
+function validateModelReview(value, label, { allowProjection = false } = {}) {
+  const withProjection = (result, projection = "matched") => (allowProjection ? { ...result, projection } : result);
+  if (value === undefined) return withProjection({ enabled: false, model: "", baseUrl: "" });
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${CONFIG_FILENAME}: ${label} must be an object`);
   }
   for (const key of Object.keys(value)) {
-    if (!["enabled", "model", "baseUrl"].includes(key)) {
+    if (!["enabled", "model", "baseUrl", ...(allowProjection ? ["projection"] : [])].includes(key)) {
       throw new Error(`${CONFIG_FILENAME}: unknown key "${label}.${key}"`);
     }
   }
   if (typeof value.enabled !== "boolean") {
     throw new Error(`${CONFIG_FILENAME}: ${label}.enabled must be a boolean`);
+  }
+  // Compared with undefined, not ??, so an explicit null is rejected rather than defaulted.
+  const projection = value.projection === undefined ? "matched" : value.projection;
+  if (allowProjection && !["matched", "full"].includes(projection)) {
+    throw new Error(`${CONFIG_FILENAME}: ${label}.projection must be "matched" or "full", got ${JSON.stringify(value.projection)}`);
   }
   const model = value.model === undefined ? "" : value.model;
   const baseUrl = value.baseUrl === undefined ? "" : value.baseUrl;
@@ -120,7 +127,7 @@ function validateModelReview(value, label) {
       throw new Error(`${CONFIG_FILENAME}: ${label}.baseUrl must not contain a credential`);
     }
   }
-  return { enabled: value.enabled, model: model.trim(), baseUrl: baseUrl.trim().replace(/\/+$/, "") };
+  return withProjection({ enabled: value.enabled, model: model.trim(), baseUrl: baseUrl.trim().replace(/\/+$/, "") }, projection);
 }
 
 function validateSourceGraph(value, ontologyPath) {
@@ -298,7 +305,7 @@ export function validateConfig(raw, deps = {}) {
     allowlist,
     bannedAliases,
     ignorePaths: requireStringArray(input.ignorePaths, "ignorePaths"),
-    semanticReview: validateModelReview(input.semanticReview, "semanticReview"),
+    semanticReview: validateModelReview(input.semanticReview, "semanticReview", { allowProjection: true }),
     sourceGraph: validateSourceGraph(input.sourceGraph, ontologyPath),
   };
 }

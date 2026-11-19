@@ -84,6 +84,73 @@ that figure has not been measured with prompts near the budget against any gatew
 `ONTOLOGY_MODEL_TIMEOUT_MS` if requests time out. A hung model call can hold a request for that long, and
 chunks are reviewed one after another. The semantic request sets no output cap of its own.
 
+## Ontology projection
+
+Each request carries an `OntologyProjection`: the part of the ontology the model is shown for that piece
+of the file. Its `ProjectionMode` comes from `semanticReview.projection` in `ontology.config.json`, read
+from the default branch:
+
+| Value | What each request carries |
+|---|---|
+| `"matched"` (the default) | the full rows of the ontology entries the piece of the file selects, plus the name index: every evidence key, one per line |
+| `"full"` | the whole ontology projection, exactly as before this setting existed |
+
+To send the whole ontology again:
+
+```json
+"semanticReview": { "enabled": true, "model": "...", "baseUrl": "...", "projection": "full" }
+```
+
+Any other value, including `null`, makes the review job fail with an error naming
+`semanticReview.projection` and the value.
+
+### How entries are matched
+
+Matching is deterministic: the same file and ontology always select the same entries. An entry is
+selected when the Markdown contains:
+- its exact name, as a whole word with the same case;
+- a banned-alias phrase whose suggested name is the entry, as whole words in any case;
+- one of its name words, alone or with "s" or "es" added. Name words come from splitting the name at
+  case changes and keeping words of four letters or more. PascalCase words in the Markdown are split the
+  same way, so "RemovalStatus" contains "removal";
+- for an enum, one of the words of its values.
+
+These words never select anything, because they appear in too many names:
+data, info, item, kind, list, name, type, value, values, state, status, record, result, config, event, events.
+
+Then one hop is added, and only one: every entry named in backticks in a selected entry's rows, and every
+Relationships row that starts or ends at a selected entry, with the entries at both of its ends. The name
+index is always sent in full, so the model can cite any entry, and a cited key is checked against the
+whole ontology whichever mode is used.
+
+### What the record shows
+
+The pull request comment gains one line per reviewed file, after the "Eligible" line:
+
+```text
+- Ontology projection for `docs/a.md`: matched, 12 of 130 entries with full rows; largest 8410 characters (full projection 31977).
+```
+
+It names the mode, how many entries were sent with full rows across the file's requests, the total
+number of entries, the largest projection sent for that file, and the size of the whole projection.
+Status descriptions do not change.
+
+### Limits
+
+A matched review can miss a paraphrase that shares no name word with the entry it paraphrases, because
+that entry's rows are not sent; the model sees only its name in the index. Set `"full"` if catching such
+paraphrases matters more than request size.
+
+Matched mode is what keeps a large ontology inside the request budget. The whole projection grows by
+the full rows of every entry added. A matched request grows only by the rows of the entries that piece of
+the file selects, plus one line per entry in the name index. With a small ontology the two are close,
+because the one hop pulls in most related entries: over tracked Markdown, the median matched request was
+75% to 99% of the whole projection in the repositories measured when this mode was introduced. For such
+a repository `"full"` costs little.
+
+Older reviewer scripts reject `projection` as an unknown key, so update the kit first, then set
+`"full"`. Leaving the key out needs no update.
+
 ## Reading "not reviewed" reasons
 
 When a file could not be assessed, the pull request comment lists it as "Not reviewed" with a fixed

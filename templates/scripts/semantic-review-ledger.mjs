@@ -50,6 +50,14 @@ function renderRun(run, dismissals) {
     `PR #${run.prNumber} · revision \`${run.headSha}\` · workflow run ${run.triggerRunId}`,
     `Eligible: ${run.eligible.length}; reviewed: ${run.reviewed.length}; not reviewed: ${run.unreviewed.length}.`,
   ];
+  // Optional (ADR 0028): records from earlier kit versions have no projections and render as before.
+  if (Array.isArray(run.projections)) {
+    for (const item of run.projections) {
+      lines.push(`- Ontology projection for \`${display(item.path)}\`: ${display(item.mode)}, ${display(item.entriesSent)} of `
+        + `${display(item.entriesTotal)} entries with full rows; largest ${display(item.largestChars)} characters `
+        + `(full projection ${display(item.fullChars)}).`);
+    }
+  }
   for (const item of run.unreviewed) lines.push(`- Not reviewed: \`${display(item.path)}\` — ${display(item.reason)}`);
   const dismissed = new Set(dismissals.filter((item) => item.headSha === run.headSha).map((item) => item.findingId));
   for (const item of run.findings) {

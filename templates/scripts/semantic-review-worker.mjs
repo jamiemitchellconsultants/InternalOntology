@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { loadConfig } from "./ontology-config.mjs";
 import { createGitHubClient, resolvePulls, isEligiblePull, collectReviewInput } from "./semantic-review-github.mjs";
 import { reviewFiles } from "./semantic-review-model.mjs";
+import { createProjector } from "./ontology-projection.mjs";
 import { createModelAuth, AuthConfigError } from "./llm-auth.mjs";
 import { resolveRequestBudget } from "./request-budget.mjs";
 import { publishPending, publishRun, readLatestRun, reconcileStatus } from "./semantic-review-ledger.mjs";
@@ -92,10 +93,12 @@ export async function runSemanticReview({ client, pull, config, modelFetch = fet
   }
   let result;
   try {
+    // The ?? fallbacks serve hand-built configs; a parsed config always carries both (ADR 0028).
+    const project = createProjector({ mode: config.semanticReview.projection ?? "matched", bannedAliases: config.bannedAliases ?? [] });
     result = await api.reviewFiles({ files: input.files, ontologyText: input.ontologyText,
       sections: config.sections, model: config.semanticReview.model, baseUrl: config.semanticReview.baseUrl,
       auth, headSha: pull.head.sha, fetchImpl: modelFetch,
-      maxRequestChars: budget.maxRequestChars, timeoutMs: budget.modelTimeoutMs });
+      maxRequestChars: budget.maxRequestChars, timeoutMs: budget.modelTimeoutMs, project });
   } catch {
     run.unreviewed.push({ path: "<model>", reason: "semantic model could not assess the selected files" });
     return finish();
@@ -103,6 +106,7 @@ export async function runSemanticReview({ client, pull, config, modelFetch = fet
   run.reviewed = result.reviewed;
   run.unreviewed.push(...result.unreviewed);
   run.findings = result.findings;
+  if (Array.isArray(result.projections)) run.projections = result.projections;
   const onlyTooLarge = run.unreviewed.length > 0 && run.unreviewed.every((item) => item.code === "too-large");
   run.outcome = run.unreviewed.length === 0 ? "reviewed" :
     run.reviewed.length || run.findings.length ? "partial" :

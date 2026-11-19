@@ -93,6 +93,9 @@ export function buildPlan(options) {
         plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
       }
     }
+    for (const path of ["scripts/ontology-projection.mjs", "scripts/ontology-projection.test.mjs"]) {
+      plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
+    }
     for (const name of ["request", "review", "dismiss"]) {
       plan.push({ template: `github/workflows/ontology-semantic-${name}.yml`,
         dest: `.github/workflows/ontology-semantic-${name}.yml`, substitute: false, ownedBy: "kit" });
