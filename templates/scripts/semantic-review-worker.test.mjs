@@ -251,3 +251,52 @@ test("valid settings reach the model module as the budget and timeout", async ()
   assert.equal(seen.maxRequestChars, 200_000);
   assert.equal(seen.timeoutMs, 300_000);
 });
+
+const enabledConfig = { ...config, bannedAliases: [{ phrase: "bill", nameInstead: ["Invoice"] }],
+  semanticReview: { enabled: true, model: "m", baseUrl: "https://model.example/v1", projection: "matched" } };
+
+test("B6 B20 the worker passes a matched projector, with the banned aliases, by default", async () => {
+  const { catalogOntology } = await import("./semantic-review-model.mjs");
+  let seen;
+  const support = deps({ reviewFiles: async (args) => { seen = args; return { reviewed: ["docs/a.md"], unreviewed: [], findings: [] }; } });
+  const { projection, ...withoutKey } = enabledConfig.semanticReview;
+  await runSemanticReview({ client: {}, pull, config: { ...enabledConfig, semanticReview: withoutKey },
+    auth: authFor("k"), env: {}, deps: support.value });
+  assert.equal(seen.project.mode, "matched");
+  const catalog = catalogOntology(input.ontologyText, config.sections);
+  assert.deepEqual(seen.project(catalog, "the bill").keys, ["Entities:Invoice"]);
+  assert.deepEqual(seen.project(catalog, "nothing").keys, []);
+});
+
+test("B21 projection full reaches the model module", async () => {
+  let seen;
+  const support = deps({ reviewFiles: async (args) => { seen = args; return { reviewed: ["docs/a.md"], unreviewed: [], findings: [] }; } });
+  await runSemanticReview({ client: {}, pull, config: { ...enabledConfig, semanticReview: { ...enabledConfig.semanticReview, projection: "full" } },
+    auth: authFor("k"), env: {}, deps: support.value });
+  assert.equal(seen.project.mode, "full");
+});
+
+test("B10 the run record carries the projections, and has none when the model module gives none", async () => {
+  const summary = [{ path: "docs/a.md", mode: "matched", entriesSent: 1, entriesTotal: 1, largestChars: 10, fullChars: 20 }];
+  const withSummary = deps({ reviewFiles: async () => ({ reviewed: ["docs/a.md"], unreviewed: [], findings: [], projections: summary }) });
+  const run = await runSemanticReview({ client: {}, pull, config: enabledConfig, auth: authFor("k"), env: {}, deps: withSummary.value });
+  assert.deepEqual(run.projections, summary);
+  assert.equal(run.outcome, "reviewed");
+  const without = deps({ reviewFiles: async () => ({ reviewed: ["docs/a.md"], unreviewed: [], findings: [] }) });
+  const older = await runSemanticReview({ client: {}, pull, config: enabledConfig, auth: authFor("k"), env: {}, deps: without.value });
+  assert.equal("projections" in older, false);
+});
+
+test("B12 a finding has the same identity in matched and full mode", async () => {
+  const reply = { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ findings: [
+    { quote: "wrong term", evidenceKey: "Entities:Invoice", reason: "r", suggestion: "s" }] }) } }] }) };
+  const ids = [];
+  for (const projection of ["matched", "full"]) {
+    const support = deps();
+    const run = await runSemanticReview({ client: {}, pull, config: { ...enabledConfig, semanticReview: { ...enabledConfig.semanticReview, projection } },
+      auth: authFor("k"), env: {}, modelFetch: async () => reply, deps: support.value });
+    ids.push(run.findings.map((item) => item.id));
+  }
+  assert.equal(ids[0].length, 1);
+  assert.deepEqual(ids[0], ids[1]);
+});
