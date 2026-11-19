@@ -864,3 +864,14 @@ test("an installed graph naming review passes its shipped tests alone", async ()
     assert.match(readFileSync(join(repo.dir, "docs/graph-naming-review.md"), "utf8"), /\/graph-naming accept/);
   });
 });
+
+test("the projection module is planned with the semantic reviewer only", () => {
+  for (const dest of ["scripts/ontology-projection.mjs", "scripts/ontology-projection.test.mjs"]) {
+    const hits = buildPlan({ withSemanticReview: true }).filter((entry) => entry.dest === dest);
+    assert.equal(hits.length, 1, dest);
+    assert.equal(hits[0].ownedBy, "kit");
+  }
+  for (const options of [{}, { withDriftReview: true }, { withSourceGraph: true, withGraphNamingReview: true }]) {
+    assert.equal(buildPlan(options).some((entry) => entry.dest.includes("ontology-projection")), false, JSON.stringify(options));
+  }
+});
