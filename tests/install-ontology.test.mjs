@@ -249,7 +249,7 @@ test("detectAgentFile proposes creating AGENTS.md when neither exists", async ()
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { install, detectDefaultBranch } from "../bin/install-ontology.mjs";
+import { install, detectDefaultBranch, resolveDefaultBranch } from "../bin/install-ontology.mjs";
 
 test("detectDefaultBranch reports the target's actual current branch", async () => {
   await withTempRepo(async (repo) => {
@@ -258,6 +258,44 @@ test("detectDefaultBranch reports the target's actual current branch", async () 
     assert.equal(detectDefaultBranch(repo.dir), repo.git("symbolic-ref", "--short", "HEAD").trim());
     repo.git("checkout", "-b", "trunk");
     assert.equal(detectDefaultBranch(repo.dir), "trunk");
+  });
+});
+
+function remoteHead(repo, branch) {
+  repo.git("commit", "--allow-empty", "-q", "-m", "base");
+  repo.git("update-ref", `refs/remotes/origin/${branch}`, "HEAD");
+  repo.git("symbolic-ref", "refs/remotes/origin/HEAD", `refs/remotes/origin/${branch}`);
+}
+
+test("detectDefaultBranch prefers the remote's default branch over a checked-out feature branch (#133)", async () => {
+  await withTempRepo(async (repo) => {
+    remoteHead(repo, "main");
+    repo.git("checkout", "-q", "-b", "feature/upgrade-kit");
+    assert.equal(detectDefaultBranch(repo.dir), "main");
+    assert.deepEqual(resolveDefaultBranch(repo.dir), { branch: "main", source: "origin/HEAD" });
+    assert.deepEqual(resolveDefaultBranch(repo.dir, "trunk"), { branch: "trunk", source: "--default-branch" });
+  });
+});
+
+test("resolveDefaultBranch says when it fell back to the current branch or to main (#133)", async () => {
+  await withTempRepo(async (repo) => {
+    repo.git("checkout", "-q", "-b", "trunk");
+    assert.deepEqual(resolveDefaultBranch(repo.dir), { branch: "trunk", source: "current branch" });
+  });
+  assert.deepEqual(resolveDefaultBranch("/nonexistent-path-for-ontology-kit-test"), { branch: "main", source: "fallback" });
+});
+
+test("an upgrade run on a feature branch writes the remote's default branch into push triggers (#133)", async () => {
+  await withTempRepo(async (repo) => {
+    remoteHead(repo, "main");
+    repo.git("checkout", "-q", "-b", "feature/upgrade-kit");
+    const result = install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
+    assert.deepEqual(result.defaultBranch, { branch: "main", source: "origin/HEAD" });
+    for (const name of ["ontology-lint.yml", "source-graph-check.yml", "source-graph-render.yml"]) {
+      const text = readFileSync(join(repo.dir, ".github/workflows", name), "utf8");
+      assert.match(text, /branches: \["main"\]/, name);
+      assert.doesNotMatch(text, /feature\/upgrade-kit/, name);
+    }
   });
 });
 
