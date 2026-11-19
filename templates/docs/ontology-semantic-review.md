@@ -141,9 +141,12 @@ A matched review can miss a paraphrase that shares no name word with the entry i
 that entry's rows are not sent; the model sees only its name in the index. Set `"full"` if catching such
 paraphrases matters more than request size.
 
-The saving is modest. Measured over tracked Markdown, the median request was about 75% of the whole
-projection for JEPA-Speech, 83% for InternalOntology and 99% for EventBooking, mostly because the one
-hop pulls in related entries. A small, densely related ontology saves almost nothing.
+Matched mode is what keeps a large ontology inside the request budget. The whole projection grows by
+the full rows of every entry added. A matched request grows only by the rows of the entries that piece of
+the file selects, plus one line per entry in the name index. With a small ontology the two are close,
+because the one hop pulls in most related entries: over tracked Markdown, the median matched request was
+75% to 99% of the whole projection in the repositories measured when this mode was introduced. For such
+a repository `"full"` costs little.
 
 Older reviewer scripts reject `projection` as an unknown key, so update the kit first, then set
 `"full"`. Leaving the key out needs no update.
