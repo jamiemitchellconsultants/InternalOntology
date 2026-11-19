@@ -60,6 +60,7 @@ by rewriting the original.
 | [44](#entry-feat-agent-maintained-knowledge-graph-and-graph-naming-review-122) | 2026-11-18 | feat: agent-maintained knowledge graph and graph naming review (#122) | product | The build follows the plan, with two rulings. - The existing installer option test now expects the new `withGraphNamingReview: false` default. |
 | [45](#entry-fix-and-acceptance-agent-maintained-knowledge-graph-user-step-122) | 2026-11-18 | fix and acceptance: agent-maintained knowledge graph user step (#122) | product | - A disabled run publishes only the status, on head and merge, and posts no comment. A run that cannot read the trusted configuration at all stays `unavailable`. |
 | [46](#entry-docs-design-for-matched-ontology-projection-135) | 2026-11-19 | docs: design for matched ontology projection (#135) | product | The semantic reviewer now sends, by default, only the entries deterministically matched to the Markdown. |
+| [47](#entry-docs-implementation-plans-for-matched-ontology-projection-135) | 2026-11-19 | docs: implementation plans for matched ontology projection (#135) | product | - **Guard against over-budget chunks.** `reviewFiles` checks each request's size after projecting its chunk. A chunk that would exceed the `RequestBudget` is split before it is sent, exactly as on a 413. |
 
 ---
 
@@ -1089,5 +1090,34 @@ Rejected alternatives:
 ## Consequences
 
 Adopters get smaller requests after reinstalling with `--force`, but the saving is modest, mostly because of the one hop. A paraphrase that shares no name word with its entry is reviewed against the name index only. The pull request record now shows, for each reviewed file, what it was checked against. Setting `"full"` before updating the kit gives an invalid-config run. The stop list is fixed, so changing it needs a kit release. Embedding retrieval can later replace the projector without reshaping the reviewer.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-docs-implementation-plans-for-matched-ontology-projection-135"></a>
+
+## Entry 47 — 2026-11-19 — docs: implementation plans for matched ontology projection (#135)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The design for #135 (PR #136, ADRs 0026–0028) settled what a matched `OntologyProjection` contains and how the reviewer uses it. The plan step had to turn that into tasks without re-deciding anything. Two things the design assumed did not hold exactly:
+- **B17's subset claim.** The design assumed a chunk never selects more ontology than its whole file. A chunk cut inside an oversized line can create a word or a whole-name match the file lacks, so its own projection can be larger than the one the plan was budgeted against.
+- **The default changes an existing test.** Making `matched` the default changes what an existing #111 acceptance test exercises. That test relied on the full projection of a 60 KB ontology not fitting 24,000 characters, but the name index alone fits.
+
+## Decision
+
+- **Guard against over-budget chunks.** `reviewFiles` checks each request's size after projecting its chunk. A chunk that would exceed the `RequestBudget` is split before it is sent, exactly as on a 413. At one character it is reported `too-large` with the budget reason. Nothing over budget is ever sent, and the projector interface stays as ADR 0026 defines it.
+- **Pin the #111 test to `"full"`.** That test now sets `projection: "full"`, so it keeps proving the full projection's too-large path. The new acceptance test covers the matched one (a budget below the name index).
+- **Keep the model module's tests independent of the projector.** `semantic-review-model.mjs` and its test use stub projectors and never import the projection module, because graph-naming-only installs copy them without it.
+- **Reject `null` explicitly.** `semanticReview.projection` defaults only when the key is absent. An explicit `null` is rejected like any other value.
+
+## Consequences
+
+- The build can proceed from the detailed plan without design questions. A smaller model can run it task by task, because every test it needs is written out and has already been run.
+- The guard adds one size check per request and changes nothing when a chunk's projection fits, which is every case in `full` mode.
+- The #111 acceptance suite now names its mode explicitly. A later change to the default does not silently change what it tests.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
