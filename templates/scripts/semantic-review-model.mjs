@@ -131,11 +131,12 @@ export function resolveEvidenceKey(cited, catalog) {
   const separator = cited.indexOf(":");
   const prefix = separator === -1 ? "" : cited.slice(0, separator);
   const name = separator === -1 ? cited : cited.slice(separator + 1);
-  const candidates = catalog.entries.filter((entry) => entry.name === name);
+  // One candidate per evidence key: several rows (for example Relationships rows sharing a From) share a key.
+  const candidates = [...new Set(catalog.entries.filter((entry) => entry.name === name).map((entry) => entry.section))];
   if (candidates.length === 0) throw new ReplyError("finding cites an unknown evidence key");
-  if (candidates.length === 1) return `${candidates[0].section}:${name}`;
-  const matching = prefix ? candidates.filter((entry) => sectionKey(entry.section) === sectionKey(prefix)) : [];
-  if (matching.length === 1) return `${matching[0].section}:${name}`;
+  if (candidates.length === 1) return `${candidates[0]}:${name}`;
+  const matching = prefix ? candidates.filter((section) => sectionKey(section) === sectionKey(prefix)) : [];
+  if (matching.length === 1) return `${matching[0]}:${name}`;
   throw new ReplyError("finding cites an ambiguous evidence key");
 }
 
