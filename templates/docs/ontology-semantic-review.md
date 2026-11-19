@@ -141,9 +141,9 @@ A matched review can miss a paraphrase that shares no name word with the entry i
 that entry's rows are not sent; the model sees only its name in the index. Set `"full"` if catching such
 paraphrases matters more than request size.
 
-The saving is modest. Measured over tracked Markdown, the median request was about 74% of the whole
-projection for JEPA-Speech, 78% for InternalOntology and 95% for EventBooking, mostly because the one
-hop pulls in related entries.
+The saving is modest. Measured over tracked Markdown, the median request was about 75% of the whole
+projection for JEPA-Speech, 83% for InternalOntology and 99% for EventBooking, mostly because the one
+hop pulls in related entries. A small, densely related ontology saves almost nothing.
 
 Older reviewer scripts reject `projection` as an unknown key, so update the kit first, then set
 `"full"`. Leaving the key out needs no update.
