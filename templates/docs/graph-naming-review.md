@@ -18,6 +18,8 @@ Add a `namingReview` object inside `sourceGraph` in `ontology.config.json` and m
 "namingReview": { "enabled": true, "model": "your-model", "baseUrl": "https://model.example/v1" }
 ```
 
+`ontology.config.json` is an input of the generated source graph Markdown, so this change makes the Markdown stale. Commit the setting first, then run `node scripts/render-source-graph.mjs`, stage the regenerated Markdown, check it with `node scripts/render-source-graph.mjs --check --staged` and commit it in the same pull request. Otherwise the `source-graph-markdown` check fails.
+
 The review reads this setting, the model, the endpoint and the ontology sections only from the default branch, never from the pull request. Without the setting, or with `enabled` false, every pull request gets a successful "disabled" status and nothing else is posted.
 
 The review job runs in the `ontology-semantic-review` environment, which should be restricted to the default branch. It uses the same secrets and variables as the semantic reviewer: either the `ONTOLOGY_SEMANTIC_LLM_API_KEY` secret, or the `KEYCLOAK_CLIENT_SECRET` secret with the `ONTOLOGY_OIDC_TOKEN_URL` and `ONTOLOGY_OIDC_CLIENT_ID` variables, plus the optional `ONTOLOGY_MAX_REQUEST_CHARS` and `ONTOLOGY_MODEL_TIMEOUT_MS` variables. A repository that already runs the semantic review needs no new secret. Otherwise create the environment, restrict its deployment branches to the default branch, and add the secret or the OIDC settings there.

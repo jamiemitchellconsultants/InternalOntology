@@ -194,6 +194,7 @@ export async function publishState({ client, pull, run = null, readRole = readPe
   const blob = (path) => `${repoUrl}/blob/${latest.headSha}/${path.split("/").map(encodeURIComponent).join("/")}`;
   const resultByKey = new Map(latest.results.map((result) => [result.key, result]));
   let labelReady = false;
+  const created = new Set();
   for (const command of commands) {
     const record = records[command.id];
     if (!record || record.decision !== "deferred" || record.issue || !record.keys.length) continue;
@@ -207,6 +208,7 @@ export async function publishState({ client, pull, run = null, readRole = readPe
     const issue = await client.post("/issues", { title: `Deferred graph naming results from #${pull.number}: ${deferred.map((r) => ledger.labels[r.key]).join(", ")}`,
       body, labels: [DEFERRED_LABEL] });
     record.issue = issue.number;
+    created.add(issue.number);
     for (const key of record.keys) { const settlement = settlements.get(key); if (settlement?.commandId === command.id) settlement.issue = issue.number; }
   }
   for (const command of commands) {
@@ -227,7 +229,9 @@ export async function publishState({ client, pull, run = null, readRole = readPe
     }
   }
 
-  const open = (await client.getAll(`/issues?state=open&labels=${DEFERRED_LABEL}&per_page=100`)).filter((issue) => !issue.pull_request).length;
+  // GitHub's issue list can lag behind an issue this run just created, so count those too (#132).
+  const listed = (await client.getAll(`/issues?state=open&labels=${DEFERRED_LABEL}&per_page=100`)).filter((issue) => !issue.pull_request);
+  const open = new Set([...listed.map((issue) => issue.number), ...created]).size;
   const counts = countResults(latest, settlements);
   const body = `${renderSummary({ ledger, run: latest, counts, settlements, ignored, notCurrent, openDeferrals: open,
     deferralsUrl: `${repoUrl}/issues?q=is%3Aissue+is%3Aopen+label%3A${DEFERRED_LABEL}` })}\n\n${encodeLedger(ledger)}`;

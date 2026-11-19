@@ -214,22 +214,41 @@ export function detectAgentFile(target) {
   return { path: "AGENTS.md", created: true };
 }
 
+function symbolicRef(target, ref) {
+  try {
+    return execFileSync("git", ["-C", target, "symbolic-ref", "--short", ref], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
 /**
- * The target repository's current branch, for the lint workflow's `push: branches:` trigger.
- * Falls back to "main" whenever detection cannot produce an answer — not only a missing `git`
- * binary, but also a target in a state `symbolic-ref` cannot resolve (e.g. a detached HEAD).
+ * The target's default branch, for the workflows' `push: branches:` triggers, and where it came from.
+ * The remote's default branch (`origin/HEAD`) wins over the checked-out branch, so an upgrade run on a
+ * feature branch does not write that branch into the triggers (#133). A repository with no remote HEAD
+ * falls back to its current branch, and one where neither resolves (no git, a detached HEAD) to "main".
+ * @param {string} target
+ * @param {string} [override] the --default-branch option
+ * @returns {{ branch: string, source: "--default-branch" | "origin/HEAD" | "current branch" | "fallback" }}
+ */
+export function resolveDefaultBranch(target, override) {
+  if (override) return { branch: override, source: "--default-branch" };
+  const remote = symbolicRef(target, "refs/remotes/origin/HEAD");
+  if (remote.startsWith("origin/") && remote.length > "origin/".length) return { branch: remote.slice("origin/".length), source: "origin/HEAD" };
+  const current = symbolicRef(target, "HEAD");
+  if (current) return { branch: current, source: "current branch" };
+  return { branch: "main", source: "fallback" };
+}
+
+/**
  * @param {string} target
  * @returns {string}
  */
 export function detectDefaultBranch(target) {
-  try {
-    const branch = execFileSync("git", ["-C", target, "symbolic-ref", "--short", "HEAD"], {
-      encoding: "utf8",
-    }).trim();
-    return branch || "main";
-  } catch {
-    return "main";
-  }
+  return resolveDefaultBranch(target).branch;
 }
 
 // fileURLToPath, not new URL(...).pathname: the latter percent-encodes the path, so a directory
@@ -304,11 +323,12 @@ export function install(options) {
     );
   }
 
+  const defaultBranch = resolveDefaultBranch(target, options.defaultBranch);
   const values = {
     PROJECT_NAME: options.projectName ?? basename(target),
     ONTOLOGY_PATH: ontologyPath,
     ONTOLOGY_TTL_PATH: ontologyPath.replace(/\.md$/, ".ttl"),
-    DEFAULT_BRANCH: options.defaultBranch ?? detectDefaultBranch(target),
+    DEFAULT_BRANCH: defaultBranch.branch,
     GRAPH_ROOT: sourceGraphRoot,
   };
   values.NAMESPACE_URI = `https://ontology.example/${slugifyForNamespace(values.PROJECT_NAME)}#`;
@@ -366,7 +386,7 @@ export function install(options) {
   if (!dryRun) writeFileSync(agentPath, agentText);
   written.push(agentFile.path);
 
-  return { written, skipped, agentFile: agentFile.path, enumTestExample, configNotice };
+  return { written, skipped, agentFile: agentFile.path, enumTestExample, configNotice, defaultBranch };
 }
 
 const VALUE_OPTIONS = {
@@ -400,8 +420,8 @@ const USAGE =
   "  --project-name <name>    Name used in the ontology's title. Defaults to the target directory's name.\n" +
   "  --ontology-path <path>   Where the ontology file goes. Defaults to docs/ontology.md. Must be\n" +
   "                           repository-relative, with no \"..\" segment.\n" +
-  "  --default-branch <name>  Branch the lint workflow triggers on. Defaults to the target's current\n" +
-  "                           branch (detected via git), falling back to \"main\".\n" +
+  "  --default-branch <name>  Branch the workflows' push triggers fire on. Defaults to the remote's\n" +
+  "                           default branch (origin/HEAD), else the current branch, else \"main\".\n" +
   "  --with-drift-review      Also install the advisory semantic reviewer, its tests, workflow and runbook.\n" +
   "  --with-semantic-review   Install the opt-in blocking semantic reviewer and its setup runbook.\n" +
   "  --with-source-graph      Install the opt-in source graph and its workflow.\n" +
@@ -461,6 +481,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const result = install(options);
       const verb = options.dryRun ? "would write" : "wrote";
       console.log(`ontology kit: ${verb} ${result.written.length} file(s) into ${options.target}`);
+      const { branch, source } = result.defaultBranch;
+      console.log(`default branch for workflow push triggers: ${branch} (from ${source}${source === "current branch" || source === "fallback" ? "; pass --default-branch to override" : ""})`);
       for (const file of result.written) console.log(`  + ${file}`);
       for (const { dest, ownedBy } of result.skipped) {
         if (ownedBy === "adopter") {
