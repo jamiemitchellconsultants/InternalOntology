@@ -116,6 +116,9 @@ against each repository's configured sections. The scratch scripts are not commi
 
 ## Analyst: behaviours
 
+Unless a behaviour names its own "when", the "when" is: the `SemanticReviewWorker` reviews the pull
+request's changed eligible Markdown.
+
 ### Terms
 
 New in `docs/ontology.md`: the value object `OntologyProjection` and the enum `ProjectionMode`
