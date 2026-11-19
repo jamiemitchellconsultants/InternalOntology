@@ -40,14 +40,14 @@ test("a minimal config is filled in with empty defaults", () => {
     allowlist: [],
     bannedAliases: [],
     ignorePaths: [],
-    semanticReview: { enabled: false, model: "", baseUrl: "" },
+    semanticReview: { enabled: false, model: "", baseUrl: "", projection: "matched" },
     sourceGraph: { enabled: false, root: "docs/source-knowledge-graph", evidence: {}, markdownPath: "docs/source-knowledge-graph/README.md", repositoryUrl: "", namingReview: { enabled: false, model: "", baseUrl: "" } },
   });
 });
 
 test("semantic review is disabled when the section is absent", () => {
   const value = validateConfig(minimal, { ontologyExists: () => true });
-  assert.deepEqual(value.semanticReview, { enabled: false, model: "", baseUrl: "" });
+  assert.deepEqual(value.semanticReview, { enabled: false, model: "", baseUrl: "", projection: "matched" });
 });
 
 test("enabled semantic review accepts a maintainer endpoint and model", () => {
@@ -55,7 +55,7 @@ test("enabled semantic review accepts a maintainer endpoint and model", () => {
     enabled: true, model: "review-model", baseUrl: "https://model.example/v1",
   } }, { ontologyExists: () => true });
   assert.deepEqual(value.semanticReview, {
-    enabled: true, model: "review-model", baseUrl: "https://model.example/v1",
+    enabled: true, model: "review-model", baseUrl: "https://model.example/v1", projection: "matched",
   });
 });
 
@@ -443,4 +443,27 @@ test("B34: an enabled namingReview needs the source graph enabled", () => {
   assert.throws(() => validateConfig(naming({ enabled: true, model: "m", baseUrl: "https://m.example" }, false), ok),
     /sourceGraph\.namingReview requires sourceGraph\.enabled/);
   assert.equal(validateConfig(naming({ enabled: false }, false), ok).sourceGraph.namingReview.enabled, false);
+});
+
+test("B20 B21 semanticReview.projection defaults to matched and accepts matched or full", () => {
+  const settings = { enabled: true, model: "m", baseUrl: "https://model.example/v1" };
+  assert.equal(validateConfig(minimal, { ontologyExists: () => true }).semanticReview.projection, "matched");
+  assert.equal(validateConfig({ ...minimal, semanticReview: settings }, { ontologyExists: () => true }).semanticReview.projection, "matched");
+  for (const projection of ["matched", "full"]) {
+    assert.equal(validateConfig({ ...minimal, semanticReview: { ...settings, projection } },
+      { ontologyExists: () => true }).semanticReview.projection, projection);
+  }
+});
+
+test("B22 any other projection value is rejected, naming the key and the value", () => {
+  for (const [projection, shown] of [["Full", '"Full"'], ["", '""'], [null, "null"], [1, "1"], ["embedding", '"embedding"']]) {
+    assert.throws(() => validateConfig({ ...minimal, semanticReview: { enabled: false, projection } }, { ontologyExists: () => true }),
+      (error) => error.message.includes("semanticReview.projection") && error.message.includes(shown), JSON.stringify(projection));
+  }
+});
+
+test("B22 projection is not a sourceGraph.namingReview setting", () => {
+  assert.throws(() => validateConfig({ ...minimal, sourceGraph: { enabled: false, namingReview: { enabled: false, projection: "full" } } },
+    { ontologyExists: () => true }), /unknown key "sourceGraph\.namingReview\.projection"/);
+  assert.equal("projection" in validateConfig(minimal, { ontologyExists: () => true }).sourceGraph.namingReview, false);
 });
