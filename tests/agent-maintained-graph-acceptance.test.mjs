@@ -605,3 +605,14 @@ test("B44: settling writes only statuses, comments, labels and issues, never the
     }
   });
 });
+
+test("B34: the installed runbook says enabling the review needs the graph Markdown regenerated in the same pull request", async () => {
+  await withTempRepo(async (repo) => {
+    install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true, withGraphNamingReview: true });
+    const doc = read(repo, "docs/graph-naming-review.md");
+    const enable = flat(doc.slice(doc.indexOf("## Enable it"), doc.indexOf("## Require the status")));
+    assert.match(enable, /`ontology\.config\.json` is an input of the generated source graph Markdown/);
+    assert.match(enable, /run `node scripts\/render-source-graph\.mjs`/);
+    assert.match(enable, /`source-graph-markdown` check fails/);
+  });
+});
