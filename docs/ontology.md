@@ -64,12 +64,12 @@ Internal components that are ours to build. Named so that specs can describe the
 |------|------------|-------------|
 | `TargetRepository` | `path` | The git repository (must already contain `.git`) the `Installer` writes into. Identity persists across repeated installs and upgrades of the same repository. |
 | `Ontology` | `ontologyPath`, one Markdown table per section | The canonical vocabulary document a `TargetRepository` maintains (`docs/ontology.md` by default). Identity persists as sections and rows are added, renamed, or removed over the repository's life; this file, in this repository, is one instance of it. |
-| `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths`, optional `semanticReview`, optional `sourceGraph` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific settings through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. The `semanticReview` settings are read from the trusted default branch, not an unmerged PR. The optional `sourceGraph` settings locate adopter-owned graph data, select eligible evidence roles, and configure a repository browser URL and optional generated Markdown path within the excluded graph root. |
+| `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths`, optional `semanticReview`, optional `sourceGraph` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific settings through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. The `semanticReview` settings are read from the trusted default branch, not an unmerged PR. The optional `sourceGraph` settings locate adopter-owned graph data, select eligible evidence roles, and configure a repository browser URL and optional generated Markdown path within the excluded graph root. The optional `semanticReview.projection` setting chooses the `ProjectionMode` of the semantic reviewer and is accepted only under `semanticReview`. |
 | `SourceKnowledgeGraph` | source repository, effective Git revision, Turtle resources for assertions, declared coverage, file review records | A reviewable, versioned account of repository facts and clearly marked inferences that extends beyond the canonical vocabulary in `Ontology`. It is stored as Turtle with the source repository; its effective revision is the Git commit containing it, not a hash embedded in its own files. An agent prepares it before a pull request; its assertions ground later agent work and may support downstream views. Missing coverage is explicit. |
 | `GraphNode` | stable identity, kind, label, canonical ontology IRI when kind is concept | A repository concept, source element, dependency, or other subject or object named by a `GraphAssertion`. A concept node links to its canonical `Ontology` IRI instead of reusing the ontology class IRI as a graph node. Its identity remains stable when a label or source location changes. |
 | `GraphAssertion` | stable identity, subject, relationship, object, basis, evidence | One reviewable claim in a `SourceKnowledgeGraph` about a repository fact or relationship. Its basis distinguishes a directly evidenced claim from an inference supported by source observations. Its identity persists when the same claim is refreshed at a later source revision. |
 | `AgentInstructionFile` | one of `AGENTS.md`, `CLAUDE.md` | Whichever file a `TargetRepository` already treats as authoritative for agent instructions (`AGENTS.md` preferred, `CLAUDE.md` otherwise, `AGENTS.md` created if neither exists). Carries the spliced `OntologyProtocol` and optionally `GraphAgentProtocol`. |
-| `SemanticReviewRun` | pull request, revision, eligible files, reviewed files, outcome | One attempt to assess changed Markdown against the ontology. Its outcome controls the current semantic check; a later run supersedes it even when that later run cannot review. |
+| `SemanticReviewRun` | pull request, revision, eligible files, reviewed files, `OntologyProjection` summary per reviewed file, outcome | One attempt to assess changed Markdown against the ontology. Its outcome controls the current semantic check; a later run supersedes it even when that later run cannot review. |
 | `GraphNamingRun` | pull request, revision, eligible graph nodes, reviewed nodes, outcome | One model-assisted comparison of the names of a pull request revision's added or changed `GraphNode`s, and of nodes whose denoted ontology item the revision renames or removes, with its proposed `Ontology`. Separate from `GraphChecker`, which it never changes; a run that cannot review permits merge. |
 
 ---
@@ -89,6 +89,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `GraphRefreshRecord` | covered path, current Git blob ID or deletion, review outcome | The current review of one covered source path for graph impact, including a decision that no graph fact changed. Replaced when that path changes; it is a snapshot rather than an event log. |
 | `OidcClientConfig` | `ONTOLOGY_OIDC_TOKEN_URL`, `ONTOLOGY_OIDC_CLIENT_ID`, `ONTOLOGY_OIDC_CLIENT_SECRET` | The three settings that select OIDC client-credentials authentication. All or none must be set; a partial set is an error, never a silent fallback. |
 | `RequestBudget` | `ONTOLOGY_MAX_REQUEST_CHARS`, `ONTOLOGY_MODEL_TIMEOUT_MS` | The complete-request character budget and the model timeout the `DriftReviewer` and the `SemanticReviewWorker` run with. Defaults apply when a setting is unset or empty; a non-integer or non-positive value is an error. When the system prompt plus ontology projection leave too little room, the review is skipped with an explanation rather than failed. |
+| `OntologyProjection` | `ProjectionMode`, name index, full rows, entries sent | The ontology evidence in one `SemanticReviewWorker` request. It always contains the name index, the evidence key of every ontology entry, and adds the full rows of every entry (`full`) or of the entries selected for that Markdown (`matched`). The same Markdown, ontology and mode always give the same projection. |
 | `Violation` | `file`, `line`, `column`, `message` | One flagged occurrence the `TermChecker` reports: an unknown backticked term, or a banned-alias paraphrase. |
 | `SemanticFinding` | revision, file, passage, ontology evidence, suggested correction | A claim made by a `SemanticReviewRun` that changed Markdown conflicts with the ontology. Its identity is stable across reruns of the same revision and is reconsidered on a new revision. |
 | `FindingDismissal` | `SemanticFinding`, revision, maintainer, reason | A maintainer's recorded decision to disregard one `SemanticFinding` for one PR revision. It survives reruns of that revision and expires when the PR changes. |
@@ -108,6 +109,7 @@ enum lock test catches.
 | `SemanticOutcome` | `reviewed`, `partial`, `unavailable`, `disabled`, `out-of-scope`, `no-eligible`, `too-large` | The outcome of one `SemanticReviewRun` or `GraphNamingRun`, which controls that review's fixed status. `too-large` is non-blocking like `unavailable`, but records that the `RequestBudget` left no room for the ontology projection, so the status and the pull request record name the budget instead of an outage. |
 | `SettlementDecision` | `accepted`, `rejected`, `deferred` | The decision a `NamingSettlement` records. `accepted` makes the `GraphNamingResult` a required correction that holds the merge until a revision no longer reports it; `rejected` and `deferred` let the pull request proceed. |
 | `AuthMode` | `Oidc`, `Static`, `None` | Which credential a `ModelAuthProvider` resolved: a complete `OidcClientConfig`, the static key variable, or nothing. `Oidc` wins over `Static`; a partial `OidcClientConfig` is an error, not `Static`. |
+| `ProjectionMode` | `matched`, `full` | How the `SemanticReviewWorker` builds each `OntologyProjection`. `matched`, the default, sends full rows only for the entries selected for the Markdown in the request; `full` sends every row, as before this mode existed. Set by `semanticReview.projection` in `OntologyConfig`. |
 
 ---
 
@@ -153,6 +155,8 @@ enum lock test catches.
 | `SemanticReviewWorker` | produces | `SemanticReviewRun` | 1 → many |
 | `SemanticReviewWorker` | reads | `OntologyConfig` | many → 1 |
 | `SemanticReviewWorker` | reads | `Ontology` | many → 1 |
+| `SemanticReviewWorker` | builds | `OntologyProjection` | 1 → many (one per request) |
+| `OntologyProjection` | follows | `ProjectionMode` | many → 1 |
 | `SemanticStatusPublisher` | publishes | `SemanticReviewRun` | 1 → many |
 | `SemanticDismissalHandler` | records | `FindingDismissal` | 1 → many |
 | `GraphNamingTrigger` | starts | `GraphNamingWorker` | many → 1 |
@@ -203,6 +207,9 @@ enum lock test catches.
 - **`SemanticReviewWorker`** — never reports an ontology that outgrew the `RequestBudget` as a service or
   configuration outage, and never passes it without saying so: a too-large ontology is stated as such in
   the status description and the pull request record.
+- **`OntologyProjection`** — always contains the name index of every ontology entry, so a finding may
+  cite any entry, including one sent by name only. It never sends one row of an evidence key without
+  the other rows that share that key, and the same inputs always give the same projection.
 - **`DriftReviewer`** — never fails a job merely because the ontology outgrew the `RequestBudget`;
   it reports a skipped review. A malformed `RequestBudget` setting is a configuration error and
   does fail.
