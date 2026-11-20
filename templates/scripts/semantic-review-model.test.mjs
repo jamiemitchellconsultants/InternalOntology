@@ -461,3 +461,18 @@ test("B12 B14 B16 citations resolve against the whole catalog whatever the proje
   assert.deepEqual(unknown.unreviewed, [{ path: "docs/a.md", reason: "finding cites an unknown evidence key" }]);
   assert.deepEqual(unknown.projections, []);
 });
+
+test("B7 the catalog lists every relationship row with its key, From and To, in ontology order", () => {
+  const source = "## Entities\n\n| Name | Description |\n| --- | --- |\n| `Analysis` | a pass |\n| `Speaker` | a person |\n\n" +
+    "## Relationships\n\n| From | Relationship | To | Cardinality |\n| --- | --- | --- | --- |\n" +
+    "| `Analysis` | scores | `Speaker` | 1 → 1 |\n| `Speaker` | reads | `Analysis` | 1 → many |\n| `Analysis` | writes | `Speaker` | 1 → many |\n";
+  const catalog = catalogOntology(source, { required: ["Entities", "Relationships"], optional: [] });
+  assert.deepEqual(catalog.relationships, [
+    { evidenceKey: "Relationships:Analysis", from: "Analysis", to: "Speaker" },
+    { evidenceKey: "Relationships:Speaker", from: "Speaker", to: "Analysis" },
+    { evidenceKey: "Relationships:Analysis", from: "Analysis", to: "Speaker" },
+  ]);
+  assert.deepEqual(catalogOntology(source, { required: ["Entities"], optional: [] }).relationships, []);
+  assert.equal(catalogOntology(source, { required: ["Entities", "Relationships"], optional: [] }).projection,
+    catalogOntology(source, { required: ["Entities", "Relationships"], optional: [] }).projection);
+});
