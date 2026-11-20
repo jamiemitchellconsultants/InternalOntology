@@ -1,6 +1,6 @@
 # 0026 — Matched projection as an injected projector in its own module
 
-- **Status:** accepted
+- **Status:** accepted; amended by ADR 0030 (planning by paragraph in the projector)
 - **Date:** 2026-11-19
 - **Feature:** #135 (docs/features/matched-ontology-projection/)
 
