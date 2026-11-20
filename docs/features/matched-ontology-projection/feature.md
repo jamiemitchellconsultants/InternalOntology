@@ -257,6 +257,8 @@ New in `docs/ontology.md`: the value object `OntologyProjection` and the enum `P
 
 U11 and U13 are settled in ADRs 0027 and 0026. The amendment of 2026-11-20 answers the user's acceptance pushback with three more ADRs: 0029 (reading the ontology source), 0030 (planning by paragraph) and 0031 (relationships only, and the grouped name index). They amend 0026 and 0027 where noted.
 
+The build review identified a GitHub transport limit and a budget boundary for indivisible characters. ADR 0034 specifies the raw ontology read. ADR 0035 puts the final piece-size check and the line too-large diagnosis in the matched planner.
+
 Measured with the shipped catalog, before building:
 - Relationships only made the median matched request 52% of the full projection on JEPA-Speech's 213 tracked Markdown files and 65% on InternalOntology's 126, against 79% and 85% with the one hop. All ten recorded findings are kept.
 - The grouped name index is 40% to 49% smaller, which lifts the ceiling at the default budget from about 6,700 entries to about 10,000 to 11,500.
@@ -266,16 +268,16 @@ Measured with the shipped catalog, before building:
 
 | Component | Responsibility | Serves |
 | --- | --- | --- |
-| `ontology-projection.mjs` (kit-owned, installed with `--with-semantic-review`) | `createProjector({ mode, bannedAliases })` returns a projector with `mode` and `project(catalog, text)`, and in `matched` mode also `plan(catalog, files, maxRequestChars)`. The matched projector prepares an index once per catalog: name words, enum value words, exact names and each entry's relationships. Through the index it does the base match (B2 to B6) and adds the relationships of matched entries (B7), with every row of their keys (B8). It renders the selected rows in ontology order, followed by the grouped name index and its one explanatory sentence (B24). `plan` packs paragraphs, then lines, then pieces of a line, and returns the two too-large causes (B17, B18). `full` returns `catalog.projection` and has no `plan`. No I/O. | B1–B9, B13, B17, B18, B21, B24 |
-| `semantic-review-model.mjs` | `catalogOntology` gains the additive `relationships` field (evidence key, From, To) beside `groups`; its other fields are unchanged. `reviewFiles` uses the projector's `plan` when it has one, and `chunkFiles` otherwise. It projects every request, and each half of a 413 split, with that text's own projection, and keeps the pre-send guard. It returns `projections`. Evidence-key resolution and finding identity are unchanged. | B1, B8, B10, B12–B14, B16–B19, B21, B25 |
-| `semantic-review-github.mjs` (`collectReviewInput`) | Reads the ontology source at `ttlPathFor(ontologyPath)` at the reviewed revision. It renders the source with `parseTurtle`, `triplesToModel` and `renderOntologyMarkdown`, and returns the rendered text as `ontologyText`. On 404 it reads `ontology.md` as today. A source that cannot be read or parsed fails the read, as an unreadable proposed ontology does today. | B25 |
+| `ontology-projection.mjs` (kit-owned, installed with `--with-semantic-review`) | `createProjector({ mode, bannedAliases })` provides `mode` and projection, and in `matched` mode also `plan(catalog, files, maxRequestChars)`. The matched projector indexes name words, enum value words, exact names and relationships once per catalog. It selects matching entries and their relationships with every row of each selected key. It renders the selected rows in ontology order, followed by the grouped name index. `plan` packs paragraphs, lines, and pieces of a line. It verifies each piece against its own projection, preserves whole code points, and owns both too-large causes. `full` returns `catalog.projection` and has no `plan`. No I/O. | B1–B9, B13, B17, B18, B21, B24 |
+| `semantic-review-model.mjs` | `catalogOntology` adds the `relationships` field (evidence key, From, To) beside `groups`. `reviewFiles` uses the projector's `plan` when it has one and `chunkFiles` otherwise. It projects and guards every request independently, including each half of a 413 split, and returns `projections`. It resolves evidence keys and computes finding identities as before. | B1, B8, B10, B12–B14, B16–B19, B21, B25 |
+| `semantic-review-github.mjs` (`collectReviewInput`) | Reads the ontology source at `ttlPathFor(ontologyPath)` as raw Contents bytes pinned to the reviewed head SHA. It decodes strict UTF-8, renders Turtle with `parseTurtle`, `triplesToModel` and `renderOntologyMarkdown`, and returns `ontologyText`. A source 404 triggers a raw read of the configured Markdown at the same revision. Other read, decoding or parsing failures propagate to the worker. | B25 |
 | `owl-ontology.mjs` | Exports `ttlPathFor`, moved from `build-ontology.mjs`, which re-exports it. Parsing and rendering are unchanged. | B25 |
 | `ontology-config.mjs` (`OntologyConfig` parsing) | Unchanged: `semanticReview.projection`, `"matched"` by default, or `"full"`. | B20–B22 |
 | `semantic-review-worker.mjs` (`SemanticReviewWorker`) | Unchanged: it builds the projector from `config.semanticReview.projection` and `config.bannedAliases`, passes it to `reviewFiles`, copies `projections` into the run record, and maps too-large files to the `too-large` outcome. | B6, B10, B12, B15, B18, B20, B21 |
 | `semantic-review-ledger.mjs` (`SemanticStatusPublisher`) | Unchanged: one projection line per reviewed file, and each not-reviewed reason as `plan` gives it. `statusFor` is unchanged. | B10, B15, B18 |
 | `Installer` (`bin/install-ontology.mjs`) | Unchanged. `owl-ontology.mjs` is part of every installation. | B20 |
 | Runbook `templates/docs/ontology-semantic-review.md`, README | Cover: the modes; the matching rules and stop list; relationships only; that the reviewer reads `ontology.ttl` and falls back to `ontology.md`; the grouped name index; planning by paragraph; the two too-large causes; the record line; the paraphrase caveat, now including neighbours; and updating the kit before setting `"full"`. | B23 |
-| Tests | Shipped `ontology-projection.test.mjs` adds B7 and B8 fixtures for relationships only, and cases for B17 packing, B18's causes and B24. It asserts that every planned chunk's projection equals `project` of its text. The model, github (`.ttl` read, fallback and B25 equality on a fixture) and ledger tests sit beside the scripts. The acceptance tests in `tests/` are regenerated by the user phase; they are committed locally as b1a2a41 on `feature/matched-ontology-projection/user`. | B1–B25 |
+| Tests | The shipped projector tests cover relationship selection, packing, both too-large causes and the grouped index. They compare every planned chunk with `project` of its own text, including cuts that add a match and boundaries next to surrogate pairs. The GitHub tests cover raw source above the inline-content limit, raw Markdown fallback, source errors and B25 equivalence. The model tests cover the pre-send guard and 413 splitting. The user phase regenerates the acceptance tests from local commit b1a2a41 on `feature/matched-ontology-projection/user`. | B1–B25 |
 | Ontology | `OntologyProjection` updated in the analyst amendment. Nothing further. | B10, B21 |
 
 ### Structure
@@ -284,13 +286,13 @@ Measured with the shipped catalog, before building:
 flowchart LR
   C[ontology.config.json on the default branch] --> K[ontology-config.mjs]
   K -->|semanticReview.projection, bannedAliases| W[SemanticReviewWorker]
-  T[ontology.ttl at the reviewed revision] -->|parse, render| R[collectReviewInput]
-  MD[ontology.md, only when the .ttl is absent] --> R
+  T[ontology.ttl at the reviewed revision] -->|raw Contents, parse, render| R[collectReviewInput]
+  MD[ontology.md fallback at the reviewed revision] -->|raw Contents| R
   R -->|ontologyText| M[reviewFiles]
   W -->|createProjector| P[ontology-projection.mjs]
   W -->|project| M
   O[catalogOntology with groups and relationships] --> M
-  M -->|matched: plan by paragraph| P
+  M -->|matched: plan and check each piece| P
   M -->|full: chunkFiles as today| M
   M -->|per request and per 413 half| P
   M --> G[Model endpoint]
@@ -301,13 +303,13 @@ flowchart LR
 
 A request's system message is the unchanged system prompt followed by the projection text. In `matched` mode, that is:
 - the section headings and rows of the selected entries, in ontology order;
-- `## Evidence keys`, the one explanatory sentence, and one line per section listing its names.
+- `## Evidence keys`, the one explanatory sentence, and one line per section listing its names. An empty catalog omits the example key from the sentence.
 
 In `full` mode, it is `catalog.projection`. Findings resolve against the whole catalog, so a name-only citation is accepted (B14) and an unknown key is rejected as today (B16).
 
 ### Deployment and runtime
 
-There is no new service, workflow or repository variable. Adopters reinstall with `--force --with-semantic-review`, and the next semantic review uses `matched` (B20). The reviewer makes one contents request for the ontology source at the reviewed revision, with the same read permission it uses today, and a second for `ontology.md` only when the source is absent.
+Adopters reinstall with `--force --with-semantic-review`, and the next semantic review uses `matched` (B20). The reviewer uses its existing repository Contents read permission. It makes one raw request for the ontology source at the reviewed revision, and requests the Markdown fallback only on a source 404.
 
 `semanticReview.projection` is read, like the rest of `semanticReview`, from the trusted default branch, and should be set only after the kit update (ADR 0028). Selection and planning run in the review job before each model call. They are deterministic and need no network. The matched projector's index is built once per run.
 
@@ -331,15 +333,15 @@ There is no new service, workflow or repository variable. Adopters reinstall wit
 | B14 | `semantic-review-model.mjs` (resolution against the whole catalog) |
 | B15 | `semantic-review-ledger.mjs`, `semantic-review-worker.mjs` |
 | B16 | `semantic-review-model.mjs` |
-| B17 | `ontology-projection.mjs` (`plan`), `semantic-review-model.mjs` (pre-send guard) |
-| B18 | `ontology-projection.mjs` (`plan`), `semantic-review-worker.mjs`, `semantic-review-ledger.mjs` |
+| B17 | `ontology-projection.mjs` (packing and piece budgets), `semantic-review-model.mjs` (pre-send guard) |
+| B18 | `ontology-projection.mjs` (name-index and original-line diagnoses), `semantic-review-worker.mjs`, `semantic-review-ledger.mjs` |
 | B19 | `semantic-review-model.mjs` |
 | B20 | `ontology-config.mjs`, `semantic-review-worker.mjs`, `Installer` |
 | B21 | `ontology-projection.mjs`, `semantic-review-model.mjs` (`chunkFiles` when there is no `plan`), `semantic-review-worker.mjs` |
 | B22 | `ontology-config.mjs` |
 | B23 | runbook, README |
 | B24 | `ontology-projection.mjs` |
-| B25 | `semantic-review-github.mjs`, `owl-ontology.mjs` |
+| B25 | `semantic-review-github.mjs` (pinned raw Contents and fallback), `owl-ontology.mjs` (shared parser and renderer) |
 
 ### Decisions
 
@@ -349,3 +351,5 @@ There is no new service, workflow or repository variable. Adopters reinstall wit
 - [ADR 0029: semantic review reads the ontology source, falling back to Markdown](../../adr/0029-semantic-review-reads-the-ontology-source.md) (U15, B25)
 - [ADR 0030: matched planning by paragraph, inside the projector](../../adr/0030-matched-planning-by-paragraph-in-the-projector.md) (U5, U17, B17, B18)
 - [ADR 0031: relationships of matched entries, and a grouped name index](../../adr/0031-relationships-only-and-grouped-name-index.md) (U2, U3, B7, B24)
+- [ADR 0034: semantic review reads raw ontology contents](../../adr/0034-semantic-review-reads-raw-ontology-contents.md) (B25, amends ADR 0029)
+- [ADR 0035: matched planner budgets whole code points](../../adr/0035-matched-planner-budgets-whole-code-points.md) (B17, B18, amends ADR 0030)
