@@ -198,6 +198,8 @@ test("B23 the installed runbook describes the modes, the record line and the cav
     install({ target: repo.dir, projectName: "Widgets", withSemanticReview: true });
     const doc = readFileSync(join(repo.dir, "docs/ontology-semantic-review.md"), "utf8");
     for (const expected of ['"matched"', '"full"', "Ontology projection for", "paraphrase", "update the kit first",
+      "ontology.ttl", "ontology.md", "other end", "Each key is a section name", "paragraph",
+      "ontology name index too large for the configured budget", "selects too much of the ontology for the configured budget",
       "data, info, item, kind, list, name, type, value, values, state, status, record, result, config, event, events"]) {
       assert.ok(doc.includes(expected), `runbook lacks ${expected}`);
     }
