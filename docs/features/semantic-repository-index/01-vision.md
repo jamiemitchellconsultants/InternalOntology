@@ -34,7 +34,16 @@ without embedding the whole repository again.
    embeddings, excluded files stay outside the index and its model requests, and credentials stay
    outside the published asset.
 
+5. **Make unfamiliar code easier to work in.** Developers and agents spend less effort deciding
+   where to look and trust the results enough to start from them. Pair a short before and after
+   note from developers on a reviewed set of real tasks (how hard it was to find the relevant
+   files, and how far they trusted the first results) with the cost of discovery per task: files
+   opened, search calls, and input tokens an agent spends before its first edit. Compare tasks
+   run with and without the index.
+
 Set performance targets after measuring the baseline on representative adopting repositories.
+Outcome 5 starts as an observation. The perceived benefit is the primary evidence, and the
+token measure shows whether it comes with a lower or higher cost.
 
 ## Scope
 
