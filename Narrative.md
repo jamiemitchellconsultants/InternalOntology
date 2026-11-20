@@ -66,6 +66,7 @@ by rewriting the original.
 | [50](#entry-docs-define-semantic-repository-index-vision) | 2026-11-20 | docs: define semantic repository index vision | product | Offer semantic repository search as an opt-in capability. The repository owner supplies the embedding model and approves the indexed content. Each checkout uses a rebuildable, Git-ignored vector store. |
 | [51](#entry-docs-define-semantic-repository-index-behaviours) | 2026-11-20 | docs: define semantic repository index behaviours | product | Search uses approved content from the current Git commit, including local commits, with an explicit refresh after a change to the commit or source scope. An exact compatible release asset can be searched with zero source re-embedding. |
 | [52](#entry-docs-amend-matched-ontology-projection-plans-after-acceptance-pushback-1) | 2026-11-20 | docs: amend matched ontology projection plans after acceptance pushback (#135) | product | - **A projector stays a callable function**, carrying `mode` and, when matched, `plan`. ADR 0030 describes an object with `mode`, `project` and `plan`. |
+| [53](#entry-docs-design-semantic-repository-index-architecture) | 2026-11-20 | docs: design semantic repository index architecture | product | Use a checkout-local CLI and separately approved committed configuration. Read the selected Git tree, use exact cosine search, and store a portable vector file with atomic promotion. |
 
 ---
 
@@ -1277,3 +1278,31 @@ Rejected: dropping the per-file pre-pass for every projector. It would have chan
 - Lite mode still has no command to reopen later phases after an amendment. This PR records the manual step; a command for it is a possible follow-up to the feature tool.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-docs-design-semantic-repository-index-architecture"></a>
+
+## Entry 53 — 2026-11-20 — docs: design semantic repository index architecture
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted behaviours require source references tied to a Git commit, owner-supplied embeddings, incremental refresh, and portable release assets that teammates can reuse. The Kit also needs to preserve a complete local index through a failed build or import and keep endpoint and source approval independent of the checkout's current branch.
+
+## Decision
+
+Use a checkout-local CLI and separately approved committed configuration. Read the selected Git tree, use exact cosine search, and store a portable vector file with atomic promotion. One OpenAI-compatible adapter serves local and remote embedding models. Authenticated release exchange verifies the chosen release, its pushed source commit, and publisher authority.
+
+- [ADR 0029 · Local CLI and trusted settings](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect/docs/adr/0029-semantic-index-local-cli-and-trusted-settings.md)
+- [ADR 0030 · Pinned source and exact search](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect/docs/adr/0030-semantic-index-pinned-source-and-exact-search.md)
+- [ADR 0031 · Portable file and atomic promotion](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect/docs/adr/0031-semantic-index-portable-file-and-promotion.md)
+- [ADR 0032 · Embedding adapter](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect/docs/adr/0032-semantic-index-embedding-adapter.md)
+- [ADR 0033 · Release exchange](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect/docs/adr/0033-semantic-index-release-exchange.md)
+
+## Consequences
+
+Adopting repositories can search without a vector service and share a single compressed asset without adding generated vectors to Git history. Repositories choose their model and publishing scope. The pilot will measure the size and latency of the portable file and exact search before the Kit takes on a vector engine or additional provider adapters.
+
+AI-Fingerprint: sha256:5095f31f39a2
