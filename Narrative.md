@@ -62,6 +62,7 @@ by rewriting the original.
 | [46](#entry-docs-design-for-matched-ontology-projection-135) | 2026-11-19 | docs: design for matched ontology projection (#135) | product | The semantic reviewer now sends, by default, only the entries deterministically matched to the Markdown. |
 | [47](#entry-docs-implementation-plans-for-matched-ontology-projection-135) | 2026-11-19 | docs: implementation plans for matched ontology projection (#135) | product | - **Guard against over-budget chunks.** `reviewFiles` checks each request's size after projecting its chunk. A chunk that would exceed the `RequestBudget` is split before it is sent, exactly as on a 413. |
 | [48](#entry-feat-matched-ontology-projection-for-the-semantic-reviewer-135) | 2026-11-19 | feat: matched ontology projection for the semantic reviewer (#135) | product | Each request carries a deterministic matched projection by default: the full rows of the entries its chunk selects, plus the name index, so the model can still cite any entry and every citation is checked against the whole catalog ([ADR… |
+| [49](#entry-docs-design-semantic-repository-index-architecture) | 2026-11-20 | docs: design semantic repository index architecture | product | Use a checkout-local CLI and separately approved committed configuration. Read the selected Git tree, use exact cosine search, and store a portable vector file with atomic promotion. |
 
 ---
 
@@ -1144,3 +1145,31 @@ Each request carries a deterministic matched projection by default: the full row
 Request size now grows with the entries a chunk selects rather than with the whole ontology, so larger ontologies stay reviewable. A matched review can miss a paraphrase that shares no name word with its entry; repositories that care more about that than about request size can set `"full"`. The stop list is fixed in the script for every adopter, so changing it changes every repository's requests.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-docs-design-semantic-repository-index-architecture"></a>
+
+## Entry 49 — 2026-11-20 — docs: design semantic repository index architecture
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted behaviours require source references tied to a Git commit, owner-supplied embeddings, incremental refresh, and portable release assets that teammates can reuse. The Kit also needs to preserve a complete local index through a failed build or import and keep endpoint and source approval independent of the checkout's current branch.
+
+## Decision
+
+Use a checkout-local CLI and separately approved committed configuration. Read the selected Git tree, use exact cosine search, and store a portable vector file with atomic promotion. One OpenAI-compatible adapter serves local and remote embedding models. Authenticated release exchange verifies the chosen release, its pushed source commit, and publisher authority.
+
+- [ADR 0029 · Local CLI and trusted settings](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect/docs/adr/0029-semantic-index-local-cli-and-trusted-settings.md)
+- [ADR 0030 · Pinned source and exact search](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect/docs/adr/0030-semantic-index-pinned-source-and-exact-search.md)
+- [ADR 0031 · Portable file and atomic promotion](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect/docs/adr/0031-semantic-index-portable-file-and-promotion.md)
+- [ADR 0032 · Embedding adapter](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect/docs/adr/0032-semantic-index-embedding-adapter.md)
+- [ADR 0033 · Release exchange](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect/docs/adr/0033-semantic-index-release-exchange.md)
+
+## Consequences
+
+Adopting repositories can search without a vector service and share a single compressed asset without adding generated vectors to Git history. Repositories choose their model and publishing scope. The pilot will measure the size and latency of the portable file and exact search before the Kit takes on a vector engine or additional provider adapters.
+
+AI-Fingerprint: sha256:5095f31f39a2
