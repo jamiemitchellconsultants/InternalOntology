@@ -114,3 +114,80 @@ The scenarios cover the six outcomes in the [PO] Vision above. Search already re
 ## Terms
 
 New domain terms, added to `docs/ontology.md`: `SearchTokenLog`, `TokenEstimate`, `ResponseCap`, `PassageExtract`, `ShowIndexedPassage`, `ReportIndexTokenUse`. Existing terms used: `SemanticRepositoryIndex`, `SemanticSearchResult`, `IndexSourceScope`, `OntologyConfig`, `SourceKnowledgeGraph`, `GraphReader`, `GraphCoverage`.
+
+## [Architect] Structure
+
+The [Analyst behaviours](#analyst-behaviours) govern this design. It extends the installed index script and its protocol text. It adds no service, dependency or workflow. Search stays location-only; the new work is a passage command, a token estimate with a local log, a response cap, and shorter agent guidance.
+
+### Components
+
+| Component | Responsibility | Behaviours |
+| --- | --- | --- |
+| Token estimator and limiter | New module in `templates/scripts/`. Computes the `TokenEstimate` of a response as characters divided by four, rounded up, and applies the `ResponseCap` by cutting at the largest whole line or result that fits, adding a truncation marker that states what was returned and what remains. | B2, B6, B8, B9, B10 |
+| Token log | New module. Appends one counts-only `SearchTokenLog` record per search or passage response to `.ontology-index/token-log.jsonl`, rotates once at 1 MiB keeping one previous file, and never fails a command when a write fails. Reads both files for reports. | B1, B3 |
+| Passage reader | Extends the Git source module with a bounded read of the lines of one path at the indexed commit. Checks the commit equals the indexed commit, the path is in the effective `IndexSourceScope`, and the range lies within the file. Produces a `PassageExtract`. | B5, B8, B10 |
+| Command entry point | The existing `scripts/semantic-index.mjs` gains `show` and `usage` and a `--compact` flag on JSON search. It adds the estimate to every response, calls the limiter and the log, and leaves output without the flag byte-identical. | B1–B3, B5–B8 |
+| Trusted configuration | `ontology-config.mjs` validates the optional `semanticIndex.responseCap` as a positive integer in estimated tokens and supplies the default of 4000. The value is read from the trusted committed configuration only. | B8, B9 |
+| Agent protocol | The shortened `templates/protocol/semantic-index-protocol.md`, spliced by the `Installer`, with the rule to consult the `GraphReader` first when the graph is enabled. | B13, B15 |
+| Pilot harness | Extends `scripts/measure-semantic-index.mjs` to compare estimates with an independent count, relevance with compact output, the largest response against the cap, per-task discovery cost from session records, protocol size and fidelity, and graph-first savings. | B4, B7, B10–B12, B14, B16 |
+
+### Structure
+
+```mermaid
+flowchart LR
+  CLI[search, show and usage commands] --> Config[Trusted configuration and cap]
+  CLI --> Index[Local index search]
+  CLI --> Reader[Passage reader]
+  Reader --> Git[Indexed Git commit]
+  Index --> Limiter[Estimator and limiter]
+  Reader --> Limiter
+  Limiter --> Out[Response with estimate]
+  Limiter --> Log[Token log in .ontology-index]
+  Log --> Usage[usage report]
+  Protocol[Agent protocol] -.guides.-> Agent[Coding agent]
+  Agent -->|graph first| Graph[GraphReader]
+  Agent -->|otherwise| CLI
+```
+
+The estimator and limiter sit between every output path and the response, so each response is measured, capped and logged in one place. The passage reader shares scope and blob reading with the source module, so `show` cannot return text the index would not have indexed. The log is written after the response is built and its failure is reported, not raised.
+
+### Data
+
+`.ontology-index/token-log.jsonl` holds one JSON line per response: time, command, count of results or lines returned, estimated tokens, and whether the response was truncated. It holds no query text, source text or path. The directory is already Git-ignored by the opt-in installer, so the log is never committed.
+
+### Deployment and runtime
+
+- The new module and changes ship in `templates/scripts/` as byte-identical installed scripts under the existing `--with-semantic-index` opt-in. An adopter upgrades by reinstalling; the Kit's config validator must be upgraded before `responseCap` is set.
+- Runtime needs only Git and Node 20+ built-ins. `show` and `usage` use local files and Git and make no model or network request.
+- The shortened protocol text reaches adopters through the existing splice on install or upgrade. Adopters that have not upgraded keep the old text and the old behaviour.
+- The pilot runs on representative adopting repositories with pinned commits and the same reviewed questions as the original index pilot.
+
+### Traceability
+
+| Behaviour | Components and verification focus |
+| --- | --- |
+| B1 | Command entry point, token estimator and limiter, token log: one counts-only record per response, no query or source text. |
+| B2 | Command entry point, token estimator and limiter, token log: estimate in text and JSON, logging failure reported without failing the command. |
+| B3 | Command entry point, token log: report totals, mean, largest, after-time filter, empty-log message. |
+| B4 | Pilot harness, token estimator and limiter: estimates against an independent count. |
+| B5 | Command entry point, passage reader, token estimator and limiter: cited lines from the indexed commit, refusals for commit, scope and range. |
+| B6 | Command entry point, token estimator and limiter: location-only results, commit stated once in compact JSON, default output byte-identical. |
+| B7 | Pilot harness, command entry point: relevance in the first five unchanged. |
+| B8 | Token estimator and limiter, passage reader, command entry point, trusted configuration: cut at the cap with a truncation marker. |
+| B9 | Trusted configuration, command entry point: default, validation and trusted source of the cap. |
+| B10 | Pilot harness, token estimator and limiter, passage reader: largest response within the cap plus the notice. |
+| B11 | Pilot harness: discovery cost per task from session records. |
+| B12 | Pilot harness: change against the baseline and against running without the index. |
+| B13 | Agent protocol: every needed rule kept, text identical across repositories. |
+| B14 | Pilot harness, agent protocol: starting-context tokens and rule fidelity. |
+| B15 | Agent protocol: graph reader first when enabled, index search otherwise. |
+| B16 | Pilot harness, agent protocol: searches and tokens for graph-covered questions, evidence still cited. |
+
+### Decisions
+
+- [ADR 0037 · Count tokens by estimate and log counts locally](../../adr/0037-count-tokens-by-estimate-and-log-counts-locally.md)
+- [ADR 0038 · Add a passage command and compact output](../../adr/0038-add-a-passage-command-and-compact-output.md)
+- [ADR 0039 · Cap responses by estimated tokens](../../adr/0039-cap-responses-by-estimated-tokens.md)
+- [ADR 0040 · Shorten the protocol and consult the graph first](../../adr/0040-shorten-the-protocol-and-consult-the-graph-first.md)
+
+Deferred U7 and U9 are decided here: the default cap is 4000 estimated tokens, to be revisited once the baseline exists, and the log rotates once at 1 MiB keeping one previous file.
