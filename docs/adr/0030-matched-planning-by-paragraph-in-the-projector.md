@@ -4,6 +4,7 @@
 - **Date:** 2026-11-20
 - **Feature:** #135 (docs/features/matched-ontology-projection/)
 - **Amends:** ADR 0026 (the projector is also called once per file to plan chunks)
+- **Amended by:** [ADR 0035](0035-matched-planner-budgets-whole-code-points.md) (piece sizing and the line too-large cause)
 
 ## Context
 

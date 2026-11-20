@@ -3,6 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-20
 - **Feature:** #135 (docs/features/matched-ontology-projection/)
+- **Amended by:** [ADR 0034](0034-semantic-review-reads-raw-ontology-contents.md) (transport for ontology reads)
 
 ## Context
 
