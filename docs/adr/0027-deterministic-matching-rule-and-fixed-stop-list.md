@@ -1,6 +1,6 @@
 # 0027 — Deterministic matching rule, name index and fixed stop list
 
-- **Status:** accepted
+- **Status:** accepted; amended by ADR 0031 (relationships only, grouped name index)
 - **Date:** 2026-11-19
 - **Feature:** #135 (docs/features/matched-ontology-projection/)
 

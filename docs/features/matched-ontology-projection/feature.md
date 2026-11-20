@@ -119,19 +119,23 @@ against each repository's configured sections. The scratch scripts are not commi
 Unless a behaviour names its own "when", the "when" is: the `SemanticReviewWorker` reviews the pull
 request's changed eligible Markdown.
 
+Amended on 2026-11-20 to answer the user's acceptance pushback on #135 (the matched projection did not scale to large ontologies). Changed: B1, B7, B17, B18 and B23; added B24 and B25; revised U2, U3, U5, U11 and U13; added U15 to U18.
+
 ### Terms
 
 New in `docs/ontology.md`: the value object `OntologyProjection` and the enum `ProjectionMode`
 (`matched`, `full`). There are also two relationships, an invariant, and additions to the
 `OntologyConfig` and `SemanticReviewRun` rows. Words used below:
 
-- **Entry**: an item in the configured ontology sections with an evidence key (`Section:Name`), as
-  `catalogOntology` reads them today.
-- **Row**: one table line, or one invariant bullet with its continuation lines. Several rows can share
+- **Ontology source**: `ontology.ttl`, the repository's source of truth, from which `ontology.md` is generated. Every adopting repository has it once it is created from, or upgraded to, the current kit.
+- **Entry**: an item in the configured ontology sections, read from the ontology source, with the evidence key (`Section:Name`) that `ontology.md` shows for it. The keys are the ones `catalogOntology` reads today.
+- **Row**: one table line, or one invariant bullet with its continuation lines, as `ontology.md` renders it. Several rows can share
   an evidence key: a Relationships row is keyed by its From name, so JEPA-Speech has three rows under
   `Relationships:Analysis`, and an item can have several invariant bullets.
-- **Name index**: the list of every evidence key, in ontology order. It is today's evidence-key list.
-- **Selected entries**: the entries whose rows a request carries in `matched` mode, per B2 to B7.
+- **Relationship**: an `owl:ObjectProperty` in the ontology source, shown as a Relationships row. Its domain is the From entry, its range is the To entry, and its evidence key is `Relationships:<From>`.
+- **Name index**: every evidence key, in ontology order. In `matched` mode it is grouped by section (B24). In `full` mode it is today's evidence-key list, one key per line.
+- **Selected entries**: the entries whose rows a request carries in `matched` mode: those matched by B2 to B6, plus the relationships B7 adds.
+- **Paragraph**: lines of a file separated from the lines after them by at least one blank line.
 - **Name words**: an entry's name split at case changes and lowercased, with words shorter than four
   letters or on a fixed stop list dropped. For an Enums entry, the same split applies to its values
   as well. SessionRemovalState gives "session", "removal" and "state" unless they are on the stop list.
@@ -142,8 +146,8 @@ New in `docs/ontology.md`: the value object `OntologyProjection` and the enum `P
 
 - **B1 Matched request.** Given `semanticReview.projection` is absent and a chunk of a changed Markdown
   file, when the `SemanticReviewWorker` reviews it, then the system message holds the system prompt,
-  the rows of the selected entries under their section headings in ontology order, and the name
-  index, and no other rows.
+  the rows of the selected entries under their section headings in ontology order, and the grouped
+  name index (B24), and no other rows.
 - **B2 Exact name.** Given the chunk contains an entry's name as a whole word with the same case (for
   example AuditEvent), then that entry is selected.
 - **B3 Name word.** Given the chunk's Markdown words include one of an entry's name words, or that word
@@ -156,10 +160,7 @@ New in `docs/ontology.md`: the value object `OntologyProjection` and the enum `P
   than four letters or a word on the stop list, then that entry is not selected through that word.
 - **B6 Banned alias.** Given a `BannedAlias` phrase appears in the chunk as whole words, in any case,
   then every entry named in its `nameInstead` is selected.
-- **B7 One hop.** Given an entry is selected by B2 to B6, then these are also selected: every entry
-  whose name appears in backticks in one of its rows, and every Relationships row whose From or To is
-  that entry, together with the entry at the other end. Entries added this way do not add further
-  entries.
+- **B7 Relationships of a matched entry.** Given an entry is selected by B2 to B6, then every relationship whose domain or range is that entry is also selected, with every row of its evidence key (B8). The entry at the other end is not selected through the relationship, and a name mentioned in an entry's description selects nothing. For example, in JEPA-Speech a chunk matching AuditEvent carries the row "Analysis writes AuditEvent" and the other `Relationships:Analysis` rows, but not the Analysis entry's own row.
 - **B8 Rows travel together.** Given a selected evidence key has several rows, then every row with that
   key is sent (all three `Relationships:Analysis` rows, not only the last).
 - **B9 Deterministic.** Given the same Markdown, ontology, configuration and budget, when the review runs
@@ -182,6 +183,7 @@ New in `docs/ontology.md`: the value object `OntologyProjection` and the enum `P
 - **B12 Finding identity unchanged.** Given the same revision, path, quote and evidence key, then a
   `SemanticFinding` has the same identity in `matched` and `full` mode. A `FindingDismissal` recorded
   under one mode still applies after switching to the other on the same revision.
+- **B25 Same evidence from the ontology source.** Given a repository whose `ontology.md` is current with its `ontology.ttl`, then reading entries and relationships from the ontology source gives exactly the evidence keys, rows and full projection that reading `ontology.md` gives today. A `SemanticFinding` therefore keeps its identity across the change, and `full` mode stays byte for byte (B21).
 
 ### Outcome 3: a chunk that matches nothing is still reviewed
 
@@ -191,6 +193,7 @@ New in `docs/ontology.md`: the value object `OntologyProjection` and the enum `P
 - **B14 Name-only citation.** Given the model cites an entry that the request carried in the name index
   only, then the finding is accepted like any other: it blocks, it can be dismissed, and its identity
   follows B12.
+- **B24 Grouped name index.** Given `matched` mode, then the name index has one line per section in ontology order: the section name, a colon and a space, then the names of that section's entries in ontology order, separated by a comma and a space. For example: "Entities: AuditEvent, StudySession, SessionRemoval". A finding that cites `Section:Name` for any listed name resolves as in B14, and any other key is handled as in B16.
 
 ### Outcome 4: reduced coverage is visible, not silent
 
@@ -198,14 +201,12 @@ New in `docs/ontology.md`: the value object `OntologyProjection` and the enum `P
   shows B10 for each reviewed file. The status descriptions of every `SemanticOutcome` are unchanged.
 - **B16 Unknown keys still rejected.** Given the model cites a key that resolves to no entry in the name
   index, then the chunk is handled exactly as an unknown evidence key is today.
-- **B17 Planning against the matched projection.** Given a file, then its chunks are planned against
-  the `OntologyProjection` its whole text would select, which is the largest any of its chunks can
-  need. Each chunk is then sent with the projection its own text selects, so every planned chunk fits
-  the `RequestBudget`.
-- **B18 Too large.** Given the budget minus the request overhead, the file path and the file's
-  projection (B17) leaves less than one character, then the file is not reviewed. The outcome is
-  `too-large` with today's explanation. If even the name index alone does not fit, every file is
-  `too-large`.
+- **B17 Planning by paragraph.** Given `matched` mode and a file, then the file is divided into paragraphs, and any paragraph that cannot fit a request on its own is divided into its lines. Chunks are formed in file order: each takes the next paragraphs or lines for as long as the request still fits the `RequestBudget`, counting the request overhead, the `OntologyProjection` that the chunk's own text selects, the file path and the text. A line whose text alone is too long for the room its own projection leaves is cut into pieces that fit, never inside a UTF-16 surrogate pair. Each chunk is sent with the projection its own text selects, so every request fits the budget. A file whose paragraphs each fit is reviewed, however much of the ontology the whole file selects. For example, a file naming one entry from each of 60 bounded contexts is reviewed in several requests rather than being too-large. In `full` mode, files are planned as today.
+- **B18 Too large.** Given `matched` mode, then a file is not reviewed, with outcome `too-large`, in either of two cases. The reason names the cause, and both reasons name `ONTOLOGY_MAX_REQUEST_CHARS`:
+  - the request overhead, the file path and the name index alone leave less than one character. Every file is then `too-large`, and the reason says that the ontology's name index does not fit the budget;
+  - a line of the file selects a projection that leaves no room for any of its text. The reason gives the line's offset in the file, and says that this line selects too much of the ontology for the budget.
+
+  Status descriptions do not change (B15). In `full` mode, today's rule and reason apply.
 - **B19 413 split.** Given the endpoint answers 413, then the chunk is split as today, and each half is
   sent with the projection its own text selects.
 
@@ -222,6 +223,8 @@ New in `docs/ontology.md`: the value object `OntologyProjection` and the enum `P
 - **B23 Documented.** Given the runbook `templates/docs/ontology-semantic-review.md` and the README, then
   they describe:
   - the two modes and the matching rules;
+  - that matched selection reads the ontology source, and adds relationships but not the entries at their other end;
+  - the grouped name index, planning by paragraph, and the two too-large causes;
   - the B10 fields;
   - that a matched review can miss a paraphrase sharing no name word with its entry;
   - that `"full"` should be set only after updating to a kit version that knows the setting, because
@@ -232,40 +235,48 @@ New in `docs/ontology.md`: the value object `OntologyProjection` and the enum `P
 | # | Question | Decision or deferral |
 |---|---|---|
 | U1 | Which matching rule? | Decided: exact names, banned aliases, name words and enum value words, with Markdown PascalCase split (B2–B6). It found all ten recorded findings. The rare-word rule found only four and was rejected. |
-| U2 | What does "directly related" add? | Decided, by the maintainer: one hop (B7). In the replay this selected 104–148 of JEPA-Speech's 202 entries, so the saving is about 25–45% of the full projection, not the 70–88% of name words alone. The maintainer judges that trade-off in acceptance. |
-| U3 | What is the core set, and do matched chunks get it? | Decided: the name index, sent with every request (B1, B13). About 6,100 characters for JEPA-Speech, 3,400 for InternalOntology and 2,300 for EventBooking. |
+| U2 | What does "directly related" add? | Revised on 2026-11-20 by the maintainer after acceptance: the relationships whose domain or range is a matched entry, without the entry at the other end and without names mentioned in descriptions (B7). The original one hop made the median matched request 79% of the full projection on JEPA-Speech's 213 tracked Markdown files and 85% on InternalOntology's 126. Relationships only measured 52% and 65%; no hop at all measured 52% and 62%. All ten recorded findings keep their cited entry's full rows in every variant, because each is matched directly. |
+| U3 | What is the core set, and do matched chunks get it? | Decided: the name index, sent with every request (B1, B13). Revised on 2026-11-20: in `matched` mode it is grouped by section (B24). One key per line costs about 30 characters per entry, so the name index alone filled the 200,000-character default at about 6,700 entries. Grouping removes the repeated section prefix, roughly a third of the index. Acceptance must check against a live model that findings still cite keys exactly. |
 | U4 | Can a finding cite an entry sent by name only? | Decided: yes, like any other finding (B14). This keeps the vision's rule that a finding cites only an entry that was sent, because the name index sends every entry by name. |
-| U5 | Is matching per chunk or per file? | Decided: plan against the file, send per chunk (B17, B19). |
+| U5 | Is matching per chunk or per file? | Decided: per chunk (B17, B19). Revised on 2026-11-20: planning is by paragraph too, not against the whole file. Acceptance showed that a file's projection is the union of everything it mentions. A 3.4 KB file naming one entry from each of 60 contexts in a 1,920-entry ontology projected 330,898 of 331,071 characters and was too-large, although each of its paragraphs projected about 74,500 and would have fit. JEPA-Speech's `docs/source-knowledge-graph/README.md` already projects 63% of the full projection. |
 | U6 | Split PascalCase words in the Markdown? | Decided: yes (Markdown words). Without it, "RemovalStatus" matched only through other words in the file. |
 | U7 | Do rows sharing an evidence key travel together? | Decided: yes (B8). `rows` in `catalogOntology` keeps only the last row per key today, so the architect must not select by that map as it stands. |
 | U8 | What is the setting's name and shape? | Decided: `semanticReview.projection`, `"matched"` (default) or `"full"` (B20–B22). |
 | U9 | Does the status description change? | Decided: no. Coverage shows in the pull request record only (B15). |
 | U10 | Does finding identity change? | Decided: no. The identity hash takes no projection input (B12). |
-| U11 | What is on the stop list? | Deferred to the architect: a fixed list in the script, the same in every repository and not configurable. It must not stop any recorded finding in B11. |
+| U11 | What is on the stop list? | Deferred to the architect: a fixed list in the script, the same in every repository and not configurable. It must not stop any recorded finding in B11. Unchanged by the amendment; limiting other common words is U18. |
 | U12 | How is B11 fixtured without network or JEPA-Speech files? | Decided: synthetic fixtures in the kit's tests reproduce each quoted passage and the cited items. A replay against JEPA-Speech itself belongs to the user phase's acceptance walkthrough. |
-| U13 | Embedding retrieval, and keeping it possible later. | Out of scope (vision). Keeping the selection step replaceable is left to the architect. |
+| U13 | Embedding retrieval, and keeping it possible later. | Out of scope (vision). Keeping the selection step replaceable is left to the architect, now over entries read from the ontology source (U15). |
 | U14 | Does the drift reviewer or the naming reviewer change? | Out of scope (vision). |
+| U15 | Which ontology does selection read? | Decided on 2026-11-20: the ontology source, `ontology.ttl`, which is the source of truth; `ontology.md` is generated from it. Relationships are then typed edges, rather than backticked names scraped from row text. Selected entries are still sent as `ontology.md` renders their rows, because Turtle is larger (JEPA-Speech: 80,721 bytes against 59,474). Evidence keys and finding identity must not change (B25). How the reviewer reads the source is for the architect. A repository without `ontology.ttl` is out of scope, because every adopting repository is created from, or upgraded to, the current kit. |
+| U16 | Should matching use alternative labels (`skos:altLabel`)? | Deferred. The kit does not produce alternative labels yet, and adding them to adopters' ontologies is out of scope (vision). Matching on them would do more for recall than any word rule, so it belongs to a later feature. |
+| U17 | Should a too-large reason say why? | Decided on 2026-11-20: yes. It names either the name index or the line that selects too much, and status descriptions do not change (B18, B15). |
+| U18 | Should name words shared by many entries be limited? | Deferred, with measurements recorded. A word such as "account", or "graph" (in 44 of InternalOntology's 107 entry names), selects every entry that shares it. In a 1,920-entry synthetic ontology, one paragraph naming one entry selected 67 entries without the hop. After B17 and B24 this costs request size but no longer makes files too-large. A limit risks recall (the rare-word rule in U1 kept 4 of 10 findings), so it needs measuring first. |
 
 ## Architect: structure
 
-U11 and U13 are settled in ADRs 0027 and 0026. The maintainer kept B7's one hop after seeing
-corrected figures. Measured over each repository's tracked Markdown with the chosen stop list and the
-name index included, the median request is about 74% of the full projection for JEPA-Speech, 78% for
-InternalOntology and 95% for EventBooking. The analyst's U2 figures also counted reverse references.
+U11 and U13 are settled in ADRs 0027 and 0026. The amendment of 2026-11-20 answers the user's acceptance pushback with three more ADRs: 0029 (reading the ontology source), 0030 (planning by paragraph) and 0031 (relationships only, and the grouped name index). They amend 0026 and 0027 where noted.
+
+Measured with the shipped catalog, before building:
+- Relationships only made the median matched request 52% of the full projection on JEPA-Speech's 213 tracked Markdown files and 65% on InternalOntology's 126, against 79% and 85% with the one hop. All ten recorded findings are kept.
+- The grouped name index is 40% to 49% smaller, which lifts the ceiling at the default budget from about 6,700 entries to about 10,000 to 11,500.
+- Planning by paragraph removes the broad-file case. In the 1,920-entry synthetic ontology, a paragraph projects about 74,500 characters while the whole file projected 330,898.
 
 ### Components
 
 | Component | Responsibility | Serves |
 | --- | --- | --- |
-| `ontology-projection.mjs` (new, kit-owned, installed with `--with-semantic-review`) | `createProjector({ mode, bannedAliases })`. Provides the stop list and the name-word and Markdown-word splitting, the base match and one hop over grouped rows, and rendering of the matched projection in ontology order with the name index. The `full` mode returns `catalog.projection` unchanged. No I/O. | B1–B9, B13, B21 |
-| `semantic-review-model.mjs` | `catalogOntology` gains an additive field grouping every row by evidence key; its existing fields are unchanged. `reviewFiles` takes an optional `project` (default: a built-in full projector) and awaits it per file to plan chunks and per request, so each 413 half is projected again. It returns `projections`, one summary per reviewed file. Evidence-key resolution and finding identity are unchanged. | B1, B8, B10, B12–B14, B16–B19, B21 |
-| `ontology-config.mjs` (`OntologyConfig` parsing) | `validateModelReview` accepts `projection` for `semanticReview` only, defaults it to `"matched"`, and rejects any other value, naming the key and the value. | B20–B22 |
-| `semantic-review-worker.mjs` (`SemanticReviewWorker`) | Builds the projector from `config.semanticReview.projection` and `config.bannedAliases`, passes it to `reviewFiles`, and copies `projections` into the run record. Outcomes are unchanged. | B6, B10, B12, B15, B18, B20, B21 |
-| `semantic-review-ledger.mjs` (`SemanticStatusPublisher`) | `renderRun` prints one projection line per reviewed file. Records without `projections` still parse. `statusFor` is unchanged. | B10, B15 |
-| `Installer` (`bin/install-ontology.mjs`) | Plans `scripts/ontology-projection.mjs` and its test with `--with-semantic-review`, but not for graph naming alone. | B20 |
-| Runbook `templates/docs/ontology-semantic-review.md`, README | Cover the modes, the matching rules and stop list, the record line, the paraphrase caveat, and updating the kit before setting `"full"`. | B23 |
-| Tests | `ontology-projection.test.mjs` is shipped and runs standalone, with inline synthetic fixtures for the ten recorded findings. There are model, config, worker, ledger and installer unit tests beside the scripts, and an acceptance test in `tests/` with a local stand-in for the model. | B1–B22 |
-| Ontology | Nothing further: `OntologyProjection` and `ProjectionMode` were added in the analyst phase. | B10, B21 |
+| `ontology-projection.mjs` (kit-owned, installed with `--with-semantic-review`) | `createProjector({ mode, bannedAliases })` returns a projector with `mode` and `project(catalog, text)`, and in `matched` mode also `plan(catalog, files, maxRequestChars)`. The matched projector prepares an index once per catalog: name words, enum value words, exact names and each entry's relationships. Through the index it does the base match (B2 to B6) and adds the relationships of matched entries (B7), with every row of their keys (B8). It renders the selected rows in ontology order, followed by the grouped name index and its one explanatory sentence (B24). `plan` packs paragraphs, then lines, then pieces of a line, and returns the two too-large causes (B17, B18). `full` returns `catalog.projection` and has no `plan`. No I/O. | B1–B9, B13, B17, B18, B21, B24 |
+| `semantic-review-model.mjs` | `catalogOntology` gains the additive `relationships` field (evidence key, From, To) beside `groups`; its other fields are unchanged. `reviewFiles` uses the projector's `plan` when it has one, and `chunkFiles` otherwise. It projects every request, and each half of a 413 split, with that text's own projection, and keeps the pre-send guard. It returns `projections`. Evidence-key resolution and finding identity are unchanged. | B1, B8, B10, B12–B14, B16–B19, B21, B25 |
+| `semantic-review-github.mjs` (`collectReviewInput`) | Reads the ontology source at `ttlPathFor(ontologyPath)` at the reviewed revision. It renders the source with `parseTurtle`, `triplesToModel` and `renderOntologyMarkdown`, and returns the rendered text as `ontologyText`. On 404 it reads `ontology.md` as today. A source that cannot be read or parsed fails the read, as an unreadable proposed ontology does today. | B25 |
+| `owl-ontology.mjs` | Exports `ttlPathFor`, moved from `build-ontology.mjs`, which re-exports it. Parsing and rendering are unchanged. | B25 |
+| `ontology-config.mjs` (`OntologyConfig` parsing) | Unchanged: `semanticReview.projection`, `"matched"` by default, or `"full"`. | B20–B22 |
+| `semantic-review-worker.mjs` (`SemanticReviewWorker`) | Unchanged: it builds the projector from `config.semanticReview.projection` and `config.bannedAliases`, passes it to `reviewFiles`, copies `projections` into the run record, and maps too-large files to the `too-large` outcome. | B6, B10, B12, B15, B18, B20, B21 |
+| `semantic-review-ledger.mjs` (`SemanticStatusPublisher`) | Unchanged: one projection line per reviewed file, and each not-reviewed reason as `plan` gives it. `statusFor` is unchanged. | B10, B15, B18 |
+| `Installer` (`bin/install-ontology.mjs`) | Unchanged. `owl-ontology.mjs` is part of every installation. | B20 |
+| Runbook `templates/docs/ontology-semantic-review.md`, README | Cover: the modes; the matching rules and stop list; relationships only; that the reviewer reads `ontology.ttl` and falls back to `ontology.md`; the grouped name index; planning by paragraph; the two too-large causes; the record line; the paraphrase caveat, now including neighbours; and updating the kit before setting `"full"`. | B23 |
+| Tests | Shipped `ontology-projection.test.mjs` adds B7 and B8 fixtures for relationships only, and cases for B17 packing, B18's causes and B24. It asserts that every planned chunk's projection equals `project` of its text. The model, github (`.ttl` read, fallback and B25 equality on a fixture) and ledger tests sit beside the scripts. The acceptance tests in `tests/` are regenerated by the user phase; they are committed locally as b1a2a41 on `feature/matched-ontology-projection/user`. | B1–B25 |
+| Ontology | `OntologyProjection` updated in the analyst amendment. Nothing further. | B10, B21 |
 
 ### Structure
 
@@ -273,30 +284,32 @@ InternalOntology and 95% for EventBooking. The analyst's U2 figures also counted
 flowchart LR
   C[ontology.config.json on the default branch] --> K[ontology-config.mjs]
   K -->|semanticReview.projection, bannedAliases| W[SemanticReviewWorker]
+  T[ontology.ttl at the reviewed revision] -->|parse, render| R[collectReviewInput]
+  MD[ontology.md, only when the .ttl is absent] --> R
+  R -->|ontologyText| M[reviewFiles]
   W -->|createProjector| P[ontology-projection.mjs]
-  W -->|project| M[reviewFiles]
-  O[catalogOntology with grouped rows] --> M
-  M -->|per file: plan chunks| P
+  W -->|project| M
+  O[catalogOntology with groups and relationships] --> M
+  M -->|matched: plan by paragraph| P
+  M -->|full: chunkFiles as today| M
   M -->|per request and per 413 half| P
   M --> G[Model endpoint]
   M -->|findings, projections| W
   W --> L[SemanticStatusPublisher: record lines, unchanged status]
-  N[graph naming] -->|no project argument| M2[catalogOntology and helpers, unchanged]
+  N[graph naming and drift review] -->|ontology.md, unchanged| M2[catalogOntology and helpers]
 ```
 
-A request's system message is the unchanged system prompt followed by the projection text. In
-`matched` mode, that is the section headings and rows of the selected entries in ontology order, then
-`## Evidence keys` with every key. In `full` mode, it is `catalog.projection`. Findings resolve against
-the whole catalog, whose keys all appear in the name index, so a name-only citation is accepted
-(B14) and an unknown key is rejected as today (B16).
+A request's system message is the unchanged system prompt followed by the projection text. In `matched` mode, that is:
+- the section headings and rows of the selected entries, in ontology order;
+- `## Evidence keys`, the one explanatory sentence, and one line per section listing its names.
+
+In `full` mode, it is `catalog.projection`. Findings resolve against the whole catalog, so a name-only citation is accepted (B14) and an unknown key is rejected as today (B16).
 
 ### Deployment and runtime
 
-No new service, workflow or repository variable. Adopters reinstall with `--force`, which adds
-`scripts/ontology-projection.mjs` and its test, and the next semantic review uses `matched` (B20).
-`semanticReview.projection` is read, like the rest of `semanticReview`, from the trusted default
-branch, and is set only after the kit update (ADR 0028). Selection runs in the review job before each
-model call. It is deterministic and needs no network.
+There is no new service, workflow or repository variable. Adopters reinstall with `--force --with-semantic-review`, and the next semantic review uses `matched` (B20). The reviewer makes one contents request for the ontology source at the reviewed revision, with the same read permission it uses today, and a second for `ontology.md` only when the source is absent.
+
+`semanticReview.projection` is read, like the rest of `semanticReview`, from the trusted default branch, and should be set only after the kit update (ADR 0028). Selection and planning run in the review job before each model call. They are deterministic and need no network. The matched projector's index is built once per run.
 
 ### Traceability
 
@@ -308,7 +321,7 @@ model call. It is deterministic and needs no network.
 | B4 | `ontology-projection.mjs` |
 | B5 | `ontology-projection.mjs` |
 | B6 | `ontology-projection.mjs`, `semantic-review-worker.mjs` |
-| B7 | `ontology-projection.mjs` |
+| B7 | `ontology-projection.mjs`, `semantic-review-model.mjs` (relationships field) |
 | B8 | `semantic-review-model.mjs` (grouped rows), `ontology-projection.mjs` |
 | B9 | `ontology-projection.mjs`, tests |
 | B10 | `semantic-review-model.mjs`, `semantic-review-worker.mjs`, `semantic-review-ledger.mjs` |
@@ -318,16 +331,21 @@ model call. It is deterministic and needs no network.
 | B14 | `semantic-review-model.mjs` (resolution against the whole catalog) |
 | B15 | `semantic-review-ledger.mjs`, `semantic-review-worker.mjs` |
 | B16 | `semantic-review-model.mjs` |
-| B17 | `semantic-review-model.mjs` |
-| B18 | `semantic-review-model.mjs`, `semantic-review-worker.mjs` |
+| B17 | `ontology-projection.mjs` (`plan`), `semantic-review-model.mjs` (pre-send guard) |
+| B18 | `ontology-projection.mjs` (`plan`), `semantic-review-worker.mjs`, `semantic-review-ledger.mjs` |
 | B19 | `semantic-review-model.mjs` |
 | B20 | `ontology-config.mjs`, `semantic-review-worker.mjs`, `Installer` |
-| B21 | `ontology-projection.mjs`, `semantic-review-model.mjs`, `semantic-review-worker.mjs` |
+| B21 | `ontology-projection.mjs`, `semantic-review-model.mjs` (`chunkFiles` when there is no `plan`), `semantic-review-worker.mjs` |
 | B22 | `ontology-config.mjs` |
 | B23 | runbook, README |
+| B24 | `ontology-projection.mjs` |
+| B25 | `semantic-review-github.mjs`, `owl-ontology.mjs` |
 
 ### Decisions
 
-- [ADR 0026: matched projection as an injected projector in its own module](../../adr/0026-matched-projection-as-an-injected-projector.md) (U13)
-- [ADR 0027: deterministic matching rule, name index and fixed stop list](../../adr/0027-deterministic-matching-rule-and-fixed-stop-list.md) (U1, U2, U3, U11)
+- [ADR 0026: matched projection as an injected projector in its own module](../../adr/0026-matched-projection-as-an-injected-projector.md) (U13), amended by ADR 0030
+- [ADR 0027: deterministic matching rule, name index and fixed stop list](../../adr/0027-deterministic-matching-rule-and-fixed-stop-list.md) (U1, U11), amended by ADR 0031
 - [ADR 0028: the projection setting and the run record summary](../../adr/0028-projection-setting-and-run-record-summary.md) (U8, U9)
+- [ADR 0029: semantic review reads the ontology source, falling back to Markdown](../../adr/0029-semantic-review-reads-the-ontology-source.md) (U15, B25)
+- [ADR 0030: matched planning by paragraph, inside the projector](../../adr/0030-matched-planning-by-paragraph-in-the-projector.md) (U5, U17, B17, B18)
+- [ADR 0031: relationships of matched entries, and a grouped name index](../../adr/0031-relationships-only-and-grouped-name-index.md) (U2, U3, B7, B24)
