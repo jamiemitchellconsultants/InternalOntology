@@ -68,7 +68,7 @@ async function storage(root, create) {
     await checkKind(directory, true);
   }
   await checkKind(active, false, create);
-  return { directory, active };
+  return { root, directory, active };
 }
 
 function keys(value, fields) {
@@ -264,7 +264,8 @@ async function promote(location, input, limits, verify) {
     } finally {
       await reader.close();
     }
-    await checkKind(location.active, false, true);
+    // A checkout can change the tracked or ignored paths while the candidate is being built.
+    await storage(location.root, true);
     await rename(path, location.active);
   } finally {
     await unlink(path).catch((error) => {

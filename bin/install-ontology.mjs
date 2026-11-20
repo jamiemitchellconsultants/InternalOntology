@@ -297,14 +297,6 @@ export function substituteJsonString(text, values) {
   });
 }
 
-/**
- * @param {{ target: string, projectName?: string, ontologyPath?: string, defaultBranch?: string,
- *           force?: boolean, resetContent?: boolean, dryRun?: boolean, withDriftReview?: boolean,
- *           withSemanticReview?: boolean,
- *           withEnumTests?: string }} options
- * @returns {{ written: string[], skipped: { dest: string, ownedBy: "kit" | "adopter" }[],
- *             agentFile: string, enumTestExample: string | null }}
- */
 function planIndexIgnore(target) {
   const directory = ".ontology-index";
   const git = (...args) => execFileSync("git", args, { cwd: target, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -324,8 +316,11 @@ function planIndexIgnore(target) {
     if (path === directory ? !stat.isDirectory() : !stat.isFile()) throw new Error(`Semantic index setup found the wrong file type at ${path}.`);
   }
   try {
-    git("check-ignore", "-q", "--no-index", "--", `${directory}/`);
-    return null;
+    const match = execFileSync("git", ["check-ignore", "-v", "-z", "--no-index", "--stdin"], {
+      cwd: target, encoding: "utf8", input: `${directory}/\0`, stdio: ["pipe", "pipe", "pipe"],
+    });
+    const [source, , pattern] = match.split("\0");
+    if (source === ".gitignore" && pattern && !pattern.startsWith("!")) return null;
   } catch (error) {
     if (error.status !== 1) throw error;
   }
@@ -334,6 +329,14 @@ function planIndexIgnore(target) {
   return { file, suffix: `${contents.length && contents.at(-1) !== 10 ? "\n" : ""}/${directory}/\n` };
 }
 
+/**
+ * @param {{ target: string, projectName?: string, ontologyPath?: string, defaultBranch?: string,
+ *           force?: boolean, resetContent?: boolean, dryRun?: boolean, withDriftReview?: boolean,
+ *           withSemanticReview?: boolean, withSemanticIndex?: boolean,
+ *           withEnumTests?: string }} options
+ * @returns {{ written: string[], skipped: { dest: string, ownedBy: "kit" | "adopter" }[],
+ *             agentFile: string, enumTestExample: string | null }}
+ */
 export function install(options) {
   const { target, force = false, resetContent = false, dryRun = false } = options;
   if (!existsSync(join(target, ".git"))) {

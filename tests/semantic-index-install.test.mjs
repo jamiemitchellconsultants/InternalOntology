@@ -89,3 +89,18 @@ test("installed commands use each adopter's model and emit refresh metrics", asy
     });
   }
 });
+
+test("an installer-only local ignore does not replace the rule inherited by teammates", async () => {
+  await withTempRepo(async ({ dir, write, git }) => {
+    write(".git/info/exclude", "/.ontology-index/\n");
+    install({ target: dir, withSemanticIndex: true });
+    assert.equal(readFileSync(join(dir, ".gitignore"), "utf8"), "/.ontology-index/\n");
+    git("add", ".");
+    git("commit", "-qm", "publish portable install");
+    await withTempRepo(async ({ git: teammate }) => {
+      teammate("fetch", "-q", dir, "main");
+      teammate("switch", "-q", "--detach", "FETCH_HEAD");
+      assert.equal(teammate("check-ignore", ".ontology-index/index-v1.jsonl").trim(), ".ontology-index/index-v1.jsonl");
+    });
+  });
+});

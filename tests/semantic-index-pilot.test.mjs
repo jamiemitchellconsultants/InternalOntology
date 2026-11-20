@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { measurePilot, rankKeywordLocations } from "../scripts/measure-semantic-index.mjs";
 import { treeFromRevision } from "../templates/scripts/source-graph-git.mjs";
@@ -29,5 +32,21 @@ test("B3 keyword baseline ranks distinct matches on approved committed lines", a
     const result = rankKeywordLocations(tree, { include: ["src/"], exclude: ["src/private.txt"] }, "refund rule refund");
     assert.deepEqual(result.map(({ path, startLine, commit }) => [path, startLine, commit]),
       [["src/a.txt", 2, tree.id], ["src/a.txt", 3, tree.id]]);
+  });
+});
+
+test("B3 the pilot CLI's labelled baseline comes from the pinned tree and query", async () => {
+  await withTempRepo(async ({ dir, write, git }) => {
+    write("src/a.txt", "unrelated\nrefund\n");
+    git("add", ".");
+    git("commit", "-qm", "baseline source");
+    const commit = git("rev-parse", "HEAD").trim();
+    const location = { commit, path: "src/a.txt", startLine: 2, endLine: 2 };
+    write("report.json", JSON.stringify({ commit, scope: { include: ["src/"], exclude: [] }, questions: [
+      { id: "refund", text: "refund", expected: [location], semantic: [location], keyword: [] },
+    ] }));
+    const script = fileURLToPath(new URL("../scripts/measure-semantic-index.mjs", import.meta.url));
+    const report = JSON.parse(execFileSync(process.execPath, [script, join(dir, "report.json"), dir], { encoding: "utf8" }));
+    assert.equal(report.keywordHits, 1);
   });
 });

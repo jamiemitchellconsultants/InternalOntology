@@ -116,3 +116,25 @@ test("B12 excludes concurrent writers and unsafe tracked or linked storage", asy
     await assert.rejects(withIndexWriter(dir, () => assert.fail("tracked store opened")), /tracked/);
   });
 });
+
+test("B12 preserves a tracked file introduced by a branch switch before promotion", async () => {
+  await withTempRepo(async ({ dir, write, git }) => {
+    const rel = ".ontology-index/index-v1.jsonl";
+    write(".gitignore", "/.ontology-index/\n");
+    git("add", ".gitignore");
+    git("commit", "-qm", "ignore local store");
+    git("switch", "-qc", "tracked-store");
+    write(rel, "tracked source file\n");
+    git("add", "-f", rel);
+    git("commit", "-qm", "track a source file in this branch");
+    git("switch", "-q", "main");
+    await withIndexWriter(dir, (writer) => writer.replace({ header: header("1"), records: [record("a")] }));
+    async function* switchBeforePromotion() {
+      yield record("b");
+      git("switch", "-q", "tracked-store");
+    }
+    await assert.rejects(withIndexWriter(dir, (writer) => writer.replace({ header: header("2"), records: switchBeforePromotion() })), /tracked paths/);
+    assert.equal(readFileSync(join(dir, rel), "utf8"), "tracked source file\n");
+    assert.equal(git("status", "--short").trim(), "");
+  });
+});

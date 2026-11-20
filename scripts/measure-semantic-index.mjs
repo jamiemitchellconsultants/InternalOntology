@@ -85,9 +85,14 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       if (!counts.has(path)) counts.set(path, lineCount(tree.readBounded(path, FILE_BYTES)));
       return end <= counts.get(path);
     };
-    const questions = input.questions.map((question) => ({
-      ...question, keyword: question.keyword ?? rankKeywordLocations(tree, input.scope, question.text),
-    }));
+    const scope = { include: input.scope?.include, exclude: input.scope?.exclude ?? [] };
+    if (!Array.isArray(scope.include) || !Array.isArray(scope.exclude) || !Array.isArray(input.questions)) {
+      throw new Error("Supply the pilot source scope and reviewed questions.");
+    }
+    const questions = input.questions.map((question) => {
+      if (typeof question.text !== "string" || !question.text.trim()) throw new Error("Each pilot question needs its query text.");
+      return { ...question, keyword: rankKeywordLocations(tree, scope, question.text) };
+    });
     console.log(JSON.stringify({ commit: tree.id, keywordMethod, ...measurePilot({ commit: tree.id, questions, locate }) }));
   } catch (error) {
     console.error(error.message);
