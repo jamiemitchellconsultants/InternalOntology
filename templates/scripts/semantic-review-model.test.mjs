@@ -461,3 +461,33 @@ test("B12 B14 B16 citations resolve against the whole catalog whatever the proje
   assert.deepEqual(unknown.unreviewed, [{ path: "docs/a.md", reason: "finding cites an unknown evidence key" }]);
   assert.deepEqual(unknown.projections, []);
 });
+
+test("B7 the catalog lists every relationship row with its key, From and To, in ontology order", () => {
+  const source = "## Entities\n\n| Name | Description |\n| --- | --- |\n| `Analysis` | a pass |\n| `Speaker` | a person |\n\n" +
+    "## Relationships\n\n| From | Relationship | To | Cardinality |\n| --- | --- | --- | --- |\n" +
+    "| `Analysis` | scores | `Speaker` | 1 → 1 |\n| `Speaker` | reads | `Analysis` | 1 → many |\n| `Analysis` | writes | `Speaker` | 1 → many |\n";
+  const catalog = catalogOntology(source, { required: ["Entities", "Relationships"], optional: [] });
+  assert.deepEqual(catalog.relationships, [
+    { evidenceKey: "Relationships:Analysis", from: "Analysis", to: "Speaker" },
+    { evidenceKey: "Relationships:Speaker", from: "Speaker", to: "Analysis" },
+    { evidenceKey: "Relationships:Analysis", from: "Analysis", to: "Speaker" },
+  ]);
+  assert.deepEqual(catalogOntology(source, { required: ["Entities"], optional: [] }).relationships, []);
+  assert.equal(catalogOntology(source, { required: ["Entities", "Relationships"], optional: [] }).projection,
+    catalogOntology(source, { required: ["Entities", "Relationships"], optional: [] }).projection);
+});
+
+test("B17 a projector with a plan replaces chunkFiles, and only planned chunks are projected", async () => {
+  const seen = [];
+  const plan = async (_catalog, files, budget) => ({
+    chunks: [{ path: "docs/a.md", offset: 0, text: "one\n\n" }, { path: "docs/a.md", offset: 5, text: "two\n" }],
+    unreviewed: [{ path: "docs/b.md", code: "too-large", reason: `planned reason ${budget}` }] });
+  const project = Object.assign(async (_catalog, text) => { seen.push(text); return { text: "p", keys: [] }; }, { mode: "matched", plan });
+  let requests = 0;
+  const result = await reviewFiles({ ...options([{ path: "docs/a.md", text: "one\n\ntwo\n" }, { path: "docs/b.md", text: "big" }],
+    async () => { requests++; return completion(clean); }), project, maxRequestChars: 5_000 });
+  assert.deepEqual(seen, ["one\n\n", "two\n"]);
+  assert.equal(requests, 2);
+  assert.deepEqual(result.reviewed, ["docs/a.md"]);
+  assert.deepEqual(result.unreviewed, [{ path: "docs/b.md", code: "too-large", reason: "planned reason 5000" }]);
+});

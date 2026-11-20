@@ -69,7 +69,7 @@ rows that do not apply, update `sections` in `ontology.config.json` to match, th
 ## Optional semantic review pilot
 
 After seeding the ontology, install the pilot with `--with-semantic-review` and follow its
-[runbook](templates/docs/ontology-semantic-review.md). Requests are budgeted at 200,000 characters by default, shared with the drift reviewer: set the repository variable ONTOLOGY_MAX_REQUEST_CHARS to change it. An ontology still too large for the budget is reported as a non-blocking too-large result naming that variable. Each request now carries the matched `OntologyProjection` by default, the ontology entries that piece of the file selects plus the name index, and `semanticReview.projection: "full"` restores the whole ontology; see the runbook. The model and endpoint are configured in the
+[runbook](templates/docs/ontology-semantic-review.md). Requests are budgeted at 200,000 characters by default, shared with the drift reviewer: set the repository variable ONTOLOGY_MAX_REQUEST_CHARS to change it. An ontology still too large for the budget is reported as a non-blocking too-large result naming that variable. Each request carries the matched `OntologyProjection` by default. It includes the ontology entries selected by that piece of the file, their relationships, and a name index grouped by section, read from `ontology.ttl`. Set `semanticReview.projection: "full"` to restore the whole ontology. The runbook explains both modes. The model and endpoint are configured in the
 adopter-owned `ontology.config.json` on the default branch; the model credential (a Keycloak client secret for
 short-lived OIDC tokens, or a legacy static key) is an Actions environment secret restricted to
 that branch. The reviewer runs from trusted default-branch code
