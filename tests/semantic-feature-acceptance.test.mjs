@@ -49,6 +49,7 @@ function makeClient({ current = pull, files = [], texts = {}, sourceOntology = o
         return { permission: role, role_name: role };
       }
       if (path.startsWith("/contents/docs/ontology.md?ref=")) return blob(sourceOntology);
+      if (path.startsWith("/contents/docs/ontology.ttl?ref=")) throw new Error(`GitHub API GET returned 404 for ${path}`);
       if (path.startsWith("/git/blobs/")) {
         const sha = decodeURIComponent(path.slice("/git/blobs/".length));
         if (!(sha in texts)) throw new Error("missing blob");

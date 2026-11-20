@@ -1,6 +1,7 @@
 // Read-only GitHub adapter for the privileged semantic reviewer. PR data is never executed.
 import { TextDecoder } from "node:util";
 import { globToRegExp } from "./check-ontology-terms.mjs";
+import { parseTurtle, renderOntologyMarkdown, triplesToModel, ttlPathFor } from "./owl-ontology.mjs";
 
 const apiOrigin = "https://api.github.com";
 
@@ -91,12 +92,27 @@ export function decodeBlob(data) {
   return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(encoded, "base64"));
 }
 
+// ADR 0029: render the ontology source exactly as build-ontology.mjs does; read ontology.md only when
+// the source is absent at this revision.
+async function readOntologyText(client, ontologyPath, headSha) {
+  const contents = (path) => client.get(`/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(headSha)}`);
+  const sourcePath = ttlPathFor(ontologyPath);
+  if (sourcePath !== ontologyPath) {
+    let source;
+    try {
+      source = await contents(sourcePath);
+    } catch (error) {
+      if (!/returned 404/.test(String(error))) throw error;
+    }
+    if (source) return renderOntologyMarkdown(triplesToModel(parseTurtle(decodeBlob(source))));
+  }
+  return decodeBlob(await contents(ontologyPath));
+}
+
 export async function collectReviewInput(client, pull, config) {
   const headSha = pull.head.sha;
   const mergeSha = pull.merge_commit_sha;
-  const ontologyPath = config.ontologyPath;
-  const ontology = await client.get(`/contents/${ontologyPath.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(headSha)}`);
-  const ontologyText = decodeBlob(ontology);
+  const ontologyText = await readOntologyText(client, config.ontologyPath, headSha);
   let listed;
   try {
     listed = await client.getAll(`/pulls/${pull.number}/files?per_page=100`);

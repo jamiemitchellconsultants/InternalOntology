@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createGitHubClient, resolvePulls, isEligiblePull, collectReviewInput } from "./semantic-review-github.mjs";
+import { modelToTriples, serializeTurtle } from "./owl-ontology.mjs";
+import { catalogOntology } from "./semantic-review-model.mjs";
 
 const headSha = "a".repeat(40);
 const pull = {
@@ -9,6 +11,7 @@ const pull = {
   base: { sha: "b".repeat(40), repo: { id: 1 } }, merge_commit_sha: "c".repeat(40),
 };
 const blob = (text) => ({ encoding: "base64", content: Buffer.from(text).toString("base64") });
+const absent = (path) => { throw new Error(`GitHub API GET returned 404 for ${path}`); };
 
 test("same-repository authors with write, maintain, or admin permission are eligible", async () => {
   for (const permission of ["write", "maintain", "admin"]) {
@@ -109,6 +112,7 @@ test("collector reads complete changed Markdown blobs, including renamed destina
       if (path.endsWith("/git/blobs/blob-a")) return blob("unchanged line\nchanged line\n");
       if (path.endsWith("/git/blobs/blob-new")) return blob("renamed content");
       if (path.includes("/contents/docs/ontology.md")) return blob("# proposed ontology");
+      if (path.includes("/contents/docs/ontology.ttl")) return absent(path);
       throw new Error(`unexpected ${path}`);
     },
   };
@@ -126,7 +130,7 @@ test("collector reads complete changed Markdown blobs, including renamed destina
 test("unreadable blobs and truncated file listings are incomplete, never silently clean", async () => {
   const client = {
     getAll: async () => [{ filename: "docs/a.md", status: "modified", sha: "blob-a" }],
-    get: async (path) => path.includes("/contents/") ? blob("# ontology") : { encoding: "base64", content: "%%%" },
+    get: async (path) => path.includes("/contents/docs/ontology.ttl") ? absent(path) : path.includes("/contents/") ? blob("# ontology") : { encoding: "base64", content: "%%%" },
   };
   const result = await collectReviewInput(client, { ...pull, changed_files: 4 },
     { ontologyPath: "docs/ontology.md", ignorePaths: [] });
@@ -138,9 +142,65 @@ test("unreadable blobs and truncated file listings are incomplete, never silentl
 test("failed file pagination is reported as incomplete coverage", async () => {
   const client = {
     getAll: async () => { throw new Error("page 2 failed"); },
-    get: async () => blob("# ontology"),
+    get: async (path) => path.includes("/contents/docs/ontology.ttl") ? absent(path) : blob("# ontology"),
   };
   const result = await collectReviewInput(client, pull, { ontologyPath: "docs/ontology.md", ignorePaths: [] });
   assert.deepEqual(result.files, []);
   assert.match(result.unreviewed[0].reason, /listing is unavailable/);
+});
+
+// B25: the reviewer reads the ontology source, rendered as build-ontology.mjs renders it (ADR 0029).
+const SOURCE_MODEL = { projectName: "Widgets", invariants: [{ concept: "Analysis", text: "scores only stored sessions." }], sections: {
+  Entities: [{ name: "Analysis", cells: { Properties: "`analysisId`", Description: "One scoring pass." } },
+    { name: "Speaker", cells: { Properties: "`speakerCode`", Description: "A person." } }],
+  Enums: [{ name: "SessionRemovalState", cells: { Values: "`Requested`, `Removed`", Description: "Where a removal stands." } }],
+  Relationships: [{ name: "Analysis", cells: { Relationship: "credits", To: "`Speaker`", Cardinality: "many → many" } }],
+} };
+const SOURCE_TTL = serializeTurtle(modelToTriples(SOURCE_MODEL), { namespaceUri: "https://ontology.example/widgets#" });
+
+function sourceClient(contents) {
+  const calls = [];
+  return { calls, getAll: async () => [],
+    get: async (path) => {
+      calls.push(path.split("?")[0]);
+      const [file, value] = Object.entries(contents).find(([name]) => path.startsWith(`/contents/${name}?`)) ?? [];
+      if (!file) return absent(path);
+      if (value instanceof Error) throw value;
+      return blob(value);
+    } };
+}
+const listed = { ...pull, changed_files: 0 };
+
+test("B25 the collector renders ontology.ttl as build-ontology.mjs does and does not read ontology.md", async () => {
+  const client = sourceClient({ "docs/ontology.ttl": SOURCE_TTL, "docs/ontology.md": "# stale Markdown" });
+  const result = await collectReviewInput(client, listed, { ontologyPath: "docs/ontology.md", ignorePaths: [] });
+  assert.deepEqual(client.calls, ["/contents/docs/ontology.ttl"]);
+  assert.match(result.ontologyText, /^# Widgets — Application Ontology\n/);
+  const catalog = catalogOntology(result.ontologyText, { required: ["Entities", "Enums", "Relationships", "Business Rules & Invariants"], optional: [] });
+  assert.deepEqual([...catalog.evidenceKeys], ["Entities:Analysis", "Entities:Speaker", "Enums:SessionRemovalState",
+    "Relationships:Analysis", "Business Rules & Invariants:Analysis"]);
+  assert.deepEqual(catalog.groups.get("Relationships:Analysis").rows, ["| `Analysis` | credits | `Speaker` | many → many |"]);
+  assert.deepEqual(catalog.relationships, [{ evidenceKey: "Relationships:Analysis", from: "Analysis", to: "Speaker" }]);
+});
+
+test("B25 the collector reads ontology.md when ontology.ttl is absent at the revision", async () => {
+  const client = sourceClient({ "docs/ontology.md": "# proposed ontology" });
+  const result = await collectReviewInput(client, listed, { ontologyPath: "docs/ontology.md", ignorePaths: [] });
+  assert.equal(result.ontologyText, "# proposed ontology");
+  assert.deepEqual(client.calls, ["/contents/docs/ontology.ttl", "/contents/docs/ontology.md"]);
+});
+
+test("B25 an unreadable or unparseable ontology source fails the read instead of falling back", async () => {
+  const config = { ontologyPath: "docs/ontology.md", ignorePaths: [] };
+  await assert.rejects(collectReviewInput(sourceClient({ "docs/ontology.ttl": new Error("GitHub API GET returned 500 for /contents"),
+    "docs/ontology.md": "# ontology" }), listed, config), /returned 500/);
+  await assert.rejects(collectReviewInput(sourceClient({ "docs/ontology.ttl": "this is not turtle", "docs/ontology.md": "# ontology" }),
+    listed, config));
+});
+
+test("B25 an ontology path without .md is read as Markdown only", async () => {
+  const client = sourceClient({ "docs/ontology.markdown": "# proposed ontology" });
+  const result = await collectReviewInput(client, listed, { ontologyPath: "docs/ontology.markdown", ignorePaths: [] });
+  assert.equal(result.ontologyText, "# proposed ontology");
+  assert.deepEqual(client.calls, ["/contents/docs/ontology.markdown"]);
 });
