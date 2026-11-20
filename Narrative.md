@@ -70,6 +70,7 @@ by rewriting the original.
 | [54](#entry-docs-plan-the-matched-projection-build-review-amendment-135) | 2026-11-20 | Docs: plan the matched projection build-review amendment (#135) | product | - Task 18 adds the pinned raw read, verifies strict decoding and numeric 404 behaviour, and exercises a valid source over 1 MiB through the collector and planner. JSON API operations and full-mode request bytes retain their existing tests. |
 | [55](#entry-ship-matched-ontology-projection-for-large-ontologies-135) | 2026-11-20 | Ship matched ontology projection for large ontologies (#135) | product | - Read the pinned source through raw GitHub Contents with strict UTF-8 decoding and keep a Markdown fallback on a source 404. |
 | [56](#entry-docs-plan-semantic-repository-index-implementation) | 2026-11-20 | docs: plan semantic repository index implementation | product | Implement seven separately testable tasks covering configuration, committed source, embeddings, storage, local commands, release exchange, and installer and pilot integration. |
+| [57](#entry-feat-add-optional-semantic-repository-index) | 2026-11-20 | feat: add optional semantic repository index | product | Ship the indexing commands as an opt-in part of the Kit. Keep index state in an ignored file per checkout, with versioned GitHub Release assets as the shared distribution channel. Read model and scope settings from a trusted commit. |
 
 ---
 
@@ -1376,3 +1377,25 @@ Implement seven separately testable tasks covering configuration, committed sour
 Reviewers can assess the implementation and its failure cases before code is written. The build uses offline fixtures for model and release responses. Owner-authorised live endpoints and a release provide the paired-checkout evidence in the acceptance phase.
 
 AI-Fingerprint: sha256:7696fcffa70f
+
+---
+
+<a id="entry-feat-add-optional-semantic-repository-index"></a>
+
+## Entry 57 — 2026-11-20 — feat: add optional semantic repository index
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+Adopting repositories need a way to search committed code by meaning and to reuse the indexing work across checkouts. The owner needs control over which committed files are sent to the model and who can publish a snapshot that teammates consume.
+
+## Decision
+
+Ship the indexing commands as an opt-in part of the Kit. Keep index state in an ignored file per checkout, with versioned GitHub Release assets as the shared distribution channel. Read model and scope settings from a trusted commit. Require current default-branch publishing policy and the exact pushed release commit before upload.
+
+## Consequences
+
+Teams can index local commits, reuse matching assets, and refresh incrementally. Query embedding still uses the configured model. A suitable adopting repository and approved model and release are needed for live acceptance and retrieval-quality measurement. Automated tests exercise the workflow with simulated model and GitHub services.
+
+AI-Fingerprint: sha256:7d2a8de4c0c5
