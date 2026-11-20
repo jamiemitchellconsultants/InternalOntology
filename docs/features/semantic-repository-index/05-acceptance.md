@@ -124,7 +124,7 @@ The local walkthrough used the Kit from `f4cc34982768d10681b5127059d6f2af8fc64eb
 | B11 | The build suite exercises scope changes and ignored storage. | On a fixed source commit, changed coverage reported stale and refresh added only the newly approved content. |
 | B12 | The build suite exercises previous-byte preservation and a moving `HEAD`. | A controlled model error preserved the previous bytes and left the old index stale until recovery. |
 | B13 | Disabled refresh exited before model or GitHub operations. | All five commands rejected disabled or incomplete trusted policy at validation. The request monitor recorded zero model calls during the checks. |
-| B14 | The fixture recorded the approved source and query modes. | Ollama received the approved source and query modes. Changing the model revision with unchanged dimensions stopped queries before calling the model. A remote provider trial is pending. |
+| B14 | The fixture recorded the approved source and query modes. | Ollama received the approved source and query modes. Changing the model revision with unchanged dimensions stopped queries before calling the model. The installed Kit built and searched a JEPA-Speech index against the authenticated HTTPS Qwen endpoint. |
 | B15 | The build suite exercises approved paths, exclusions, symlinks, binary and dirty inputs. | The model received precisely 14 source passages from the 13 approved files. The excluded, unapproved, ignored, linked, and binary paths were absent from the index and the request trace. |
 | B16 | The build suite exercises bounded model errors and credential-free committed config. | The active store from the asset contained no token, endpoint URL or source text. A provider error omitted its response body. |
 
@@ -157,8 +157,21 @@ The representative adopter was JEPA-Speech at source commit `3021446c9cb0987139d
 
 These figures describe the selected study-app slice and question set. The live release exchange above used the private synthetic adopter. JEPA-Speech's default branch needs committed semantic index publishing policy before the upload command can approve an asset there.
 
+### Authenticated HTTPS Qwen probe · 20 November 2026 · Maintainer
+
+The maintainer ran the encoding comparison against the approved HTTPS gateway alias `qwen3-embedding-8b` using Keycloak bearer authentication. The two-input synthetic batch passed with the encoding field omitted and with `encoding_format` set to `float`. The Kit adapter accepted two indexed, nonzero numeric vectors of 4,096 dimensions in both forms. The test runner reported one pass. This verifies the format sent by the shipped adapter and the explicit `float` form at the gateway. The probe used synthetic sentences.
+
+### Installed JEPA-Speech HTTPS trial · 20 November 2026 · Maintainer
+
+Using a disposable checkout of JEPA-Speech at `3021446c9cb0987139dff4f6466712bc21c617ac`, the maintainer ran the installed Kit against the same authenticated HTTPS Qwen endpoint. The trusted policy `7396eb42b0b3934839ca5f014bdfebbd4585a420` selected the 12 files associated with the previously reviewed questions. This scope gives a focused check of source embedding, search, and citations. The larger Ollama trial above used 138 files.
+
+| Measurement | Result |
+| --- | --- |
+| Refresh | Current index for the pinned commit. 33 source embeddings in 12.51 s. |
+| Semantic top-five hits | 12/12 on the focused scope |
+| Built-in keyword top-five hits | 3/12 on the same focused scope |
+| Citations | All 60 results resolved at the pinned commit |
+
 ### Remaining deployed evidence
 
-InternalOntology documents the existing `ontology-review` alias for chat completions. An unauthenticated request to its gateway's model catalogue returned HTTP 401. The maintainer supplied a LAN embeddings endpoint. Two synthetic inputs sent directly to it returned indexed, finite, nonzero 4,096-dimensional vectors from `qwen3-embedding-8b` with HTTP 200. A separate probe on the supplied port did not establish HTTPS.
-
-The installed Kit requires HTTPS off localhost and permits HTTP for loopback addresses. Its configuration validator rejected the supplied LAN HTTP URL before any model call. The LAN probe used only synthetic text. An installed-command trial needs a transport supported by the Kit, and the live release exchange still needs a distinct reader account.
+The separate LAN service returned valid 4,096-dimensional Qwen vectors for two synthetic inputs over HTTP. The shipped CLI's validator rejected that off-loopback URL before any model call. The LAN HTTP design amendment has merged and its implementation is pending. The live release exchange still needs a distinct reader account.
