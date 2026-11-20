@@ -159,4 +159,6 @@ These figures describe the selected study-app slice and question set. The live r
 
 ### Remaining deployed evidence
 
-InternalOntology documents the existing `ontology-review` alias for chat completions. An unauthenticated request to its gateway's model catalogue returned HTTP 401. The remote trial still needs an approved OpenAI-compatible embeddings alias and credentials, and the live release exchange still needs a distinct reader account.
+InternalOntology documents the existing `ontology-review` alias for chat completions. An unauthenticated request to its gateway's model catalogue returned HTTP 401. The maintainer supplied a LAN embeddings endpoint. Two synthetic inputs sent directly to it returned indexed, finite, nonzero 4,096-dimensional vectors from `qwen3-embedding-8b` with HTTP 200. A separate probe on the supplied port did not establish HTTPS.
+
+The installed Kit requires HTTPS off localhost and permits HTTP for loopback addresses. Its configuration validator rejected the supplied LAN HTTP URL before any model call. The LAN probe used only synthetic text. An installed-command trial needs a transport supported by the Kit, and the live release exchange still needs a distinct reader account.
