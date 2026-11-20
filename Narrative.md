@@ -72,6 +72,7 @@ by rewriting the original.
 | [56](#entry-ship-matched-ontology-projection-for-large-ontologies-135) | 2026-11-20 | Ship matched ontology projection for large ontologies (#135) | product | - Read the pinned source through raw GitHub Contents with strict UTF-8 decoding and keep a Markdown fallback on a source 404. |
 | [57](#entry-docs-plan-semantic-repository-index-implementation) | 2026-11-20 | docs: plan semantic repository index implementation | product | Implement seven separately testable tasks covering configuration, committed source, embeddings, storage, local commands, release exchange, and installer and pilot integration. |
 | [58](#entry-feat-add-optional-semantic-repository-index) | 2026-11-20 | feat: add optional semantic repository index | product | Ship the indexing commands as an opt-in part of the Kit. Keep index state in an ignored file per checkout, with versioned GitHub Release assets as the shared distribution channel. Read model and scope settings from a trusted commit. |
+| [59](#entry-test-document-semantic-index-acceptance) | 2026-11-20 | test: document semantic index acceptance | product | Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. |
 
 ---
 
@@ -1422,3 +1423,25 @@ Ship the indexing commands as an opt-in part of the Kit. Keep index state in an 
 Teams can index local commits, reuse matching assets, and refresh incrementally. Query embedding still uses the configured model. A suitable adopting repository and approved model and release are needed for live acceptance and retrieval-quality measurement. Automated tests exercise the workflow with simulated model and GitHub services.
 
 AI-Fingerprint: sha256:7d2a8de4c0c5
+
+---
+
+<a id="entry-test-document-semantic-index-acceptance"></a>
+
+## Entry 59 — 2026-11-20 — test: document semantic index acceptance
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The semantic index build shipped local search and GitHub Release snapshot exchange. Acceptance needed evidence that a second developer could reuse the index, verify citations against Git, and recover from incompatible or interrupted operations. Maintainers asked to review executable behaviour in natural-language Markdown.
+
+## Decision
+
+Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. Use a Markdown test description as the maintainer review artefact.
+
+## Consequences
+
+The local suite and the live draft release exchange provide evidence for the supported workflow. The representative JEPA-Speech trial used local Ollama and obtained 8 of 12 semantic top-five hits and 1 of 12 keyword top-five hits. All 60 semantic citations resolved at the pinned commit. The maintainer's authenticated HTTPS Qwen probe accepted both the default and explicit float requests for a two-input batch, returning 4,096-dimensional vectors. The installed Kit refreshed 33 passages on a 12-file JEPA-Speech trial. It validated all 60 citations and measured 12 of 12 semantic top-five hits and 3 of 12 keyword top-five hits. Separate reader-account evidence is pending. The LAN HTTP design amendment has merged, with implementation still pending.
+
+AI-Fingerprint: sha256:8cc6ff3e1719
