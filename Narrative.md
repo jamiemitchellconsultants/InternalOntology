@@ -72,6 +72,7 @@ by rewriting the original.
 | [56](#entry-docs-plan-semantic-repository-index-implementation) | 2026-11-20 | docs: plan semantic repository index implementation | product | Implement seven separately testable tasks covering configuration, committed source, embeddings, storage, local commands, release exchange, and installer and pilot integration. |
 | [57](#entry-feat-add-optional-semantic-repository-index) | 2026-11-20 | feat: add optional semantic repository index | product | Ship the indexing commands as an opt-in part of the Kit. Keep index state in an ignored file per checkout, with versioned GitHub Release assets as the shared distribution channel. Read model and scope settings from a trusted commit. |
 | [58](#entry-test-document-semantic-index-acceptance) | 2026-11-20 | test: document semantic index acceptance | product | Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. |
+| [59](#entry-docs-add-agent-protocol-for-the-semantic-index) | 2026-11-20 | docs: add agent protocol for the semantic index | product | Ship the guidance as an installed protocol block, the same mechanism the ontology and source graph protocols use, enabled only by `--with-semantic-index`. |
 
 ---
 
@@ -1422,3 +1423,25 @@ Pair the walkthroughs and their evidence with repeatable tests of the installed 
 The local suite and the live draft release exchange provide evidence for the supported workflow. The representative JEPA-Speech trial used local Ollama and obtained 8 of 12 semantic top-five hits and 1 of 12 keyword top-five hits. All 60 semantic citations resolved at the pinned commit. The maintainer's authenticated HTTPS Qwen probe accepted both the default and explicit float requests for a two-input batch, returning 4,096-dimensional vectors. The installed Kit refreshed 33 passages on a 12-file JEPA-Speech trial. It validated all 60 citations and measured 12 of 12 semantic top-five hits and 3 of 12 keyword top-five hits. Separate reader-account evidence is pending. The LAN HTTP design amendment has merged, with implementation still pending.
 
 AI-Fingerprint: sha256:8cc6ff3e1719
+
+---
+
+<a id="entry-docs-add-agent-protocol-for-the-semantic-index"></a>
+
+## Entry 59 — 2026-11-20 — docs: add agent protocol for the semantic index
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The semantic index shipped with a runbook, user guide and setup reference, but no agent-facing instructions. `AGENTS.md` and the installed protocol never mentioned it, so an agent had no prompt to use it, to refresh a stale index, or to treat results as unverified.
+
+## Decision
+
+Ship the guidance as an installed protocol block, the same mechanism the ontology and source graph protocols use, enabled only by `--with-semantic-index`. Results are framed as leads that must be resolved against Git before use, and `upload`, `download` and scope changes are reserved for explicit requests. Rejected: a standalone doc only, because agents read the instruction file, not setup docs.
+
+## Consequences
+
+Adopters installing or upgrading with `--with-semantic-index` get the block in their agent file. Existing installs receive it on re-run. The block is only guidance and enforces nothing. Embedding endpoints receive source on `refresh`, so the block tells agents not to refresh when told otherwise.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
