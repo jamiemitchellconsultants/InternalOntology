@@ -19,6 +19,7 @@ export function catalogOntology(markdown, sections) {
   const entries = [];
   const rows = new Map();
   const groups = new Map();
+  const relationships = [];
   const groupFor = (section, name) => {
     const key = `${section}:${name}`;
     if (!groups.has(key)) groups.set(key, { section, name, rows: [] });
@@ -54,6 +55,9 @@ export function catalogOntology(markdown, sections) {
           entries.push({ section: current, name });
           rows.set(`${current}:${name}`, line);
           groupFor(current, name).rows.push(line);
+          if (current === "Relationships") {
+            relationships.push({ evidenceKey: `${current}:${name}`, from: name, to: line.split("|")[3]?.trim().replace(/^`|`$/g, "") ?? "" });
+          }
           content.set(current, (content.get(current) ?? 0) + 1);
         }
       }
@@ -87,7 +91,7 @@ export function catalogOntology(markdown, sections) {
   }
   // The valid keys are part of the projection, so the request budget counts them.
   output.push("", "## Evidence keys", "", ...[...evidenceKeys].map((key) => `- ${key}`));
-  return { projection: output.join("\n"), evidenceKeys, entries, rows, groups };
+  return { projection: output.join("\n"), evidenceKeys, entries, rows, groups, relationships };
 }
 
 function chunkEnd(text, start, capacity) {
@@ -192,9 +196,14 @@ const fullProjector = Object.assign((catalog) => ({ text: catalog.projection, ke
 export async function reviewFiles({ files, ontologyText, sections, model, baseUrl, auth, headSha,
   fetchImpl = fetch, timeoutMs = MODEL_TIMEOUT_MS, maxRequestChars = MAX_REQUEST_CHARS, project = fullProjector }) {
   const catalog = catalogOntology(ontologyText, sections);
-  const projectionChars = new Map();
-  for (const file of files) projectionChars.set(file.path, (await project(catalog, file.text)).text.length);
-  const prepared = chunkFiles(files, catalog, maxRequestChars, projectionChars);
+  let prepared;
+  if (typeof project.plan === "function") {
+    prepared = await project.plan(catalog, files, maxRequestChars);
+  } else {
+    const projectionChars = new Map();
+    for (const file of files) projectionChars.set(file.path, (await project(catalog, file.text)).text.length);
+    prepared = chunkFiles(files, catalog, maxRequestChars, projectionChars);
+  }
   const sent = new Map();
   const unreviewed = [...prepared.unreviewed];
   const findings = new Map();

@@ -353,3 +353,145 @@ Adopters reinstall with `--force --with-semantic-review`, and the next semantic 
 - [ADR 0031: relationships of matched entries, and a grouped name index](../../adr/0031-relationships-only-and-grouped-name-index.md) (U2, U3, B7, B24)
 - [ADR 0034: semantic review reads raw ontology contents](../../adr/0034-semantic-review-reads-raw-ontology-contents.md) (B25, amends ADR 0029)
 - [ADR 0035: matched planner budgets whole code points](../../adr/0035-matched-planner-budgets-whole-code-points.md) (B17, B18, amends ADR 0030)
+
+## User: runbook, guide and acceptance
+
+### Runbook
+
+The deployed acceptance environment is JEPA-Speech's GitHub Actions semantic review using the upgraded reviewer and existing protected `ontology-semantic-review` environment. Local acceptance runs the installed reviewer in disposable Git repositories with a local HTTP model stand-in.
+
+#### Deploy
+
+1. From the reviewed kit revision, run `node bin/install-ontology.mjs --target <consumer-checkout> --force --with-semantic-review`. Include the consumer's other enabled installer options when upgrading their files too. Review the installer diff and merge the consumer upgrade through its normal review. The workflow loads scripts and trusted `ontology.config.json` from the consumer's default branch.
+2. Keep `semanticReview.enabled` true with the consumer's existing model and endpoint. The protected environment supplies the model credential. Keep the repository's required `ontology/semantic-match` status. [Installed semantic review runbook](../../../templates/docs/ontology-semantic-review.md)
+3. Leave `semanticReview.projection` absent for `"matched"`. Set it to `"full"` only after installing a kit version that recognises it. The raw source is `ontology.ttl` at the reviewed pull request revision. The sibling `ontology.md` is used on a source 404.
+4. Open a same-repository pull request changing a Markdown file. Confirm the Semantic ontology review comment refers to the expected revision, includes a projection line for the reviewed file, and the status leaves pending. An unavailable or too-large status requires inspecting the comment before calling the rollout healthy.
+
+#### Operate
+
+- Read the comment's projection line for the mode, the number of entries sent in full, the ontology's total, and the size of the largest projection compared with the full projection. The status carries the review outcome.
+- For a name-index budget error, raise ONTOLOGY_MAX_REQUEST_CHARS to a positive integer the endpoint can handle. The default is 200,000 characters. For a line error, start with the reported offset and review the line's selection or raise the budget. The reviewer preserves whole Unicode code points and skips the affected file when an indivisible piece cannot fit.
+- For an unavailable ontology read, check the source at the reviewed revision. A source that exists must decode as UTF-8 and parse as Turtle. Check generated Markdown freshness with `node scripts/build-ontology.mjs --check`. GitHub's raw Contents endpoint has its own size limit.
+- For endpoint rejections or slow responses, inspect the not-reviewed reason and the model's limits. The reviewer retries HTTP 413 by splitting the chunk and selecting evidence for each half. ONTOLOGY_MODEL_TIMEOUT_MS defaults to 300,000.
+
+#### Recover
+
+1. Set `semanticReview.projection` to `"full"` to recover whole-ontology requests if the full projection fits the budget. Rerun on a fresh pull request revision and confirm the comment records full mode.
+2. To roll back the upgrade, revert the consumer's kit upgrade through its usual review. Remove the projection setting before rolling back to a version that rejects it. Use `semanticReview.enabled: false` on the trusted branch to suspend the reviewer deliberately.
+
+### User guide
+
+For maintainers and pull request authors using semantic review on an adopting repository.
+
+| Behaviour | What to expect |
+| --- | --- |
+| B1–B8 | Matched mode sends relevant full rows and the grouped name index. Whole exact names, significant name words, enum value words and configured banned aliases select rows. Short and common words are filtered for word matching. Matching an entry brings its relationship rows and every row with the same evidence key. The entry at the far end needs its own match. |
+| B9–B11, B15 | The same inputs give the same request. The comment compares selected evidence with the full projection, while existing statuses show whether findings block. The recorded JEPA-Speech examples retain the rows they cite. |
+| B12–B14, B16, B24 | A file without matches still goes to the model with the grouped name index. A valid section-and-name citation can block even when the model received only its name. A reasoned dismissal for the same finding at the same revision survives a mode switch. An unknown key leaves the chunk unreviewed. |
+| B17–B19 | Matched mode packs paragraphs, lines and pieces under the request budget. A broad file can be reviewed in several requests. If the index or a line cannot fit, read the reason in the comment. A 413 splits and retries with each half's own evidence. |
+| B20–B23 | Reinstall for the matched default. Choose full mode when catching paraphrases with no shared name word matters more than prompt size. Unsupported setting values fail configuration validation. Follow the installed runbook for rollout and recovery. |
+| B25 | The reviewer reads the reviewed revision's Turtle source. Current generated Markdown gives the same catalog and finding identities. A Markdown-only revision uses the configured Markdown fallback. |
+
+### Plain-language acceptance review
+
+These are the 16 proposed automated acceptance tests for Matched ontology projection. They install the reviewer in a disposable repository and use a local stand-in that returns controlled model replies.
+
+Review the expected outcomes below.
+
+The eight local walkthroughs and all 16 approved automated tests passed on 20 November 2026. The live JEPA-Speech trial follows the consumer upgrade.
+
+#### 1. Default matched review
+
+With the projection setting omitted, a passage about removing a session gets the removal evidence and its relationships. An unrelated microphone appears by name only. The pull request comment shows the mode, the number of entries sent in full and the largest projection compared with the whole ontology. The status says the file was reviewed.
+
+#### 2. Full-mode compatibility
+
+Switching to full mode produces exactly the same request as the original whole-ontology review. The comment records full mode and the full projection size.
+
+#### 3. Repeatable findings and dismissals
+
+Running the same review twice produces identical requests. A finding that cites an entry sent by name alone blocks until a maintainer dismisses it. Switching to full mode on the same revision keeps the finding ID and honours the dismissal.
+
+#### 4. Unknown citation
+
+If the model cites a nonexistent entry, the reviewer reports that the chunk could not be reviewed because the evidence key is unknown.
+
+#### 5. No matches and an index that cannot fit
+
+A passage with no matches still gets a model request with the name index and zero full rows. At a budget that cannot fit the index and any file text, the reviewer sends zero requests and reports the name-index budget reason.
+
+#### 6. Upgrade and installation
+
+Reinstalling adds the projector without overwriting the consumer configuration. The installed projector matches the kit. Installing graph naming alone leaves the semantic projector absent and graph naming can still load.
+
+#### 7. Operator documentation
+
+The installed runbook explains both modes, the selection rules, source and fallback, paragraph planning, both budget reasons, how to read the comment and when to update before selecting full mode.
+
+#### 8. Matching and relationships
+
+Exact names, significant name words, enum values and a configured alias select the expected rows. Common words alone select none. Selecting either end of a relationship brings every row of its relationship key. The entity at the far end and names mentioned in descriptions add rows only if the passage matches them separately.
+
+#### 9. Ten recorded findings
+
+For each of the ten historical JEPA-Speech passages, a controlled reply cites the original key. The request carries the full cited row and the finding blocks.
+
+#### 10. Paragraphs with different evidence
+
+When the evidence for the whole file exceeds the budget but each paragraph fits individually, two paragraphs are reviewed in two requests in order. Each request carries its own evidence and fits the budget.
+
+#### 11. Endpoint rejects a large request
+
+When the stand-in returns HTTP 413 for the whole request, the reviewer retries with two parts and selects the evidence for each part separately.
+
+#### 12. A line cannot fit
+
+A line that selects too much evidence and an emoji that cannot fit without splitting both produce a line-specific reason. The reason gives the original offset and names the budget setting. Zero requests are sent for the file, even though its earlier text could fit.
+
+#### 13. Grouped names and a valid citation
+
+The request lists every name in section order. A reply using the expected section-and-name citation is accepted even when none of the entry's full rows were sent.
+
+#### 14. Turtle and Markdown equivalence
+
+If Turtle is present, the reviewer reads it at the reviewed revision even when generated Markdown is stale. With Turtle absent, the current generated Markdown produces the same full request, finding ID and projection summary.
+
+#### 15. Invalid settings
+
+An unsupported projection value is rejected with an error naming the setting and value. The graph naming configuration rejects the semantic projection option.
+
+#### 16. Large ontology
+
+With 1,920 entries, a narrow passage fits in one matched request and exceeds the budget in full mode. A broad file mentioning all 60 contexts is reviewed in four matched requests within the default budget.
+
+### Acceptance
+
+Use the [walkthrough driver](walkthrough.mjs) with an installed scratch repository. With `--rows` it shows the evidence rows and index. With `--json` it also reports request digests, source paths, chunk offsets, statuses and findings. Each request is checked against the projection of the text it carries. Use `--finding='<quote>=><Section:Name>'` to reproduce a recorded citation and `--dismiss` to reconcile the first finding as a maintainer in the stand-in. The equals form handles quotes beginning with a dash.
+
+For the local small fixture, install into a fresh Git repository as in Deploy. Use the Entities, Enums and Relationships fixture named `jepaOntology` in the [acceptance test](../../../tests/matched-projection-acceptance.test.mjs). Enable those sections in the consumer config, with a banned alias mapping “deletion request” to SessionRemoval. Enter the fixture sections in `docs/ontology.md`, with a horizontal rule between sections if generating Turtle. Put each trial passage in `docs/a.md`. For the scale fixture, run `node tests/helpers/large-ontology.mjs <scratch-repo>/docs` and configure Entities, Enums, Relationships and Business Rules & Invariants. Start with the default request budget unless the step gives a tighter one.
+
+Run a scenario with `node docs/features/matched-ontology-projection/walkthrough.mjs --repo <scratch-repo> --rows <scratch-repo>/docs/a.md`. The budget for a precise boundary is the installed model module's `REQUEST_OVERHEAD`, plus the relative file path length, plus the projection character count, plus the number of UTF-16 code units of Markdown to leave room for. The driver prints the projection count for each trial input.
+
+| Walkthrough | Scripted steps and expected results | Executable coverage |
+| --- | --- | --- |
+| W1 · B1, B9, B10, B15, B20 | 1. Upgrade a scratch repo with the setting absent. Expect matched mode and the existing config preserved. 2. Review “An AuditEvent was written.” twice with `--json`. Expect equal digests, the AuditEvent row, all rows under its related key, a grouped index and a reviewed status. 3. Read the projection line. Expect two of eleven entries in full and the largest projection compared with the full projection. | B1 B10 B15 B20, B9 B12 B14, B20 |
+| W2 · B2–B8 | 1. Review “A DataType row.” and then “A datatype row, a data type, DataTypes.” Expect its row only for the exact name. 2. Review “two microphones”, “the speakers” and the enum values requested, removing, removed and failed. Expect the respective entity or enum rows. “the data type, its status and state, one event” selects no rows. 3. Review “A Deletion” and “Request was filed.” in neighbouring paragraphs, then “a deletion requester”. Expect the alias to match in the first trial. 4. Review “An AuditEvent was written.” and “An analysis.” Expect the selected entity and all three Relationships rows for Analysis in each trial. A microphone's description naming a speaker adds no speaker row. | B2 B3 B4 B5 B6 B7 B8 |
+| W3 · B11 | 1. For each of the ten passages in `recorded` in the acceptance test, copy the passage into the file and supply the indicated citation with `--finding`. 2. Inspect the requests and status. Expect the full cited row and a finding for each of the ten passages. | B11 |
+| W4 · B12–B14, B16, B24 | 1. Review “Plain words only.” Expect a request with zero full rows and one index line per section with all names in ontology order. 2. Have the stand-in cite Entities:Microphone and use `--dismiss`. Expect blocking before dismissal and success after it. Repeat the citation with `--projection full` and the same head. Expect the same finding ID. 3. Try Entities:Nowhere. Expect “finding cites an unknown evidence key”. | B9 B12 B14, B13 B18, B16, B24 |
+| W5 · B17, B19 | 1. Review “Each microphone is checked.” and “Each speaker is checked.” in separate paragraphs. Set the budget to the larger individual request. Expect two requests with each paragraph's own evidence, contiguous offsets and a reviewed file. 2. Run the same input at the default budget with `--reject-whole`. Expect one 413 and two per-half projections. 3. Review the scale fixture's `every-context.md`. Expect four in-budget requests and a reviewed file. With `--projection full`, expect a too-large result and zero calls. | B17, B19, scaling |
+| W6 · B18 | 1. Leave zero room above the name-index projection for “Plain words only.” Expect a name-index budget reason, the variable name and zero requests. 2. Put an AuditEvent line at offset 3 after `x` and a blank line. Leave zero room above that line's projection. Expect the line reason with offset 3, the budget variable and zero requests. 3. Repeat with a single emoji at offset 3 and one code unit of room above the empty projection. Expect the same line diagnosis with no request for the earlier text. | B13 B18, B18 |
+| W7 · B20, B22, B23 | 1. Check the installer preserved the config and installed the same projector bytes as the kit. Expect matched mode with the key absent. 2. Run with `--projection embedding`. Expect an error naming the setting and value. 3. Read the installed runbook and kit README. Expect mode details, matching and source rules, the grouped index, planning and budget reasons, record fields, the paraphrase caveat and the update order. | B20, B22, B23 |
+| W8 · B21, B25 | 1. Generate Turtle with the installed build tool. Run the AuditEvent fixture with `--projection full`, the same head and a fixed citation. Expect a Turtle read only, full-mode record and finding. 2. Set aside the generated Markdown and replace it with a stale copy in the disposable fixture. Expect the same request digest. 3. Restore the generated Markdown and move Turtle aside in the fixture. Expect both path reads, the same full-request digest and the same finding ID. Restore the fixture files. | B21, B25 |
+
+The executable suite is [matched-projection-acceptance.test.mjs](../../../tests/matched-projection-acceptance.test.mjs). It installs the kit, drives the worker through the collector and captures model requests and published status. To run it against the installed scripts of an upgraded consumer, set ONTOLOGY_ACCEPTANCE_SCRIPT_ROOT to that checkout's absolute `scripts` path.
+
+For the deployed layer, repeat W1–W8 using the upgraded JEPA-Speech installation and the stand-in to control outcomes that require a specific response. In a separate trial pull request, add a Markdown passage with a known divergence such as the historical AuditRecord wording. Follow the published semantic review and confirm the live model cites a resolvable `Section:Name` key from the grouped index. Capture the trial pull request, the reviewed SHA, the comment link and the reported key. Keep the trial change out of the consumer's default branch.
+
+#### Results
+
+| Environment | Layer | Result | Date | By |
+| --- | --- | --- | --- | --- |
+| Local build | Scripted walkthroughs W1–W8 | Pass. The broad file took four requests, both budget causes were reported with zero requests for the affected files, and the full request and finding matched across the Turtle and Markdown paths. | 2026-11-20 | Codex |
+| Local build | Executable acceptance | Pass, 16 of 16 on Node 24 in Docker after maintainer approval. | 2026-11-20 | Codex |
+| JEPA-Speech | Walkthroughs and executable acceptance against deployed scripts | Pending the reviewed kit and consumer upgrades. | — | — |
+| JEPA-Speech | Live model citation check | Pending upgraded default-branch reviewer and dedicated trial PR. | — | — |
