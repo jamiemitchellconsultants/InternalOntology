@@ -380,3 +380,16 @@ test("B13 B24 an empty optional-only catalog has no example key and can still be
     chunks: [{ path: PATH, offset: 0, text: "x", keys: [], chars: projection.length }], unreviewed: [],
   });
 });
+
+test("B17 a file with 140,000 one-character chunks is planned in order", () => {
+  const text = "x".repeat(140_000);
+  const { chunks, unreviewed } = matched.plan(catalog,
+    [{ path: PATH, text }, { path: "docs/b.md", text: "z" }], fixed + EMPTY + 1);
+
+  assert.deepEqual(unreviewed, []);
+  assert.equal(chunks.length, text.length + 1);
+  for (let offset = 0; offset < text.length; offset++) {
+    assert.deepEqual(chunks[offset], { path: PATH, offset, text: "x", keys: [], chars: EMPTY });
+  }
+  assert.deepEqual(chunks.at(-1), { path: "docs/b.md", offset: 0, text: "z", keys: [], chars: EMPTY });
+});

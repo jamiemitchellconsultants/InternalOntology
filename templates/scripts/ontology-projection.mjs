@@ -280,7 +280,9 @@ export function createProjector({ mode = "matched", bannedAliases = [] } = {}) {
         continue;
       }
       try {
-        chunks.push(...planFile(index, file, maxRequestChars));
+        for (const chunk of planFile(index, file, maxRequestChars)) {
+          chunks.push(chunk);
+        }
       } catch (error) {
         if (!(error instanceof LineTooLarge)) throw error;
         unreviewed.push({ path: file.path, code: "too-large", reason: error.message });
