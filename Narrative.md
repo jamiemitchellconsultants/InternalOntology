@@ -74,6 +74,7 @@ by rewriting the original.
 | [58](#entry-test-document-semantic-index-acceptance) | 2026-11-20 | test: document semantic index acceptance | product | Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. |
 | [59](#entry-docs-add-agent-protocol-for-the-semantic-index) | 2026-11-20 | docs: add agent protocol for the semantic index | product | Ship the guidance as an installed protocol block, the same mechanism the ontology and source graph protocols use, enabled only by `--with-semantic-index`. |
 | [60](#entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi) | 2026-11-20 | docs: add perceived quality and token cost outcome to semantic index vision | product | Record perceived benefit as the primary evidence for the new outcome, and token cost as a paired measure that shows whether the benefit is cheap or expensive. Outcome 5 starts as an observation with no target until a baseline exists. |
+| [61](#entry-docs-feature-design-for-semantic-index-token-efficiency) | 2026-11-20 | docs(feature): design for semantic index token efficiency | product | Estimate tokens from characters and log counts only in a local file. Add a passage command that returns only the cited lines from the indexed commit, and a compact JSON form. |
 
 ---
 
@@ -1466,5 +1467,27 @@ Record perceived benefit as the primary evidence for the new outcome, and token 
 ## Consequences
 
 Later work can cite outcome 5 when tuning result size and telemetry. A follow-up feature, semantic index token efficiency (#178), takes on the measurement and reduction work. Nothing in the shipped index changes.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-docs-feature-design-for-semantic-index-token-efficiency"></a>
+
+## Entry 61 — 2026-11-20 — docs(feature): design for semantic index token efficiency
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The semantic repository index reports no token cost, so nobody can tell whether it saves anything. Search results already carry no passage text, so the cost that remains is the reading agents do after a search, repeated searches, and the protocol loaded each session. The owner chose to reinterpret the vision's result-size outcomes in that light rather than raise pushback.
+
+## Decision
+
+Estimate tokens from characters and log counts only in a local file. Add a passage command that returns only the cited lines from the indexed commit, and a compact JSON form. Cap responses by estimated tokens, cut and marked rather than refused. Shorten the agent protocol and have agents consult the graph first. Rejected: a model tokenizer, excerpts in search results, refusing oversize requests, and having search consult the graph. Decisions are in [ADR 0037](docs/adr/0037-count-tokens-by-estimate-and-log-counts-locally.md), [ADR 0038](docs/adr/0038-add-a-passage-command-and-compact-output.md), [ADR 0039](docs/adr/0039-cap-responses-by-estimated-tokens.md) and [ADR 0040](docs/adr/0040-shorten-the-protocol-and-consult-the-graph-first.md).
+
+## Consequences
+
+The developer can plan from the traceability table without re-deciding structure. The default cap of 4000 estimated tokens is a placeholder until a baseline exists. Passage merge and any change to model, ranking, chunking or snapshot format remain out of scope. Nothing ships until the plan and build phases.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
