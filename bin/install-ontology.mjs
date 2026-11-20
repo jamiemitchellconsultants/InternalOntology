@@ -10,12 +10,13 @@
 //                                 [--ontology-path <path>] [--default-branch <name>]
 //                                 [--with-drift-review]
 //                                 [--with-semantic-review]
+//                                 [--with-semantic-index]
 //                                 [--with-graph-naming-review]
 //                                 [--with-enum-tests csharp|typescript|python]
 //   node bin/install-ontology.mjs --help
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -136,6 +137,14 @@ export function buildPlan(options) {
       { template: "docs/source-knowledge-graph.md", dest: "docs/source-knowledge-graph.md", substitute: true, ownedBy: "kit" },
       { template: "source-graph/graph-schema.ttl", dest: `${root}/graph-schema.ttl`, substitute: false, ownedBy: "kit" },
       ...["manifest.ttl", "nodes.ttl"].map((name) => ({ template: `source-graph/${name}`, dest: `${root}/${name}`, substitute: true, ownedBy: "adopter" })));
+  }
+
+  if (options.withSemanticIndex) {
+    const scripts = ["semantic-index", "semantic-index-source", "semantic-index-embed", "semantic-index-store", "semantic-index-release"];
+    if (!options.withSourceGraph) scripts.push("source-graph-git");
+    for (const path of [...scripts.map((name) => `scripts/${name}.mjs`), "docs/semantic-index.md"]) {
+      plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
+    }
   }
 
   if (options.withEnumTests) {
@@ -288,10 +297,42 @@ export function substituteJsonString(text, values) {
   });
 }
 
+function planIndexIgnore(target) {
+  const directory = ".ontology-index";
+  const git = (...args) => execFileSync("git", args, { cwd: target, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  if (git("ls-files", "-z", "--", directory)) throw new Error("Semantic index storage contains tracked paths.");
+  let head;
+  try { head = git("rev-parse", "--verify", "--quiet", "HEAD").trim(); } catch (error) {
+    if (error.status !== 1) throw error;
+  }
+  if (head && git("ls-tree", "-z", head, "--", directory)) throw new Error("Semantic index storage contains tracked paths.");
+  for (const path of [directory, `${directory}/index-v1.jsonl`, `${directory}/writer.lock`, ".gitignore"]) {
+    let stat;
+    try { stat = lstatSync(join(target, path)); } catch (error) {
+      if (error.code === "ENOENT" || error.code === "ENOTDIR") continue;
+      throw error;
+    }
+    if (stat.isSymbolicLink()) throw new Error(`Semantic index setup cannot use a symbolic link at ${path}.`);
+    if (path === directory ? !stat.isDirectory() : !stat.isFile()) throw new Error(`Semantic index setup found the wrong file type at ${path}.`);
+  }
+  try {
+    const match = execFileSync("git", ["check-ignore", "-v", "-z", "--no-index", "--stdin"], {
+      cwd: target, encoding: "utf8", input: `${directory}/\0`, stdio: ["pipe", "pipe", "pipe"],
+    });
+    const [source, , pattern] = match.split("\0");
+    if (source === ".gitignore" && pattern && !pattern.startsWith("!")) return null;
+  } catch (error) {
+    if (error.status !== 1) throw error;
+  }
+  const file = join(target, ".gitignore");
+  const contents = existsSync(file) ? readFileSync(file) : Buffer.alloc(0);
+  return { file, suffix: `${contents.length && contents.at(-1) !== 10 ? "\n" : ""}/${directory}/\n` };
+}
+
 /**
  * @param {{ target: string, projectName?: string, ontologyPath?: string, defaultBranch?: string,
  *           force?: boolean, resetContent?: boolean, dryRun?: boolean, withDriftReview?: boolean,
- *           withSemanticReview?: boolean,
+ *           withSemanticReview?: boolean, withSemanticIndex?: boolean,
  *           withEnumTests?: string }} options
  * @returns {{ written: string[], skipped: { dest: string, ownedBy: "kit" | "adopter" }[],
  *             agentFile: string, enumTestExample: string | null }}
@@ -314,6 +355,7 @@ export function install(options) {
   if (!sourceGraphRoot) throw new Error("--source-graph-root must be non-empty");
   if (options.withGraphNamingReview && !withSourceGraph) throw new Error("--with-graph-naming-review requires --with-source-graph");
   const configExists = existsSync(join(target, "ontology.config.json"));
+  const indexIgnore = options.withSemanticIndex ? planIndexIgnore(target) : null;
 
   const agentFile = detectAgentFile(target);
   const agentPath = join(target, agentFile.path);
@@ -348,7 +390,10 @@ export function install(options) {
   const skipped = [];
   let enumTestExample = null;
   const sectionText = withSourceGraph ? substituteJsonString(readFileSync(join(TEMPLATE_ROOT, "source-graph/config-section.json"), "utf8"), values).trim() : null;
-  const configNotice = withSourceGraph && configExists && !resetContent ? `Add this section to ontology.config.json:\n"sourceGraph": ${sectionText}` : null;
+  const configNotice = [
+    withSourceGraph && configExists && !resetContent ? `Add this section to ontology.config.json:\n"sourceGraph": ${sectionText}` : null,
+    options.withSemanticIndex ? "See docs/semantic-index.md for the semanticIndex configuration example. Commit the chosen settings on the trusted branch to enable local search." : null,
+  ].filter(Boolean).join("\n\n") || null;
 
   for (const entry of plan) {
     const destPath = join(target, entry.dest);
@@ -388,6 +433,10 @@ export function install(options) {
   }
   if (!dryRun) writeFileSync(agentPath, agentText);
   written.push(agentFile.path);
+  if (indexIgnore) {
+    if (!dryRun) appendFileSync(indexIgnore.file, indexIgnore.suffix);
+    written.push(".gitignore");
+  }
 
   return { written, skipped, agentFile: agentFile.path, enumTestExample, configNotice, defaultBranch };
 }
@@ -403,6 +452,7 @@ const VALUE_OPTIONS = {
 const FLAG_OPTIONS = {
   "--with-drift-review": "withDriftReview",
   "--with-semantic-review": "withSemanticReview",
+  "--with-semantic-index": "withSemanticIndex",
   "--with-source-graph": "withSourceGraph",
   "--with-graph-naming-review": "withGraphNamingReview",
   "--force": "force",
@@ -413,7 +463,7 @@ const FLAG_OPTIONS = {
 const USAGE =
   "usage: node bin/install-ontology.mjs --target <repo> [--project-name <name>]\n" +
   "         [--ontology-path <path>] [--default-branch <name>] [--with-drift-review]\n" +
-  "         [--with-semantic-review] [--with-source-graph] [--with-graph-naming-review]\n" +
+  "         [--with-semantic-review] [--with-semantic-index] [--with-source-graph] [--with-graph-naming-review]\n" +
   "         [--with-enum-tests csharp|typescript|python] [--force] [--reset-content] [--dry-run]\n" +
   "\n" +
   "Installs the ontology kit's scripts, CI workflow, starter config and ontology document into\n" +
@@ -427,6 +477,7 @@ const USAGE =
   "                           default branch (origin/HEAD), else the current branch, else \"main\".\n" +
   "  --with-drift-review      Also install the advisory semantic reviewer, its tests, workflow and runbook.\n" +
   "  --with-semantic-review   Install the opt-in blocking semantic reviewer and its setup runbook.\n" +
+  "  --with-semantic-index    Install local semantic search and GitHub Release snapshot commands.\n" +
   "  --with-source-graph      Install the opt-in source graph and its workflow.\n" +
   "  --source-graph-root <path> Set the graph root and enable source graph installation.\n" +
   "  --with-graph-naming-review  Install the opt-in model-assisted graph naming review; needs --with-source-graph.\n" +
@@ -466,7 +517,7 @@ export function parseCliArgs(argv) {
     throw new Error(
       "--target is required — usage: node bin/install-ontology.mjs --target <repo> " +
         "[--project-name <name>] [--ontology-path <path>] [--default-branch <name>] " +
-        "[--with-drift-review] [--with-semantic-review] [--with-source-graph] [--source-graph-root <path>] [--with-graph-naming-review] [--with-enum-tests csharp|typescript|python] " +
+        "[--with-drift-review] [--with-semantic-review] [--with-semantic-index] [--with-source-graph] [--source-graph-root <path>] [--with-graph-naming-review] [--with-enum-tests csharp|typescript|python] " +
         "[--force] [--reset-content] [--dry-run]",
     );
   }

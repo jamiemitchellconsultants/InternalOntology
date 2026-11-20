@@ -30,6 +30,7 @@ node bin/install-ontology.mjs --target /path/to/repo
 | `--default-branch <name>` | Branch the workflows' `push` triggers fire on. Defaults to the remote's default branch (`origin/HEAD`), else the target's current branch, else `main`. The installer prints the branch it chose and where it came from. |
 | `--with-drift-review` | Also install the advisory semantic reviewer, its tests, workflow and runbook. It authenticates with a short-lived Keycloak token (OIDC client credentials) or a legacy static key; see the installed runbook. Requests are budgeted at 200,000 characters by default; set the repository variable ONTOLOGY_MAX_REQUEST_CHARS to change it. |
 | `--with-semantic-review` | Install the opt-in blocking semantic reviewer, its trusted workflows, tests and [setup runbook](templates/docs/ontology-semantic-review.md). The shipped config stays disabled until maintainers activate it. |
+| `--with-semantic-index` | Install checkout-local semantic search, GitHub Release snapshot commands, and the [setup reference](templates/docs/semantic-index.md). |
 | `--with-source-graph` | Install the opt-in source graph checker, reader, workflow and [runbook](templates/docs/source-knowledge-graph.md). |
 | `--source-graph-root <path>` | Select the graph root and enable source graph installation. |
 | `--with-enum-tests <lang>` | Also install a worked-example enum lock test: `csharp`, `typescript`, or `python`. Installed with a `.example` suffix — see [Then seed it](#then-seed-it). |
@@ -76,6 +77,10 @@ that branch. The reviewer runs from trusted default-branch code
 and assesses complete changed Markdown files. Findings can block merge through the fixed
 `ontology/semantic-match` status. Missing coverage is visible and permits merge unless the current
 run also has an active finding.
+
+## Optional semantic repository index
+
+Install `--with-semantic-index` to search approved code, tests, and docs from a Git commit. The repository owner supplies an OpenAI-compatible embedding endpoint in the committed `semanticIndex` settings. Each checkout stores its vectors in the Git-ignored `.ontology-index/` directory. Developers can share a snapshot through a GitHub Release and reuse its source embeddings in another checkout. See the [setup reference](templates/docs/semantic-index.md) for configuration and commands.
 
 ## Optional source knowledge graph
 
