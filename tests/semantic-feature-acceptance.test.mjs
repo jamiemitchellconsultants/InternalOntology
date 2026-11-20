@@ -40,6 +40,11 @@ function makeClient({ current = pull, files = [], texts = {}, sourceOntology = o
   const calls = [];
   const client = {
     comments, statuses, calls,
+    getContentText: async (path, ref) => {
+      calls.push(`/contents/${path}?ref=${ref}`);
+      if (path === "docs/ontology.md") return sourceOntology;
+      throw Object.assign(new Error(`GitHub API GET returned 404 for ${path}`), { status: 404 });
+    },
     get: async (path) => {
       calls.push(path);
       if (path === `/pulls/${current.number}`) return current;
@@ -48,8 +53,6 @@ function makeClient({ current = pull, files = [], texts = {}, sourceOntology = o
         if (!role) throw new Error("GitHub API GET returned 404");
         return { permission: role, role_name: role };
       }
-      if (path.startsWith("/contents/docs/ontology.md?ref=")) return blob(sourceOntology);
-      if (path.startsWith("/contents/docs/ontology.ttl?ref=")) throw new Error(`GitHub API GET returned 404 for ${path}`);
       if (path.startsWith("/git/blobs/")) {
         const sha = decodeURIComponent(path.slice("/git/blobs/".length));
         if (!(sha in texts)) throw new Error("missing blob");

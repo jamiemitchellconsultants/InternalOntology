@@ -11,7 +11,7 @@ const pull = {
   base: { sha: "b".repeat(40), repo: { id: 1 } }, merge_commit_sha: "c".repeat(40),
 };
 const blob = (text) => ({ encoding: "base64", content: Buffer.from(text).toString("base64") });
-const absent = (path) => { throw new Error(`GitHub API GET returned 404 for ${path}`); };
+const absent = (path) => { throw Object.assign(new Error(`GitHub API GET returned 404 for ${path}`), { status: 404 }); };
 
 test("same-repository authors with write, maintain, or admin permission are eligible", async () => {
   for (const permission of ["write", "maintain", "admin"]) {
@@ -108,11 +108,10 @@ test("collector reads complete changed Markdown blobs, including renamed destina
   ];
   const client = {
     getAll: async () => files,
+    getContentText: async (path) => path === "docs/ontology.md" ? "# proposed ontology" : absent(path),
     get: async (path) => {
       if (path.endsWith("/git/blobs/blob-a")) return blob("unchanged line\nchanged line\n");
       if (path.endsWith("/git/blobs/blob-new")) return blob("renamed content");
-      if (path.includes("/contents/docs/ontology.md")) return blob("# proposed ontology");
-      if (path.includes("/contents/docs/ontology.ttl")) return absent(path);
       throw new Error(`unexpected ${path}`);
     },
   };
@@ -130,7 +129,8 @@ test("collector reads complete changed Markdown blobs, including renamed destina
 test("unreadable blobs and truncated file listings are incomplete, never silently clean", async () => {
   const client = {
     getAll: async () => [{ filename: "docs/a.md", status: "modified", sha: "blob-a" }],
-    get: async (path) => path.includes("/contents/docs/ontology.ttl") ? absent(path) : path.includes("/contents/") ? blob("# ontology") : { encoding: "base64", content: "%%%" },
+    getContentText: async (path) => path === "docs/ontology.ttl" ? absent(path) : "# ontology",
+    get: async () => ({ encoding: "base64", content: "%%%" }),
   };
   const result = await collectReviewInput(client, { ...pull, changed_files: 4 },
     { ontologyPath: "docs/ontology.md", ignorePaths: [] });
@@ -142,7 +142,7 @@ test("unreadable blobs and truncated file listings are incomplete, never silentl
 test("failed file pagination is reported as incomplete coverage", async () => {
   const client = {
     getAll: async () => { throw new Error("page 2 failed"); },
-    get: async (path) => path.includes("/contents/docs/ontology.ttl") ? absent(path) : blob("# ontology"),
+    getContentText: async (path) => path === "docs/ontology.ttl" ? absent(path) : "# ontology",
   };
   const result = await collectReviewInput(client, pull, { ontologyPath: "docs/ontology.md", ignorePaths: [] });
   assert.deepEqual(result.files, []);
@@ -161,12 +161,12 @@ const SOURCE_TTL = serializeTurtle(modelToTriples(SOURCE_MODEL), { namespaceUri:
 function sourceClient(contents) {
   const calls = [];
   return { calls, getAll: async () => [],
-    get: async (path) => {
-      calls.push(path.split("?")[0]);
-      const [file, value] = Object.entries(contents).find(([name]) => path.startsWith(`/contents/${name}?`)) ?? [];
-      if (!file) return absent(path);
+    getContentText: async (file) => {
+      calls.push("/contents/" + file);
+      if (!Object.hasOwn(contents, file)) return absent(file);
+      const value = contents[file];
       if (value instanceof Error) throw value;
-      return blob(value);
+      return value;
     } };
 }
 const listed = { ...pull, changed_files: 0 };
@@ -192,7 +192,7 @@ test("B25 the collector reads ontology.md when ontology.ttl is absent at the rev
 
 test("B25 an unreadable or unparseable ontology source fails the read instead of falling back", async () => {
   const config = { ontologyPath: "docs/ontology.md", ignorePaths: [] };
-  await assert.rejects(collectReviewInput(sourceClient({ "docs/ontology.ttl": new Error("GitHub API GET returned 500 for /contents"),
+  await assert.rejects(collectReviewInput(sourceClient({ "docs/ontology.ttl": Object.assign(new Error("GitHub API GET returned 500 for /contents"), { status: 500 }),
     "docs/ontology.md": "# ontology" }), listed, config), /returned 500/);
   await assert.rejects(collectReviewInput(sourceClient({ "docs/ontology.ttl": "this is not turtle", "docs/ontology.md": "# ontology" }),
     listed, config));
@@ -203,4 +203,56 @@ test("B25 an ontology path without .md is read as Markdown only", async () => {
   const result = await collectReviewInput(client, listed, { ontologyPath: "docs/ontology.markdown", ignorePaths: [] });
   assert.equal(result.ontologyText, "# proposed ontology");
   assert.deepEqual(client.calls, ["/contents/docs/ontology.markdown"]);
+});
+
+function rawCollectorClient(responses) {
+  const calls = [];
+  const client = createGitHubClient({ token: "token", repository: "org/repo", fetchImpl: async (url, request) => {
+    const { pathname, search } = new URL(url);
+    if (pathname.endsWith("/pulls/7/files")) return new Response("[]");
+    const path = pathname.slice("/repos/org/repo/contents/".length);
+    calls.push({ path, search, method: request.method, accept: request.headers.Accept });
+    assert.ok(Object.hasOwn(responses, path), path);
+    return responses[path];
+  } });
+  return { calls, client };
+}
+
+const rawCall = (path) => ({ path, search: `?ref=${headSha}`, method: "GET", accept: "application/vnd.github.raw+json" });
+
+test("B25 a numeric source 404 tries raw Markdown once at the same reviewed revision", async () => {
+  const { client, calls } = rawCollectorClient({
+    "docs/my%20ontology.ttl": new Response('{"message":"Not found"}', { status: 404 }),
+    "docs/my%20ontology.md": new Response("\uFEFF# proposed ontology — café\n"),
+  });
+  const result = await collectReviewInput(client, listed, { ontologyPath: "docs/my ontology.md", ignorePaths: [] });
+  assert.equal(result.ontologyText, "# proposed ontology — café\n");
+  assert.deepEqual(calls, [rawCall("docs/my%20ontology.ttl"), rawCall("docs/my%20ontology.md")]);
+});
+
+test("B25 a raw path without a Markdown extension is read once as Markdown", async () => {
+  const { client, calls } = rawCollectorClient({
+    "docs/ontology.markdown": new Response("# proposed ontology\n"),
+  });
+  const result = await collectReviewInput(client, listed, { ontologyPath: "docs/ontology.markdown", ignorePaths: [] });
+  assert.equal(result.ontologyText, "# proposed ontology\n");
+  assert.deepEqual(calls, [rawCall("docs/ontology.markdown")]);
+});
+
+test("B25 a non-404 response mentioning 404 cannot trigger the raw Markdown fallback", async () => {
+  const { client, calls } = rawCollectorClient({
+    "docs/ontology.ttl": new Response('{"message":"upstream returned 404 while handling this request"}', { status: 500 }),
+  });
+  await assert.rejects(collectReviewInput(client, listed, { ontologyPath: "docs/ontology.md", ignorePaths: [] }),
+    { status: 500, message: /returned 500/ });
+  assert.deepEqual(calls, [rawCall("docs/ontology.ttl")]);
+});
+
+test("B25 invalid UTF-8 in a raw source fails without trying Markdown", async () => {
+  const { client, calls } = rawCollectorClient({
+    "docs/ontology.ttl": new Response(Uint8Array.of(0xc3, 0x28)),
+  });
+  await assert.rejects(collectReviewInput(client, listed, { ontologyPath: "docs/ontology.md", ignorePaths: [] }),
+    { code: "ERR_ENCODING_INVALID_ENCODED_DATA" });
+  assert.deepEqual(calls, [rawCall("docs/ontology.ttl")]);
 });

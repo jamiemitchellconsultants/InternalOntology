@@ -10,14 +10,14 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch }) {
     throw new Error("GitHub token and owner/repository are required");
   }
   const root = `${apiOrigin}/repos/${repository}`;
-  async function request(path, method = "GET", body) {
+  async function request(path, method = "GET", body, { raw = false } = {}) {
     const url = new URL(path.startsWith("/") ? path.slice(1) : path, root + "/");
     if (url.origin !== apiOrigin || !url.pathname.startsWith(root.slice(apiOrigin.length) + "/")) {
       throw new Error("GitHub API page is outside this repository");
     }
     const response = await fetchImpl(url.href, {
       method,
-      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`,
+      headers: { Accept: raw ? "application/vnd.github.raw+json" : "application/vnd.github+json", Authorization: `Bearer ${token}`,
         ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
@@ -25,13 +25,20 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch }) {
       const needed = response.headers.get("x-accepted-github-permissions");
       const errorBody = await response.json().catch(() => ({}));
       const detail = typeof errorBody?.message === "string" ? errorBody.message.replace(/\s+/g, " ").slice(0, 200) : "";
-      throw new Error(`GitHub API ${method} returned ${response.status} for ${url.pathname}` +
-        (needed ? ` (accepted permissions: ${needed})` : "") + (detail ? `: ${detail}` : ""));
+      throw Object.assign(new Error(`GitHub API ${method} returned ${response.status} for ${url.pathname}` +
+        (needed ? ` (accepted permissions: ${needed})` : "") + (detail ? `: ${detail}` : "")), { status: response.status });
     }
-    return { data: await response.json(), next: /<([^>]+)>;\s*rel="next"/.exec(response.headers.get("link") ?? "")?.[1] };
+    const data = raw
+      ? new TextDecoder("utf-8", { fatal: true }).decode(await response.arrayBuffer())
+      : await response.json();
+    return { data, next: /<([^>]+)>;\s*rel="next"/.exec(response.headers.get("link") ?? "")?.[1] };
   }
   return {
     async get(path) { return (await request(path)).data; },
+    async getContentText(path, ref) {
+      const encoded = path.split("/").map(encodeURIComponent).join("/");
+      return (await request(`/contents/${encoded}?ref=${encodeURIComponent(ref)}`, "GET", undefined, { raw: true })).data;
+    },
     async post(path, body) { return (await request(path, "POST", body)).data; },
     async patch(path, body) { return (await request(path, "PATCH", body)).data; },
     async getAll(path) {
@@ -95,18 +102,16 @@ export function decodeBlob(data) {
 // ADR 0029: render the ontology source exactly as build-ontology.mjs does; read ontology.md only when
 // the source is absent at this revision.
 async function readOntologyText(client, ontologyPath, headSha) {
-  const contents = (path) => client.get(`/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(headSha)}`);
   const sourcePath = ttlPathFor(ontologyPath);
-  if (sourcePath !== ontologyPath) {
-    let source;
-    try {
-      source = await contents(sourcePath);
-    } catch (error) {
-      if (!/returned 404/.test(String(error))) throw error;
-    }
-    if (source) return renderOntologyMarkdown(triplesToModel(parseTurtle(decodeBlob(source))));
+  if (sourcePath === ontologyPath) return client.getContentText(ontologyPath, headSha);
+  let source;
+  try {
+    source = await client.getContentText(sourcePath, headSha);
+  } catch (error) {
+    if (error?.status !== 404) throw error;
+    return client.getContentText(ontologyPath, headSha);
   }
-  return decodeBlob(await contents(ontologyPath));
+  return renderOntologyMarkdown(triplesToModel(parseTurtle(source)));
 }
 
 export async function collectReviewInput(client, pull, config) {
