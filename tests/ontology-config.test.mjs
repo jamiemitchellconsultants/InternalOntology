@@ -42,6 +42,7 @@ test("a minimal config is filled in with empty defaults", () => {
     ignorePaths: [],
     semanticReview: { enabled: false, model: "", baseUrl: "", projection: "matched" },
     sourceGraph: { enabled: false, root: "docs/source-knowledge-graph", evidence: {}, markdownPath: "docs/source-knowledge-graph/README.md", repositoryUrl: "", namingReview: { enabled: false, model: "", baseUrl: "" } },
+    semanticIndex: null,
   });
 });
 

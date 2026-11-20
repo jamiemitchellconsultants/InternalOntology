@@ -23,6 +23,7 @@ const KNOWN_KEYS = new Set([
   "ignorePaths",
   "semanticReview",
   "sourceGraph",
+  "semanticIndex",
 ]);
 
 const DEFAULT_NAMESPACE_URI = "https://ontology.example/ontology#";
@@ -39,7 +40,8 @@ const KNOWN_SECTION_KEYS = new Set(["required", "optional"]);
  *             semanticReview: { enabled: boolean, model: string, baseUrl: string, projection: "matched" | "full" },
  *             sourceGraph: { enabled: boolean, root: string, evidence: Record<string, string[]>,
  *                            markdownPath: string, repositoryUrl: string,
- *                            namingReview: { enabled: boolean, model: string, baseUrl: string } } }} OntologyConfig
+ *                            namingReview: { enabled: boolean, model: string, baseUrl: string } },
+ *             semanticIndex: ReturnType<typeof validateSemanticIndex> }} OntologyConfig
  */
 
 /**
@@ -83,6 +85,83 @@ function requireEntryArray(value, label) {
     throw new Error(`${CONFIG_FILENAME}: ${label} must be an array`);
   }
   return value;
+}
+
+function checkIndexObject(value, label, keys) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${CONFIG_FILENAME}: ${label} must be an object`);
+  }
+  for (const key of Object.keys(value)) {
+    if (!keys.includes(key)) throw new Error(`${CONFIG_FILENAME}: unknown key "${label}.${key}"`);
+  }
+}
+
+function indexSelectors(value, label) {
+  return [...new Set(requireStringArray(value, label).map((path) => {
+    const segments = path.replace(/\/$/, "").split("/");
+    if (path.includes("\\") || path.includes("\0") || /^[A-Za-z]:/.test(path) ||
+        segments.some((segment) => !segment || segment === "." || segment === "..")) {
+      throw new Error(`${CONFIG_FILENAME}: ${label} requires repository-relative paths and directory prefixes`);
+    }
+    return path;
+  }))].sort();
+}
+
+function validateIndexEmbedding(value) {
+  const label = "semanticIndex.embedding";
+  checkIndexObject(value, label, ["endpoint", "model", "revision", "dimensions", "documentPrefix", "queryPrefix"]);
+  const { endpoint, model, revision, dimensions, documentPrefix = "", queryPrefix = "" } = value;
+  let url;
+  try {
+    if (typeof endpoint === "string" && !/[?#\s]/.test(endpoint)) url = new URL(endpoint);
+  } catch {
+    // Report a fixed diagnostic without echoing a URL that could contain credentials.
+  }
+  const loopback = url && (url.hostname === "localhost" || url.hostname === "[::1]" || /^127(?:\.\d{1,3}){3}$/.test(url.hostname));
+  if (!url || url.username || url.password || url.pathname === "/" ||
+      (url.protocol !== "https:" && !(url.protocol === "http:" && loopback))) {
+    throw new Error(`${CONFIG_FILENAME}: ${label}.endpoint must be a credential-free HTTPS URL or loopback HTTP URL with a path`);
+  }
+  for (const [key, text] of [["model", model], ["revision", revision]]) {
+    if (typeof text !== "string" || !text.trim()) throw new Error(`${CONFIG_FILENAME}: ${label}.${key} must be a non-empty string`);
+  }
+  if (!Number.isInteger(dimensions) || dimensions < 1 || dimensions > 8192) {
+    throw new Error(`${CONFIG_FILENAME}: ${label}.dimensions must be an integer from 1 to 8192`);
+  }
+  for (const [key, prefix] of [["documentPrefix", documentPrefix], ["queryPrefix", queryPrefix]]) {
+    if (typeof prefix !== "string" || Buffer.byteLength(prefix) > 64 * 1024) {
+      throw new Error(`${CONFIG_FILENAME}: ${label}.${key} must be a string within the embedding request limit`);
+    }
+  }
+  return { endpoint: url.href, model: model.trim(), revision: revision.trim(), dimensions, documentPrefix, queryPrefix };
+}
+
+function validateIndexRelease(value) {
+  if (value === undefined) return null;
+  const label = "semanticIndex.release";
+  checkIndexObject(value, label, ["repository", "publishers"]);
+  const { repository, publishers } = value;
+  if (typeof repository !== "string" || !/^[a-z0-9]+(?:[.-][a-z0-9]+)*\/[a-z0-9][a-z0-9-]*\/(?!\.{1,2}$)[a-z0-9_.-]+$/i.test(repository)) {
+    throw new Error(`${CONFIG_FILENAME}: ${label}.repository must be host/owner/repo`);
+  }
+  const logins = requireStringArray(publishers, `${label}.publishers`);
+  if ((publishers !== undefined && !logins.length) || logins.some((login) => !/^[a-z0-9][a-z0-9_-]*$/i.test(login))) {
+    throw new Error(`${CONFIG_FILENAME}: ${label}.publishers must list one or more GitHub logins`);
+  }
+  return { repository: repository.toLowerCase(), publishers: [...new Set(logins.map((login) => login.toLowerCase()))].sort() };
+}
+
+function validateSemanticIndex(value) {
+  if (value === undefined) return null;
+  const label = "semanticIndex";
+  checkIndexObject(value, label, value?.enabled === false ? ["enabled"] : ["enabled", "scope", "embedding", "release"]);
+  if (typeof value.enabled !== "boolean") throw new Error(`${CONFIG_FILENAME}: ${label}.enabled must be a boolean`);
+  if (!value.enabled) return { enabled: false };
+  checkIndexObject(value.scope, `${label}.scope`, ["include", "exclude"]);
+  const include = indexSelectors(value.scope.include, `${label}.scope.include`);
+  if (!include.length) throw new Error(`${CONFIG_FILENAME}: ${label}.scope.include must name at least one path or directory prefix`);
+  const exclude = indexSelectors(value.scope.exclude, `${label}.scope.exclude`);
+  return { enabled: true, scope: { include, exclude }, embedding: validateIndexEmbedding(value.embedding), release: validateIndexRelease(value.release) };
 }
 
 // allowProjection: only semanticReview has a projection setting (ADR 0028); namingReview does not.
@@ -307,6 +386,7 @@ export function validateConfig(raw, deps = {}) {
     ignorePaths: requireStringArray(input.ignorePaths, "ignorePaths"),
     semanticReview: validateModelReview(input.semanticReview, "semanticReview", { allowProjection: true }),
     sourceGraph: validateSourceGraph(input.sourceGraph, ontologyPath),
+    semanticIndex: validateSemanticIndex(input.semanticIndex),
   };
 }
 
