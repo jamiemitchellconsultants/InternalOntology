@@ -298,3 +298,12 @@ export async function withIndexWriter(root, write, options) {
     }
   }
 }
+
+export function indexReadiness(header, context) {
+  if (header.embeddingDigest !== context.embeddingDigest || header.dimensions !== context.policy.embedding.dimensions) {
+    return "incompatible";
+  }
+  if (header.sourceCommit !== context.sourceTree.id || header.scopeDigest !== context.scopeDigest ||
+      header.repository !== (context.policy.release?.repository ?? null)) return "stale";
+  return "current";
+}

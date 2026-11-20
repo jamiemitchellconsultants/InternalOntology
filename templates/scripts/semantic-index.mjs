@@ -1,0 +1,208 @@
+#!/usr/bin/env node
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { createEmbeddingAdapter } from "./semantic-index-embed.mjs";
+import { hasIndexEdits, listIndexEntries, readIndexPassages, resolveIndexContext } from "./semantic-index-source.mjs";
+import { indexReadiness, openIndex, withIndexWriter } from "./semantic-index-store.mjs";
+
+const recovery = {
+  missing: "Download a compatible release snapshot or run refresh to build an index.",
+  stale: "Run refresh to index the current commit and scope.",
+  incompatible: "Download a compatible snapshot or run refresh with the configured embedding model.",
+  unreadable: "Download a fresh snapshot or run refresh to rebuild the index.",
+};
+
+function problem(code, message) {
+  return Object.assign(new Error(message), { code });
+}
+
+function parseCommand(argv) {
+  const [command, ...args] = argv;
+  const optionsFor = { status: [], refresh: [], search: ["query", "limit"] };
+  if (!Object.hasOwn(optionsFor, command)) throw problem("usage", "Use status, refresh, or search.");
+  const options = {};
+  for (let i = 0; i < args.length; i += 1) {
+    const match = /^--([a-z-]+)(?:=(.*))?$/s.exec(args[i]);
+    if (!match) throw problem("usage", "Expected a named command option.");
+    const [, key, inline] = match;
+    if (Object.hasOwn(options, key)) throw problem("usage", "Option given more than once: --" + key);
+    if (key === "json" && inline === undefined) {
+      options.json = true;
+      continue;
+    }
+    if (!optionsFor[command].includes(key)) throw problem("usage", "Unexpected option: --" + key);
+    const value = inline ?? args[++i];
+    if (!value || (inline === undefined && value.startsWith("-"))) throw problem("usage", "Missing value for --" + key);
+    options[key] = value;
+  }
+  if (command === "search" && !options.query?.trim()) throw problem("usage", "Provide a non-empty --query.");
+  const limit = options.limit === undefined ? 5 : Number(options.limit);
+  if (options.limit !== undefined && (!/^\d+$/.test(options.limit) || limit < 1 || limit > 100)) {
+    throw problem("usage", "--limit must be an integer from 1 to 100.");
+  }
+  return { command, options, limit };
+}
+
+async function inspect(context) {
+  let reader;
+  try {
+    reader = await openIndex(context.root);
+  } catch (error) {
+    return { state: error.code === "ENOENT" ? "missing" : "unreadable" };
+  }
+  return { reader, state: indexReadiness(reader.header, context) };
+}
+
+function describe(context, state, indexCommit) {
+  const value = {
+    state, configurationCommit: context.configurationCommit, sourceCommit: context.sourceTree.id,
+    indexCommit: indexCommit ?? null, committedOnly: true, dirty: hasIndexEdits(context),
+  };
+  if (recovery[state]) value.message = recovery[state];
+  return value;
+}
+
+function headerFor(context) {
+  return {
+    kind: "header", version: 1, repository: context.policy.release?.repository ?? null,
+    sourceCommit: context.sourceTree.id, scope: context.policy.scope, scopeDigest: context.scopeDigest,
+    embeddingDigest: context.embeddingDigest, dimensions: context.policy.embedding.dimensions,
+  };
+}
+
+function compatibleReader(reader, header) {
+  return reader && reader.header.repository === header.repository &&
+    reader.header.embeddingDigest === header.embeddingDigest && reader.header.dimensions === header.dimensions;
+}
+
+async function refresh(context, adapter, resolveCurrent) {
+  const started = performance.now();
+  const header = headerFor(context);
+  let sourceEmbeddings = 0;
+  await withIndexWriter(context.root, async (writer) => {
+    const { reader, state } = await inspect(context);
+    try {
+      if (state === "current") return;
+      async function* records() {
+        const previous = compatibleReader(reader, header) ? reader.records() : null;
+        let prior = await previous?.next();
+        try {
+          for (const entry of listIndexEntries(context.sourceTree, context.policy.scope)) {
+            while (prior && !prior.done && prior.value.path < entry.path) prior = await previous.next();
+            if (prior && !prior.done && prior.value.path === entry.path && prior.value.blobId === entry.blobId) {
+              do {
+                yield prior.value;
+                prior = await previous.next();
+              } while (!prior.done && prior.value.path === entry.path);
+              continue;
+            }
+            const pieces = readIndexPassages(context.sourceTree, entry);
+            for (let from = 0; from < pieces.length; from += 16) {
+              const batch = pieces.slice(from, from + 16);
+              const vectors = await adapter.embedSource(batch.map(({ text }) => text));
+              sourceEmbeddings += vectors.length;
+              for (let i = 0; i < batch.length; i += 1) {
+                const { text, ...source } = batch[i];
+                yield { ...source, vector: vectors[i] };
+              }
+            }
+          }
+        } finally {
+          await previous?.return();
+        }
+      }
+      await writer.replace({ header, records: records() });
+    } finally {
+      await reader?.close();
+    }
+  });
+  const current = resolveCurrent();
+  return {
+    ...describe(current, indexReadiness(header, current), header.sourceCommit),
+    metrics: { sourceEmbeddings, elapsedMs: performance.now() - started },
+  };
+}
+
+function cosine(a, b) {
+  let dot = 0;
+  let aSquared = 0;
+  let bSquared = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    dot += a[i] * b[i];
+    aSquared += a[i] * a[i];
+    bSquared += b[i] * b[i];
+  }
+  return Math.min(1, Math.max(-1, dot / Math.sqrt(aSquared * bSquared)));
+}
+
+function rank(a, b) {
+  return b.score - a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0) ||
+    a.startLine - b.startLine || a.endLine - b.endLine || a.position - b.position;
+}
+
+async function search(reader, query, limit, adapter) {
+  const vector = await adapter.embedQuery(query);
+  const best = [];
+  for await (const row of reader.records()) {
+    const { path, startLine, endLine, position } = row;
+    const result = { path, startLine, endLine, position, score: cosine(vector, row.vector) };
+    if (best.length === limit && rank(result, best.at(-1)) >= 0) continue;
+    best.push(result);
+    best.sort(rank);
+    if (best.length > limit) best.pop();
+  }
+  return best.map(({ position, ...result }) => ({ commit: reader.header.sourceCommit, ...result }));
+}
+
+export async function runIndexCommand(argv, { cwd = process.cwd(), env = process.env, fetchImpl = fetch } = {}) {
+  try {
+    const { command, options, limit } = parseCommand(argv);
+    const resolveCurrent = () => resolveIndexContext(cwd, env);
+    const context = resolveCurrent();
+    const adapter = createEmbeddingAdapter(context.policy.embedding, { fetchImpl, token: env.ONTOLOGY_INDEX_EMBEDDING_TOKEN });
+    let value;
+    if (command === "refresh") {
+      value = await refresh(context, adapter, resolveCurrent);
+    } else {
+      const { reader, state } = await inspect(context);
+      try {
+        value = describe(context, state, reader?.header.sourceCommit);
+        if (command === "search") {
+          if (state !== "current") throw problem(state, recovery[state]);
+          const results = await search(reader, options.query, limit, adapter);
+          const current = resolveCurrent();
+          const latest = indexReadiness(reader.header, current);
+          if (latest !== "current") throw problem(latest, recovery[latest]);
+          value = { ...describe(current, latest, reader.header.sourceCommit), results };
+        }
+      } finally {
+        await reader?.close();
+      }
+    }
+    return { exitCode: 0, value: { ok: true, ...value } };
+  } catch (error) {
+    const argument = ["config", "disabled", "unborn", "usage"].includes(error.code);
+    const code = argument || Object.hasOwn(recovery, error.code) ? error.code : "operation";
+    return { exitCode: argument ? 2 : 1, value: { ok: false, code, message: error.message } };
+  }
+}
+
+function format(value) {
+  if (!value.ok) return value.message;
+  const lines = [value.state + (value.indexCommit ? " at " + value.indexCommit : "")];
+  if (value.message) lines.push(value.message);
+  if (value.dirty) lines.push("Search uses committed content. Approved files have uncommitted edits.");
+  for (const result of value.results ?? []) lines.push(
+    JSON.stringify(result.path) + ":" + result.startLine + "-" + result.endLine + " " + result.score.toFixed(4),
+  );
+  if (value.metrics) lines.push("Source embeddings: " + value.metrics.sourceEmbeddings);
+  return lines.join("\n");
+}
+
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const argv = process.argv.slice(2);
+  const { value, exitCode } = await runIndexCommand(argv);
+  const output = argv.includes("--json") ? JSON.stringify(value) : format(value);
+  console.log(output);
+  process.exitCode = exitCode;
+}
