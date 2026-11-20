@@ -2,22 +2,22 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps in the [detailed plan](../../../detailed-implementations/matched-ontology-projection/plan.md) use checkbox (`- [ ]`) syntax for tracking.
 
-Amended on 2026-11-20 to answer the user's acceptance pushback on #135: the matched projection did not scale to large ontologies. Tasks 1 to 9 were executed and merged in PR #141 and still hold, except where a later task names the part it replaces. Tasks 10 to 17 are the amendment.
+Amended on 2026-11-20 after the build review of #135. **Execute Tasks 18–21 only.** Tasks 1–9 shipped in PR #141. Tasks 10–16 are pushed through `148d96f` on the existing build branch. Task 21 replaces the unfinished Task 17 checkpoint.
 
 **Goal:** each semantic review request carries the rows of the ontology entries its chunk deterministically selects, the relationships of those entries, and a name index grouped by section. A matched file is planned by paragraph, so a broad file is reviewed in several requests rather than being too-large. The reviewer reads `ontology.ttl`. `"full"` restores today's request byte for byte. Serves B1–B25 in [feature.md](../../../features/matched-ontology-projection/feature.md).
 
 **Architecture:**
-- `collectReviewInput` reads `ontology.ttl` at the reviewed revision and renders it as `build-ontology.mjs` does, falling back to `ontology.md` on 404 (ADR 0029, B25). `ttlPathFor` moves into `owl-ontology.mjs`.
+- `collectReviewInput` reads raw Contents bytes at the reviewed head SHA and decodes strict UTF-8. It renders `ontology.ttl` with the build tool’s renderer. A numeric source 404 triggers the raw Markdown fallback (ADRs 0029 and 0034, B25).
 - `catalogOntology` gains an additive `relationships` field (ADR 0031).
 - The matched projector builds an index once per catalog. It adds only the relationships of matched entries (B7) and ends with the grouped name index (B24, ADR 0031).
-- The matched projector gains `plan(catalog, files, maxRequestChars)`, which packs paragraphs, then lines, then pieces of a line, and names the two too-large causes. `reviewFiles` uses `plan` when the projector has one and `chunkFiles` otherwise, so `full` is unchanged (ADR 0030; B17, B18, B21).
+- The matched projector owns initial paragraph, line and piece budgeting and both too-large causes. Each piece preserves whole code points and fits with the projection of its own text. An indivisible over-budget piece rejects the file with the original line offset. `reviewFiles` retains its pre-send guard, 413 handling and full-mode path (ADRs 0030 and 0035, B17–B19, B21).
 - The worker, ledger, configuration and installer are unchanged.
 
-See ADRs [0026](../../../adr/0026-matched-projection-as-an-injected-projector.md), [0027](../../../adr/0027-deterministic-matching-rule-and-fixed-stop-list.md), [0028](../../../adr/0028-projection-setting-and-run-record-summary.md), [0029](../../../adr/0029-semantic-review-reads-the-ontology-source.md), [0030](../../../adr/0030-matched-planning-by-paragraph-in-the-projector.md) and [0031](../../../adr/0031-relationships-only-and-grouped-name-index.md).
+See ADRs [0026](../../../adr/0026-matched-projection-as-an-injected-projector.md), [0027](../../../adr/0027-deterministic-matching-rule-and-fixed-stop-list.md), [0028](../../../adr/0028-projection-setting-and-run-record-summary.md), [0029](../../../adr/0029-semantic-review-reads-the-ontology-source.md), [0030](../../../adr/0030-matched-planning-by-paragraph-in-the-projector.md), [0031](../../../adr/0031-relationships-only-and-grouped-name-index.md), [0034](../../../adr/0034-semantic-review-reads-raw-ontology-contents.md) and [0035](../../../adr/0035-matched-planner-budgets-whole-code-points.md).
 
 **Tech stack:** Node 20/22/24 ES modules, `node:test`, no dependencies.
 
-**Spec:** [feature.md](../../../features/matched-ontology-projection/feature.md) and ADRs 0026–0031.
+**Spec:** [feature.md](../../../features/matched-ontology-projection/feature.md) and ADRs 0026–0031 and 0034–0035.
 
 ## Global constraints
 
@@ -39,18 +39,17 @@ See ADRs [0026](../../../adr/0026-matched-projection-as-an-injected-projector.md
   2. Stage only the task's files and review `git diff --cached`.
   3. Run `node scripts/check-ontology-terms.mjs`.
   4. Run `npm test` and **check its exit status**. Never pipe it into a filter that hides a failure.
-- Every commit leaves the full suite green.
+- Every commit leaves the full suite green. Resume the existing build branch and retain its published commits. Read these merged plans from main when necessary.
 
 ## Review focus
 
-Things the spec implies but no behaviour states, each pinned by a test in the owning task:
+1. **Raw Turtle over 1 MiB.** The collector requests the raw media type at the reviewed head SHA, decodes and renders the source, and can plan a broad file. Only one ontology read occurs (Task 18).
+2. **An ambiguous HTTP error or unreadable raw body.** A non-404 error mentioning 404, invalid UTF-8 and parse errors propagate. A numeric source 404 tries the raw Markdown once at the same revision. A configuration whose path has no Markdown extension is read once as Markdown (Task 18).
+3. **A piece that matches more than its line.** The returned piece carries the new keys and exact size if it fits. An oversized piece is divided and reselected inside planning, without sending it over budget (Task 19).
+4. **A surrogate pair with one code unit of room under the line's projection.** A pair that fits with its own projection is kept. Otherwise the planner reports the original line and emits no chunks for that file, including any chunks accumulated earlier (Task 19).
+5. **An empty optional-only catalog.** The grouped index omits the example key and can still be budgeted (Task 20).
 
-1. **An `ontologyPath` that does not end in `.md`.** `ttlPathFor` returns the same path, so the reviewer must read it once as Markdown and never parse it as Turtle (Task 12).
-2. **An ontology source that exists but cannot be read or parsed.** The read fails, and the run is unavailable as today. It must not fall back to `ontology.md`, which would hide a broken source (Task 12).
-3. **A banned alias that spans a paragraph break.** A chunk's selection is the union of its paragraphs' selections plus any phrase match across the joined text, so the chunk holding both parts selects the alias (Task 15).
-4. **A piece cut inside a word.** It can select more than its line did. The plan records the piece's true projection, and the existing pre-send guard in `reviewFiles` halves it if it no longer fits (Task 15; guard test from Task 3).
-5. **A cut next to a surrogate pair.** A piece never starts or ends inside one (Task 15).
-6. **The known minor, a file that fits one chunk being projected twice.** With `plan` each request is projected once and the whole file never is. The test fails on `main` with 2 projections against 1 (Task 15).
+The shipped banned-alias, deterministic planning, full-mode, 413 and projection-count tests remain regression checks. Task 12's B25 equivalence and path-without-extension tests already passed on its original baseline.
 
 ## Tasks
 
@@ -65,14 +64,18 @@ Things the spec implies but no behaviour states, each pinned by a test in the ow
 | 7 | Runbook and README | `templates/docs/ontology-semantic-review.md`, `README.md` | B23 | done in #141; replaced by Task 16 |
 | 8 | Acceptance against the installed reviewer | `tests/matched-projection-acceptance.test.mjs` | B1, B9, B10, B12–B16, B18, B20, B21, B23 | done in #141; one assertion changes in Task 14, one test grows in Task 16 |
 | 9 | Wrap-up | none | all | done in #141 |
-| 10 | `ttlPathFor` moves into `owl-ontology.mjs` | `owl-ontology.mjs`, `build-ontology.mjs`, new `tests/semantic-ontology-source.test.mjs` | B25 | |
-| 11 | `catalogOntology` lists relationships | `semantic-review-model.mjs` and its test | B7, B21 | |
-| 12 | `collectReviewInput` reads `ontology.ttl`, falling back to `ontology.md` | `semantic-review-github.mjs` and its test, `tests/semantic-ontology-source.test.mjs`, `tests/semantic-feature-acceptance.test.mjs` | B25, B12, B21 | |
-| 13 | `reviewFiles` uses the projector's `plan` when it has one | `semantic-review-model.mjs` and its test | B17, B18, B21 | |
-| 14 | Per-catalog index, relationships only, grouped name index | `ontology-projection.mjs` and its test, `tests/matched-projection-acceptance.test.mjs` | B1, B7, B8, B13, B24 | |
-| 15 | `plan`: paragraphs, then lines, then pieces, and the two too-large causes | `ontology-projection.mjs` and its test | B6, B9, B13, B17, B18 | |
-| 16 | Runbook and README | `templates/docs/ontology-semantic-review.md`, `README.md`, `tests/matched-projection-acceptance.test.mjs` | B23 | |
-| 17 | Wrap-up, re-measurement and handoff | none | all | |
+| 10 | `ttlPathFor` moves into `owl-ontology.mjs` | `owl-ontology.mjs`, `build-ontology.mjs`, new `tests/semantic-ontology-source.test.mjs` | B25 | pushed as `5097eda` |
+| 11 | `catalogOntology` lists relationships | `semantic-review-model.mjs` and its test | B7, B21 | pushed as `7ed7ada` |
+| 12 | `collectReviewInput` reads `ontology.ttl`, falling back to `ontology.md` | `semantic-review-github.mjs` and its test, `tests/semantic-ontology-source.test.mjs`, `tests/semantic-feature-acceptance.test.mjs` | B25, B12, B21 | pushed as `6eb866e` |
+| 13 | `reviewFiles` uses the projector's `plan` when it has one | `semantic-review-model.mjs` and its test | B17, B18, B21 | pushed as `6cc0f62` |
+| 14 | Per-catalog index, relationships only, grouped name index | `ontology-projection.mjs` and its test, `tests/matched-projection-acceptance.test.mjs` | B1, B7, B8, B13, B24 | pushed as `0050e91` |
+| 15 | `plan`: paragraphs, then lines, then pieces, and the two too-large causes | `ontology-projection.mjs` and its test | B6, B9, B13, B17, B18 | pushed as `aed0cc0` |
+| 16 | Runbook and README | `templates/docs/ontology-semantic-review.md`, `README.md`, `tests/matched-projection-acceptance.test.mjs` | B23 | pushed as `148d96f` |
+| 17 | First wrap-up and re-measurement | none | all | superseded by Task 21 |
+| 18 | Read pinned raw ontology contents | `semantic-review-github.mjs` and its test, `tests/semantic-ontology-source.test.mjs`, `tests/semantic-feature-acceptance.test.mjs` | B12, B17, B21, B25 | pending |
+| 19 | Enforce piece budgets in matched planning | `ontology-projection.mjs` and its test | B17–B19, B21 | pending |
+| 20 | Omit the example from an empty grouped index | `ontology-projection.mjs` and its test | B13, B24 | pending |
+| 21 | Final verification, measurements, replay and handoff | none | all | pending |
 
 ### Interfaces between tasks
 
@@ -87,9 +90,15 @@ Things the spec implies but no behaviour states, each pinned by a test in the ow
   The `full` projector is unchanged.
 - **Task 15 produces** `matched.plan(catalog, files, maxRequestChars)`. Each chunk is `{ path, offset, text, keys, chars }`, where `keys` and `chars` equal `project(catalog, text).keys` and `.text.length`. `createProjector({ mode: "full" })` has no `plan`.
 
+- **Task 18 produces** `client.getContentText(path, ref) → Promise<string>` and numeric HTTP error status. The collector continues returning the same `ontologyText` field.
+- **Task 19 preserves** the matched planner's result shape. Each returned chunk fits with its own projection. A file with an indivisible over-budget piece contributes one B18 unreviewed entry and zero chunks.
+- **Task 20 preserves** the grouped name index for a catalog that has keys and omits the example for one with zero keys.
+
 ## Measurements
 
-Measured on 2026-11-20 with the prototype of Tasks 10 to 15, at the 200,000-character default budget. The scratch scripts are not committed; Task 17 repeats the measurement with the built module, and its detailed steps carry the script.
+The build at `148d96f` reproduced the prototype's grouped-index reductions and median request shares on the same revisions. On the then-current InternalOntology checkout, 116 entries gave a 40.0% smaller index (3,920 to 2,353 characters) and a median matched request of 59.2% across 193 Markdown files. All ten recorded JEPA-Speech findings retained their cited rows. Task 21 repeats the measurement and replay with the completed build.
+
+Measured on 2026-11-20 with the prototype of Tasks 10 to 15, at the 200,000-character default budget. The scratch scripts are not committed; Task 17’s detailed steps carry the script that Task 21 reuses.
 
 **The grouped name index (B24).** The design estimate was 40% to 49% smaller.
 
@@ -127,3 +136,7 @@ The design figures (52% and 65%) were for relationships only with one key per li
 - With `plan` removed from the projector (the state after Task 14), every acceptance and reviewer test passed (492 of 492).
 
 Details, steps and complete tests are in the [detailed plan](../../../detailed-implementations/matched-ontology-projection/plan.md).
+
+## Build-review prototype
+
+In a disposable snapshot of `148d96f`, Task 18's five new checks failed on the inline Contents path. Task 19's two positive cases passed before its change and its two over-budget cases failed. Task 20 failed on the undefined example. The unfiltered full suite passed after each task with 749, 753 and 754 tests, respectively. The four shipped tests passed individually from `templates/scripts` with 117 tests per runtime on Docker Node 20, 22 and 24. Task 21 repeats verification with the actual build.

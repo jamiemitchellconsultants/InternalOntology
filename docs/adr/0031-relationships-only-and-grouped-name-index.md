@@ -28,7 +28,7 @@ Entities: AuditEvent, StudySession, SessionRemoval
 Enums: RemovalReason, SessionRemovalState
 ```
 
-The example key in the sentence is the ontology's first evidence key. Sections and names follow ontology order. `full` mode keeps today's list, one key per line.
+The example key in the sentence is the ontology's first evidence key. An empty catalog keeps the explanation and omits the example. Sections and names follow ontology order. `full` mode keeps today's list, one key per line.
 
 ## Consequences
 

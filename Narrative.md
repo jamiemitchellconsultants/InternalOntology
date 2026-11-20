@@ -66,6 +66,8 @@ by rewriting the original.
 | [50](#entry-docs-define-semantic-repository-index-behaviours) | 2026-11-20 | docs: define semantic repository index behaviours | product | Search uses approved content from the current Git commit, including local commits, with an explicit refresh after a change to the commit or source scope. An exact compatible release asset can be searched with zero source re-embedding. |
 | [51](#entry-docs-amend-matched-ontology-projection-plans-after-acceptance-pushback-1) | 2026-11-20 | docs: amend matched ontology projection plans after acceptance pushback (#135) | product | - **A projector stays a callable function**, carrying `mode` and, when matched, `plan`. ADR 0030 describes an object with `mode`, `project` and `plan`. |
 | [52](#entry-docs-design-semantic-repository-index-architecture) | 2026-11-20 | docs: design semantic repository index architecture | product | Use a checkout-local CLI and separately approved committed configuration. Read the selected Git tree, use exact cosine search, and store a portable vector file with atomic promotion. |
+| [53](#entry-docs-refine-matched-projection-transport-and-budget-boundaries-135) | 2026-11-20 | Docs: refine matched projection transport and budget boundaries (#135) | product | - The semantic reviewer requests raw Contents bytes at the reviewed head SHA for both the Turtle source and the Markdown fallback. It decodes strict UTF-8 and uses the numeric HTTP 404 from the source read as the only fallback trigger. |
+| [54](#entry-docs-plan-the-matched-projection-build-review-amendment-135) | 2026-11-20 | Docs: plan the matched projection build-review amendment (#135) | product | - Task 18 adds the pinned raw read, verifies strict decoding and numeric 404 behaviour, and exercises a valid source over 1 MiB through the collector and planner. JSON API operations and full-mode request bytes retain their existing tests. |
 
 ---
 
@@ -1283,3 +1285,48 @@ Use a checkout-local CLI and separately approved committed configuration. Read t
 Adopting repositories can search without a vector service and share a single compressed asset without adding generated vectors to Git history. Repositories choose their model and publishing scope. The pilot will measure the size and latency of the portable file and exact search before the Kit takes on a vector engine or additional provider adapters.
 
 AI-Fingerprint: sha256:5095f31f39a2
+
+---
+
+<a id="entry-docs-refine-matched-projection-transport-and-budget-boundaries-135"></a>
+
+## Entry 53 — 2026-11-20 — Docs: refine matched projection transport and budget boundaries (#135)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The build review found two cases outside the original green tests. A kit-generated 3,840-entry source occupied 1,091,379 bytes of Turtle, above GitHub's inline Contents limit, while its matched name index used just 67,657 of the default 200,000 characters. The planner produced 16 requests when it received the rendered ontology. Separately, a single emoji with one UTF-16 code unit of room reached the pre-send guard intact and got the generic too-large reason. B18 requires the original line's offset and the budget setting. [Build pushback](https://github.com/jamiemitchellconsultants/InternalOntology/issues/135#issuecomment-7035269602)
+
+## Decision
+
+- The semantic reviewer requests raw Contents bytes at the reviewed head SHA for both the Turtle source and the Markdown fallback. It decodes strict UTF-8 and uses the numeric HTTP 404 from the source read as the only fallback trigger. This keeps the existing read permission and avoids a second API lookup for an existing file. [ADR 0034](docs/adr/0034-semantic-review-reads-raw-ontology-contents.md)
+- The matched projector budgets each piece with its own selected projection and keeps code points whole. If an indivisible piece cannot fit, it reports the line too-large cause with the original line's offset and discards the file's plan. The model module continues to guard actual sends and handle HTTP 413 as before. [ADR 0035](docs/adr/0035-matched-planner-budgets-whole-code-points.md)
+
+## Consequences
+
+- The name-index ceiling can be exercised without the former inline Contents limit. The raw response still has the GitHub endpoint limit and shares the existing renderer, evidence keys and finding identity.
+- Initial matched planning can diagnose an indivisible piece before any chunk of the file is sent. Extra selection is confined to pieces of long lines. Full mode retains its request construction.
+- Developer planning and build need amendment coverage for raw Turtle beyond the inline limit, fallback and source errors, in-word selection, the surrogate-pair boundary and the empty name index. The user phase still verifies the installed reviewer, including a live model run in JEPA-Speech.
+
+---
+
+<a id="entry-docs-plan-the-matched-projection-build-review-amendment-135"></a>
+
+## Entry 54 — 2026-11-20 — Docs: plan the matched projection build-review amendment (#135)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The first build was green and retained all ten recorded findings. Task 17 exposed two remaining limitations. GitHub's inline Contents representation could make a large ontology unavailable before planning. An indivisible character could reach the model guard and lose B18's line-specific reason. The new architecture specifies raw Contents reads and complete piece budgeting in the matched planner. [Build pushback](https://github.com/jamiemitchellconsultants/InternalOntology/issues/135#issuecomment-7035269602)
+
+## Decision
+
+- Task 18 adds the pinned raw read, verifies strict decoding and numeric 404 behaviour, and exercises a valid source over 1 MiB through the collector and planner. JSON API operations and full-mode request bytes retain their existing tests. [ADR 0034](docs/adr/0034-semantic-review-reads-raw-ontology-contents.md)
+- Tasks 19 and 20 cover reselecting a piece after a cut, handling the original line when a whole code point cannot fit, and rendering an empty grouped index without a sample key. The build keeps its existing pre-send and 413 checks. [ADRs 0035](docs/adr/0035-matched-planner-budgets-whole-code-points.md) and [0031](docs/adr/0031-relationships-only-and-grouped-name-index.md)
+- Task 21 is the final build verification, measurement, recorded-finding replay and user handoff. The published Task 10–16 commits remain the starting point.
+
+## Consequences
+
+A disposable prototype verified the expected failures before each change and passed the unfiltered full suite after each change. It finished with 754 tests passing. The four shipped files passed individually on Node 20, 22 and 24, with 117 tests per runtime. The developer will repeat the checks on the build branch after this plan merges. The user phase still owns the installed acceptance run and the live model check in JEPA-Speech.
