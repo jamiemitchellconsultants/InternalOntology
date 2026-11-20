@@ -59,7 +59,7 @@ async function storage(root, create) {
     throw new Error("Index storage contains tracked paths.");
   }
   try {
-    git(root, "check-ignore", "-q", "--no-index", "--", STORE + "/" + INDEX);
+    git(root, "check-ignore", "-q", "--no-index", "--", STORE + "/");
   } catch {
     throw new Error("Ignore /" + STORE + "/ in Git before using index storage.");
   }
