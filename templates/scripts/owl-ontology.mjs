@@ -5,6 +5,14 @@
 // same module's own writer (serializeTurtle) produced. It is deliberately not a general RDF/Turtle
 // implementation — see that function's own comment for what that scope limit buys.
 
+/**
+ * The ontology source beside a Markdown ontology path. A path not ending in .md maps to itself.
+ * @param {string} ontologyPath
+ */
+export function ttlPathFor(ontologyPath) {
+  return ontologyPath.replace(/\.md$/, ".ttl");
+}
+
 export const KIT_NS = "https://ontology-kit.dev/schema#";
 export const OWL_NS = "http://www.w3.org/2002/07/owl#";
 export const RDFS_NS = "http://www.w3.org/2000/01/rdf-schema#";

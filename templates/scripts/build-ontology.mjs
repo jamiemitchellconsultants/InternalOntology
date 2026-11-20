@@ -22,12 +22,10 @@ import {
   renderOntologyMarkdown,
   serializeTurtle,
   triplesToModel,
+  ttlPathFor,
 } from "./owl-ontology.mjs";
 
-/** @param {string} ontologyPath */
-export function ttlPathFor(ontologyPath) {
-  return ontologyPath.replace(/\.md$/, ".ttl");
-}
+export { ttlPathFor };
 
 /**
  * @param {{ cwd?: string, check?: boolean, force?: boolean }} [options]
