@@ -74,6 +74,7 @@ by rewriting the original.
 | [58](#entry-docs-design-opt-in-lan-http-for-semantic-embeddings) | 2026-11-20 | docs: design opt-in LAN HTTP for semantic embeddings | product | Allow `semanticIndex.embedding.allowLanHttp` in trusted committed configuration. |
 | [59](#entry-test-document-semantic-index-acceptance) | 2026-11-20 | test: document semantic index acceptance | product | Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. |
 | [60](#entry-docs-add-agent-protocol-for-the-semantic-index) | 2026-11-20 | docs: add agent protocol for the semantic index | product | Ship the guidance as an installed protocol block, the same mechanism the ontology and source graph protocols use, enabled only by `--with-semantic-index`. |
+| [61](#entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi) | 2026-11-20 | docs: add perceived quality and token cost outcome to semantic index vision | product | Record perceived benefit as the primary evidence for the new outcome, and token cost as a paired measure that shows whether the benefit is cheap or expensive. Outcome 5 starts as an observation with no target until a baseline exists. |
 
 ---
 
@@ -1466,5 +1467,27 @@ Ship the guidance as an installed protocol block, the same mechanism the ontolog
 ## Consequences
 
 Adopters installing or upgrading with `--with-semantic-index` get the block in their agent file. Existing installs receive it on re-run. The block is only guidance and enforces nothing. Embedding endpoints receive source on `refresh`, so the block tells agents not to refresh when told otherwise.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi"></a>
+
+## Entry 61 — 2026-11-20 — docs: add perceived quality and token cost outcome to semantic index vision
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The vision measured retrieval quality, snapshot reuse, refresh cost and owner control, but not the reason the index was valued in use: better perceived quality and lower cognitive load. It also said nothing about token cost, which an agent-facing index affects in both directions.
+
+## Decision
+
+Record perceived benefit as the primary evidence for the new outcome, and token cost as a paired measure that shows whether the benefit is cheap or expensive. Outcome 5 starts as an observation with no target until a baseline exists. Rejected: setting a token-reduction target now, because no baseline has been measured.
+
+## Consequences
+
+Later work can cite outcome 5 when tuning result size and telemetry. A follow-up feature, semantic index token efficiency (#178), takes on the measurement and reduction work. Nothing in the shipped index changes.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
