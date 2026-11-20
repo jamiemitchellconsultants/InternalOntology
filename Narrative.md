@@ -69,6 +69,7 @@ by rewriting the original.
 | [53](#entry-docs-refine-matched-projection-transport-and-budget-boundaries-135) | 2026-11-20 | Docs: refine matched projection transport and budget boundaries (#135) | product | - The semantic reviewer requests raw Contents bytes at the reviewed head SHA for both the Turtle source and the Markdown fallback. It decodes strict UTF-8 and uses the numeric HTTP 404 from the source read as the only fallback trigger. |
 | [54](#entry-docs-plan-the-matched-projection-build-review-amendment-135) | 2026-11-20 | Docs: plan the matched projection build-review amendment (#135) | product | - Task 18 adds the pinned raw read, verifies strict decoding and numeric 404 behaviour, and exercises a valid source over 1 MiB through the collector and planner. JSON API operations and full-mode request bytes retain their existing tests. |
 | [55](#entry-ship-matched-ontology-projection-for-large-ontologies-135) | 2026-11-20 | Ship matched ontology projection for large ontologies (#135) | product | - Read the pinned source through raw GitHub Contents with strict UTF-8 decoding and keep a Markdown fallback on a source 404. |
+| [56](#entry-docs-plan-semantic-repository-index-implementation) | 2026-11-20 | docs: plan semantic repository index implementation | product | Implement seven separately testable tasks covering configuration, committed source, embeddings, storage, local commands, release exchange, and installer and pilot integration. |
 
 ---
 
@@ -1353,3 +1354,25 @@ The initial matched reviewer was pushed back after a broad file failed to fit ag
 ## Consequences
 
 At the 200,000-character default budget, the local broad-file trial with 1,920 ontology entries took four requests. The developer's historical replay retained the evidence for all ten JEPA-Speech findings. All eight local walkthroughs and all 16 approved acceptance tests passed. The full suite passed 764 tests each on Docker Node 20, 22 and 24. The live consumer trial will verify how the deployed model cites the grouped index. [Acceptance](docs/features/matched-ontology-projection/feature.md#acceptance)
+
+---
+
+<a id="entry-docs-plan-semantic-repository-index-implementation"></a>
+
+## Entry 56 — 2026-11-20 — docs: plan semantic repository index implementation
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The adopter supplies an OpenAI-compatible embedding endpoint and keeps a portable index in its checkout. The build needs a precise contract for trusted Git input, storage and refresh, and GitHub Release exchange before installed scripts or public command output are introduced.
+
+## Decision
+
+Implement seven separately testable tasks covering configuration, committed source, embeddings, storage, local commands, release exchange, and installer and pilot integration. The plan fixes their command and file contracts, error and compatibility handling, and the tests that prove all 16 behaviours. The build branches from main and pushes one validated commit per task from the dedicated worktree.
+
+## Consequences
+
+Reviewers can assess the implementation and its failure cases before code is written. The build uses offline fixtures for model and release responses. Owner-authorised live endpoints and a release provide the paired-checkout evidence in the acceptance phase.
+
+AI-Fingerprint: sha256:7696fcffa70f
