@@ -196,9 +196,14 @@ const fullProjector = Object.assign((catalog) => ({ text: catalog.projection, ke
 export async function reviewFiles({ files, ontologyText, sections, model, baseUrl, auth, headSha,
   fetchImpl = fetch, timeoutMs = MODEL_TIMEOUT_MS, maxRequestChars = MAX_REQUEST_CHARS, project = fullProjector }) {
   const catalog = catalogOntology(ontologyText, sections);
-  const projectionChars = new Map();
-  for (const file of files) projectionChars.set(file.path, (await project(catalog, file.text)).text.length);
-  const prepared = chunkFiles(files, catalog, maxRequestChars, projectionChars);
+  let prepared;
+  if (typeof project.plan === "function") {
+    prepared = await project.plan(catalog, files, maxRequestChars);
+  } else {
+    const projectionChars = new Map();
+    for (const file of files) projectionChars.set(file.path, (await project(catalog, file.text)).text.length);
+    prepared = chunkFiles(files, catalog, maxRequestChars, projectionChars);
+  }
   const sent = new Map();
   const unreviewed = [...prepared.unreviewed];
   const findings = new Map();
