@@ -104,3 +104,16 @@ test("an installer-only local ignore does not replace the rule inherited by team
     });
   });
 });
+
+test("opt-in splices the agent protocol once and leaves it out without the flag", async () => {
+  const start = "<!-- semantic-index-protocol:start -->";
+  await withTempRepo(async ({ dir }) => {
+    install({ target: dir });
+    assert.doesNotMatch(readFileSync(join(dir, "AGENTS.md"), "utf8"), /semantic-index-protocol/);
+    for (const _ of [0, 1]) install({ target: dir, withSemanticIndex: true });
+    const text = readFileSync(join(dir, "AGENTS.md"), "utf8");
+    assert.equal(text.split(start).length, 2);
+    assert.match(text, /git show <commit>:<path>/);
+    assert.ok(text.indexOf("<!-- ontology-protocol:end -->") < text.indexOf(start));
+  });
+});

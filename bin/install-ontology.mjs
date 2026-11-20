@@ -431,6 +431,10 @@ export function install(options) {
     const graphBody = substitute(readFileSync(join(TEMPLATE_ROOT, "protocol/source-graph-protocol.md"), "utf8"), values);
     agentText = spliceBlock(agentText, graphBody, "<!-- source-graph-protocol:start -->", "<!-- source-graph-protocol:end -->");
   }
+  if (options.withSemanticIndex) {
+    const indexBody = readFileSync(join(TEMPLATE_ROOT, "protocol/semantic-index-protocol.md"), "utf8");
+    agentText = spliceBlock(agentText, indexBody, "<!-- semantic-index-protocol:start -->", "<!-- semantic-index-protocol:end -->");
+  }
   if (!dryRun) writeFileSync(agentPath, agentText);
   written.push(agentFile.path);
   if (indexIgnore) {
