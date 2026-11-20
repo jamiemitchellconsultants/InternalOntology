@@ -62,6 +62,7 @@ by rewriting the original.
 | [46](#entry-docs-design-for-matched-ontology-projection-135) | 2026-11-19 | docs: design for matched ontology projection (#135) | product | The semantic reviewer now sends, by default, only the entries deterministically matched to the Markdown. |
 | [47](#entry-docs-implementation-plans-for-matched-ontology-projection-135) | 2026-11-19 | docs: implementation plans for matched ontology projection (#135) | product | - **Guard against over-budget chunks.** `reviewFiles` checks each request's size after projecting its chunk. A chunk that would exceed the `RequestBudget` is split before it is sent, exactly as on a 413. |
 | [48](#entry-feat-matched-ontology-projection-for-the-semantic-reviewer-135) | 2026-11-19 | feat: matched ontology projection for the semantic reviewer (#135) | product | Each request carries a deterministic matched projection by default: the full rows of the entries its chunk selects, plus the name index, so the model can still cite any entry and every citation is checked against the whole catalog ([ADR… |
+| [49](#entry-docs-define-semantic-repository-index-vision) | 2026-11-20 | docs: define semantic repository index vision | product | Offer semantic repository search as an opt-in capability. The repository owner supplies the embedding model and approves the indexed content. Each checkout uses a rebuildable, Git-ignored vector store. |
 
 ---
 
@@ -1144,3 +1145,25 @@ Each request carries a deterministic matched projection by default: the full row
 Request size now grows with the entries a chunk selects rather than with the whole ontology, so larger ontologies stay reviewable. A matched review can miss a paraphrase that shares no name word with its entry; repositories that care more about that than about request size can set `"full"`. The stop list is fixed in the script for every adopter, so changing it changes every repository's requests.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-docs-define-semantic-repository-index-vision"></a>
+
+## Entry 49 — 2026-11-20 — docs: define semantic repository index vision
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+Developers and coding agents often know the behaviour they need to find before they know the exact names used in an unfamiliar repository. The Ontology Kit already gives them canonical vocabulary and optional source graph evidence. Code Context and Greptile demonstrate semantic retrieval and cross-file context. Adopting repositories need control over the embedding model and a way to share precomputed vectors with teammates.
+
+## Decision
+
+Offer semantic repository search as an opt-in capability. The repository owner supplies the embedding model and approves the indexed content. Each checkout uses a rebuildable, Git-ignored vector store. Developers with repository access can download a snapshot from the adopting repository's GitHub Releases, and a publisher with write access can upload a snapshot for a pushed commit.
+
+## Consequences
+
+A developer can reuse the published vectors with access to the matching model and refresh the local index as source changes. Release assets keep generated vectors out of Git history and give the snapshot a repository-owned distribution point. The pilot will compare search quality with keyword search and measure refresh work and asset size. Snapshot selection, publication cadence, and implementation choices carry forward to later phases.
+
+AI-Fingerprint: sha256:6cce40ee1dfb
