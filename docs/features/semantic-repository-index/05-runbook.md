@@ -2,7 +2,7 @@
 
 ## Deploy
 
-The local acceptance environment is two disposable checkouts built from the merged Kit, with a loopback OpenAI-compatible test endpoint and a simulated GitHub CLI. The deployed acceptance environment is an owner-approved GitHub adopting repository, its designated release or draft, and two independent checkouts with access to the approved model endpoints. Record the adopting repository, release, pinned commit, and model revisions in the [acceptance record](05-acceptance.md).
+The local acceptance environment is two disposable checkouts built from the merged Kit, with a loopback OpenAI-compatible test endpoint and a simulated GitHub CLI. For live acceptance, the private synthetic adopter supplies a designated GitHub draft and two independent checkouts to exercise release exchange. JEPA-Speech supplies the representative source, tests, and documentation for the retrieval pilot in a disposable clone using local Ollama. Record the adopting repository, release, pinned commit, and model revisions in the [acceptance record](05-acceptance.md).
 
 1. Use Git and Node 20 or newer. For release exchange, install `gh`, authenticate to the adopting repository's GitHub host, and confirm the publisher's write access. Use a separate checkout and, where available, a separate download-only account to exercise a developer's access.
 2. Install the approved Kit revision using `node bin/install-ontology.mjs --target "$adopter" --with-semantic-index`. Add `--force` for an upgrade. Review the installed scripts, the setup reference, and the `/.ontology-index/` ignore rule. Keep that rule in the repository so future checkouts inherit it.

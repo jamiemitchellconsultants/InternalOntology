@@ -113,7 +113,7 @@ The local walkthrough used the Kit from `f4cc34982768d10681b5127059d6f2af8fc64eb
 | --- | --- | --- |
 | B1 | The installed CLI searched a downloaded index and returned the pinned commit. | Every citation in eight queries resolved in the pinned commit. An index with no eligible passages returned a successful empty result. |
 | B2 | Missing search stopped before the model was contacted. | Missing, stale, incompatible, and unreadable search stopped before sending a query. |
-| B3 | The build suite exercises the keyword baseline and invalid citations. | Eight prewritten synthetic questions yielded 8/8 semantic and 5/8 keyword top-five hits. Representative adopter measurements are pending. |
+| B3 | The build suite exercises the keyword baseline and invalid citations. | Eight prewritten synthetic questions yielded 8/8 semantic and 5/8 keyword top-five hits. The JEPA-Speech results are recorded below. |
 | B4 | Exact download made zero model requests. First search sent one query. The fixture asset was 659 bytes. | Exact download made zero model requests. First search sent one query. The compressed asset was 44,261 bytes and download to first search took 5,072 ms. |
 | B5 | The build suite exercises exact rejection and explicit ancestor import. | Explicit ancestor import stayed stale until refresh, then reused unchanged vectors. |
 | B6 | The build suite exercises corrupt and malformed assets and connection loss. | A wrong-commit import was rejected and the previous active bytes were preserved. Deliberately invalid asset variants remain fixture checks. |
@@ -140,6 +140,23 @@ The maintainer approved the [plain-language test review](05-acceptance-test-revi
 | Ancestor reuse and local commits | B5, B8–B10 | Pass. Explicit ancestor import required refresh. An unpushed commit required three source embeddings on refresh and zero on repeat. Search reported uncommitted edits and cited the committed source. |
 | Model, scope, store, and configuration recovery | B1, B2, B11–B14, B16 | Pass. Failed refresh preserved the previous index. Scope changes applied after refresh, invalid states stopped queries, and an empty eligible scope returned an empty result. |
 
+### JEPA-Speech retrieval trial · 20 November 2026 · Codex
+
+The representative adopter was JEPA-Speech at source commit `3021446c9cb0987139dff4f6466712bc21c617ac`. A disposable clone used the installed Kit commands and a separate trusted policy commit, `3b8208b389846059f7296c1d3c4c27749e17e0ba`. The trial covered study app source, tests, the ontology, and study documentation. Codex chose 12 questions and checked their expected locations at the pinned commit before running either retrieval method. Ollama 0.40.16 served `nomic-embed-text:v1.5`, model ID `0a109f422b47`, with 768 dimensions on localhost. The source and queries stayed on the machine.
+
+| Measurement | Result |
+| --- | --- |
+| Indexed scope | 138 files, 485 passages |
+| Semantic top-five hits | 8/12 (66.7%) |
+| Built-in keyword top-five hits | 1/12 (8.3%) |
+| Citations | All 60 semantic results resolved at the pinned source commit |
+| Initial refresh | 485 source embeddings in 12.62 s |
+| Repeat refresh | Zero source embeddings in 0.24 s |
+| Search time | 421 ms median across the 12 CLI searches |
+| Size | 2,073,242 bytes locally and 1,504,614 bytes after local gzip compression |
+
+These figures describe the selected study-app slice and question set. The live release exchange above used the private synthetic adopter. JEPA-Speech's default branch needs committed semantic index publishing policy before the upload command can approve an asset there.
+
 ### Remaining deployed evidence
 
-The live walkthrough used a private draft release and a local Ollama model. GitHub release access through a distinct reader account, an approved remote OpenAI-compatible model, and retrieval on a representative adopting repository remain open.
+InternalOntology documents the existing `ontology-review` alias for chat completions. An unauthenticated request to its gateway's model catalogue returned HTTP 401. The remote trial still needs an approved OpenAI-compatible embeddings alias and credentials, and the live release exchange still needs a distinct reader account.
