@@ -2,6 +2,8 @@
 // A projector maps (catalog, Markdown text) to { text, keys }: the ontology evidence one request
 // carries, and the evidence keys whose rows it carries in full. No I/O and no model.
 
+import { REQUEST_OVERHEAD } from "./semantic-review-model.mjs";
+
 export const PROJECTION_MODES = ["matched", "full"];
 
 // Fixed for every adopter (ADR 0027). Changing it changes every repository's requests.
@@ -139,6 +141,104 @@ function render(index, selected) {
   return output.join("\n") + index.indexText;
 }
 
+// The rendered length of a selection's projection, without rendering it.
+function charsOf(index, selected) {
+  let chars = index.emptyChars;
+  const sections = new Set();
+  for (const key of selected) {
+    chars += index.groupChars.get(key);
+    sections.add(index.catalog.groups.get(key).section);
+  }
+  for (const section of sections) chars += section.length + 5;
+  return chars;
+}
+
+// Units keep their line endings, so a file's units concatenate back to its text.
+function splitLines(text, offset) {
+  const units = [];
+  for (const match of text.matchAll(/[^\n]*(?:\n|$)/g)) {
+    if (match[0] === "") continue;
+    units.push({ offset: offset + match.index, text: match[0] });
+  }
+  return units;
+}
+
+function splitParagraphs(text) {
+  const units = [];
+  for (const line of splitLines(text, 0)) {
+    const blank = !line.text.trim();
+    const last = units.at(-1);
+    if (last && (blank || !last.closed)) {
+      last.text += line.text;
+      if (blank) last.closed = true;
+    } else {
+      units.push({ offset: line.offset, text: line.text, closed: blank });
+    }
+  }
+  return units;
+}
+
+function cutLine(unit, size) {
+  const pieces = [];
+  const text = unit.text;
+  for (let start = 0; start < text.length;) {
+    let end = Math.min(text.length, start + size);
+    if (end < text.length) {
+      let space = end - 1;
+      while (space > start && !/\s/u.test(text[space])) space--;
+      if (space > start) end = space + 1;
+      else if (/[\uD800-\uDBFF]/.test(text[end - 1]) && /[\uDC00-\uDFFF]/.test(text[end])) end = end - 1 > start ? end - 1 : end + 1;
+    }
+    pieces.push({ offset: unit.offset + start, text: text.slice(start, end) });
+    start = end;
+  }
+  return pieces;
+}
+
+const nameIndexReason = (chars, budget) =>
+  `ontology name index too large for the configured budget (name index ${chars} characters, budget ${budget}; raise ONTOLOGY_MAX_REQUEST_CHARS)`;
+const lineReason = (offset, chars, budget) =>
+  `line at offset ${offset} selects too much of the ontology for the configured budget (projection ${chars} characters, budget ${budget}; raise ONTOLOGY_MAX_REQUEST_CHARS)`;
+
+class LineTooLarge extends Error {}
+
+function planFile(index, file, maxRequestChars) {
+  const room = maxRequestChars - REQUEST_OVERHEAD - file.path.length;
+  const chunks = [];
+  let current = null;
+  const finish = (chunk, selected) => {
+    chunks.push({ path: file.path, offset: chunk.offset, text: chunk.text, keys: ordered(index, selected), chars: charsOf(index, selected) });
+  };
+  const flush = () => {
+    if (current) finish(current, current.selected);
+    current = null;
+  };
+  const tryAdd = (unit) => {
+    const text = current ? current.text + unit.text : unit.text;
+    const found = current ? addAll(new Set(current.found), unit.found) : new Set(unit.found);
+    const selected = withRelationships(index, phraseMatches(index, text, new Set(found)));
+    if (charsOf(index, selected) + text.length > room) return false;
+    current = { offset: current ? current.offset : unit.offset, text, found, selected };
+    return true;
+  };
+  const place = (unit, isLine) => {
+    unit.found = unitMatches(index, unit.text);
+    if (tryAdd(unit)) return;
+    flush();
+    if (tryAdd(unit)) return;
+    if (!isLine) {
+      for (const line of splitLines(unit.text, unit.offset)) place(line, true);
+      return;
+    }
+    const chars = charsOf(index, select(index, unit.text));
+    if (room - chars < 1) throw new LineTooLarge(lineReason(unit.offset, chars, maxRequestChars));
+    for (const piece of cutLine(unit, room - chars)) finish(piece, select(index, piece.text));
+  };
+  for (const paragraph of splitParagraphs(file.text)) place(paragraph, false);
+  flush();
+  return chunks;
+}
+
 export function createProjector({ mode = "matched", bannedAliases = [] } = {}) {
   if (!PROJECTION_MODES.includes(mode)) throw new Error(`unknown projection mode: ${JSON.stringify(mode)}`);
   if (mode === "full") return Object.assign((catalog) => ({ text: catalog.projection, keys: [...catalog.evidenceKeys] }), { mode });
@@ -152,5 +252,27 @@ export function createProjector({ mode = "matched", bannedAliases = [] } = {}) {
     const selected = select(index, text);
     return { text: render(index, selected), keys: ordered(index, selected) };
   };
-  return Object.assign(project, { mode });
+  const plan = (catalog, files, maxRequestChars) => {
+    const index = indexFor(catalog);
+    const chunks = [];
+    const unreviewed = [];
+    for (const file of files) {
+      if (REQUEST_OVERHEAD + file.path.length + index.emptyChars >= maxRequestChars) {
+        unreviewed.push({ path: file.path, code: "too-large", reason: nameIndexReason(index.emptyChars, maxRequestChars) });
+        continue;
+      }
+      if (file.text.length === 0) {
+        chunks.push({ path: file.path, offset: 0, text: "", keys: [], chars: index.emptyChars });
+        continue;
+      }
+      try {
+        chunks.push(...planFile(index, file, maxRequestChars));
+      } catch (error) {
+        if (!(error instanceof LineTooLarge)) throw error;
+        unreviewed.push({ path: file.path, code: "too-large", reason: error.message });
+      }
+    }
+    return { chunks, unreviewed };
+  };
+  return Object.assign(project, { mode, plan });
 }

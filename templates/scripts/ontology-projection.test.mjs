@@ -2,7 +2,8 @@
 // inline and synthetic, modelled on the ten findings JEPA-Speech recorded (feature #135, B11).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { catalogOntology } from "./semantic-review-model.mjs";
+import { createModelAuth } from "./llm-auth.mjs";
+import { catalogOntology, REQUEST_OVERHEAD, reviewFiles } from "./semantic-review-model.mjs";
 import { createProjector, markdownWords, nameWords, STOP_WORDS } from "./ontology-projection.mjs";
 
 const ONTOLOGY = [
@@ -152,4 +153,133 @@ test("names with regex characters match literally, and an alias naming no entry 
   assert.deepEqual(project(odd, "uses C++Type and Data.Item").keys, ["Entities:Data.Item", "Entities:C++Type"]);
   assert.deepEqual(project(odd, "uses DataXItem and C+Type").keys, []);
   assert.deepEqual(project(odd, "a ghost (term) appears").keys, []);
+});
+
+// B17 B18: planning. Every test checks each planned chunk against project of its own text.
+const PATH = "docs/a.md";
+const EMPTY = matched(catalog, "").text.length;
+const fixed = REQUEST_OVERHEAD + PATH.length;
+const cost = (text) => matched(catalog, text).text.length + text.length;
+
+function assertPlanned(file, planned, budget) {
+  const chunks = planned.chunks.filter((chunk) => chunk.path === file.path);
+  assert.equal(chunks.map((chunk) => chunk.text).join(""), file.text);
+  for (const chunk of chunks) {
+    assert.equal(file.text.slice(chunk.offset, chunk.offset + chunk.text.length), chunk.text);
+    const own = matched(catalog, chunk.text);
+    assert.deepEqual(chunk.keys, own.keys, JSON.stringify(chunk.text));
+    assert.equal(chunk.chars, own.text.length, JSON.stringify(chunk.text));
+    if (budget !== undefined) assert.ok(fixed + chunk.chars + chunk.text.length <= budget, JSON.stringify(chunk.text));
+  }
+  return chunks;
+}
+
+test("B17 paragraphs are packed into a chunk while its own projection and text still fit", () => {
+  const text = "An AuditEvent was written.\n\nA microphone.\n\nThe speakers.\n\nAn analysis.\n";
+  const budget = fixed + cost("An AuditEvent was written.\n\nA microphone.\n\n");
+  assert.ok(fixed + cost(text) > budget);
+  const planned = matched.plan(catalog, [{ path: PATH, text }], budget);
+  assert.deepEqual(planned.unreviewed, []);
+  const chunks = assertPlanned({ path: PATH, text }, planned, budget);
+  assert.equal(chunks[0].text, "An AuditEvent was written.\n\nA microphone.\n\n");
+  assert.ok(chunks.length > 1);
+});
+
+test("B17 a file whose paragraphs each fit is reviewed, however much the whole file selects", () => {
+  const paragraphs = ["AuditEvent rows.\n\n", "RemovalReason rows.\n\n", "Microphone rows.\n\n", "Speaker rows.\n"];
+  const text = paragraphs.join("");
+  const budget = fixed + Math.max(...paragraphs.map(cost));
+  assert.ok(fixed + matched(catalog, text).text.length > budget);
+  const planned = matched.plan(catalog, [{ path: PATH, text }], budget);
+  assert.deepEqual(planned.unreviewed, []);
+  assertPlanned({ path: PATH, text }, planned, budget);
+});
+
+test("B17 a paragraph that cannot fit on its own is divided into its lines", () => {
+  const lines = ["An AuditEvent was written.\n", "A microphone.\n", "The speakers.\n"];
+  const text = lines.join("");
+  const budget = fixed + Math.max(...lines.map(cost));
+  assert.ok(fixed + cost(text) > budget);
+  const planned = matched.plan(catalog, [{ path: PATH, text }], budget);
+  assert.deepEqual(planned.unreviewed, []);
+  const chunks = assertPlanned({ path: PATH, text }, planned, budget);
+  assert.ok(chunks.length > 1);
+  for (const chunk of chunks) assert.ok(chunk.text.endsWith("\n"));
+});
+
+test("B17 a line too long for its room is cut at whitespace, else between characters, never inside a surrogate pair", () => {
+  const words = "plain words ".repeat(20).trimEnd();
+  const budget = fixed + EMPTY + 40;
+  const spaced = assertPlanned({ path: PATH, text: words }, matched.plan(catalog, [{ path: PATH, text: words }], budget), budget);
+  assert.ok(spaced.length > 1);
+  for (const chunk of spaced.slice(0, -1)) assert.ok(chunk.text.endsWith(" "), JSON.stringify(chunk.text));
+  const solid = "x".repeat(25);
+  const cut = assertPlanned({ path: PATH, text: solid }, matched.plan(catalog, [{ path: PATH, text: solid }], fixed + EMPTY + 10), fixed + EMPTY + 10);
+  assert.deepEqual(cut.map((chunk) => chunk.text.length), [10, 10, 5]);
+  const faces = "\u{1F600}".repeat(6);
+  const pairs = assertPlanned({ path: PATH, text: faces }, matched.plan(catalog, [{ path: PATH, text: faces }], fixed + EMPTY + 5));
+  for (const chunk of pairs) assert.doesNotMatch(chunk.text, /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/u);
+});
+
+test("B18 when the name index leaves no room, every file is too-large with a reason naming the index", () => {
+  const budget = fixed + EMPTY;
+  const planned = matched.plan(catalog, [{ path: PATH, text: "x" }], budget);
+  assert.deepEqual(planned.chunks, []);
+  assert.deepEqual(planned.unreviewed, [{ path: PATH, code: "too-large",
+    reason: `ontology name index too large for the configured budget (name index ${EMPTY} characters, budget ${budget}; raise ONTOLOGY_MAX_REQUEST_CHARS)` }]);
+  assertPlanned({ path: PATH, text: "x" }, matched.plan(catalog, [{ path: PATH, text: "x" }], budget + 1), budget + 1);
+});
+
+test("B18 a line whose own projection leaves no room makes its file too-large, naming the line's offset", () => {
+  const text = "A microphone.\nAn AuditEvent was written.\n";
+  const line = "An AuditEvent was written.\n";
+  const budget = fixed + matched(catalog, line).text.length;
+  const planned = matched.plan(catalog, [{ path: PATH, text }, { path: "docs/b.md", text: "A microphone.\n" }], budget);
+  assert.deepEqual(planned.unreviewed, [{ path: PATH, code: "too-large",
+    reason: `line at offset 14 selects too much of the ontology for the configured budget (projection ${matched(catalog, line).text.length} characters, budget ${budget}; raise ONTOLOGY_MAX_REQUEST_CHARS)` }]);
+  assert.deepEqual(planned.chunks.map((chunk) => chunk.path), ["docs/b.md"]);
+  assertPlanned({ path: "docs/b.md", text: "A microphone.\n" }, planned, budget);
+});
+
+test("B6 B17 a banned alias that spans a paragraph break selects for the chunk that holds both parts", () => {
+  const text = "A deletion\n\nrequest was filed.\n";
+  assert.ok(!keys("A deletion\n\n").includes("Entities:SessionRemoval"));
+  assert.ok(!keys("request was filed.\n").includes("Entities:SessionRemoval"));
+  const [chunk] = assertPlanned({ path: PATH, text }, matched.plan(catalog, [{ path: PATH, text }], 200_000), 200_000);
+  assert.ok(chunk.keys.includes("Entities:SessionRemoval"));
+});
+
+test("B9 B13 planning is deterministic, and an empty file is one chunk with the name index only", () => {
+  const files = [{ path: PATH, text: "An AuditEvent was written.\n\nA microphone.\n" }, { path: "docs/empty.md", text: "" }];
+  const budget = fixed + cost("An AuditEvent was written.\n\n");
+  const planned = matched.plan(catalog, files, budget);
+  assert.deepEqual(matched.plan(catalogOntology(ONTOLOGY, SECTIONS), files, budget), planned);
+  assertPlanned(files[0], planned, budget);
+  assert.deepEqual(planned.chunks.at(-1), { path: "docs/empty.md", offset: 0, text: "", keys: [], chars: EMPTY });
+});
+
+test("B21 a full projector has no plan", () => {
+  assert.equal(createProjector({ mode: "full" }).plan, undefined);
+  assert.equal(typeof matched.plan, "function");
+});
+
+test("each request is projected once: a file that fits one chunk is not projected again", async () => {
+  const calls = [];
+  const counted = Object.assign((value, text) => { calls.push(text); return matched(value, text); }, { mode: matched.mode, plan: matched.plan });
+  let requests = 0;
+  const one = "A microphone.\n\nPlain words.\n";
+  const many = "An AuditEvent was written.\n\nThe speakers.\n\nAn analysis.\n";
+  const files = [{ path: PATH, text: one }, { path: "docs/b.md", text: many }];
+  const budget = fixed + cost("An AuditEvent was written.\n\n") + 4;
+  const result = await reviewFiles({ files, ontologyText: ONTOLOGY,
+    sections: SECTIONS, model: "m", baseUrl: "https://model.example/v1", headSha: "a".repeat(40), project: counted,
+    auth: createModelAuth({ env: { K: "k" }, staticKeyVar: "K" }), maxRequestChars: budget,
+    fetchImpl: async () => { requests++; return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ findings: [] }) } }] }) }; } });
+  assert.equal(calls.filter((text) => text === one).length, 1);
+  assert.deepEqual(result.reviewed, [PATH, "docs/b.md"]);
+  assert.equal(calls.length, requests);
+  assert.ok(requests > 2);
+  const planned = matched.plan(catalog, files, budget);
+  assert.equal(assertPlanned(files[0], planned, budget).length, 1);
+  assertPlanned(files[1], planned);
 });
