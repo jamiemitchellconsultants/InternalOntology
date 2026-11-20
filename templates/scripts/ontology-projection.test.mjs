@@ -15,7 +15,7 @@ const ONTOLOGY = [
   "| `Analysis` | `analysisId` | One scoring pass. |",
   "| `Speaker` | `speakerCode` | A person who records. |",
   "| `DataType` | `code` | A name whose words are all stopped. |",
-  "| `Microphone` | `model` | Unrelated to removal or audit. |",
+  "| `Microphone` | `model` | Unrelated to removal or audit; used by a `Speaker`. |",
   "",
   "## Enums", "",
   "| Name | Values | Description |", "| --- | --- | --- |",
@@ -90,25 +90,40 @@ test("B6 a banned alias phrase selects its nameInstead entries, as whole words i
   assert.ok(!keys("a deletion requester").includes("Entities:SessionRemoval"));
 });
 
-test("B7 one hop adds backticked names and relationship ends, and stops there", () => {
-  assert.deepEqual(keys("An AuditEvent was written."), [
-    "Entities:AuditEvent", "Entities:Analysis", "Relationships:Analysis", "Business Rules & Invariants:AuditEvent",
-  ]);
+test("B7 a matched entry adds the relationships whose domain or range it is, not the entries at their other ends", () => {
+  assert.deepEqual(keys("An AuditEvent was written."),
+    ["Entities:AuditEvent", "Relationships:Analysis", "Business Rules & Invariants:AuditEvent"]);
+  assert.deepEqual(keys("the speakers"), ["Entities:Speaker", "Relationships:Analysis"]);
+  assert.deepEqual(keys("An analysis."), ["Entities:Analysis", "Relationships:Analysis"]);
+});
+
+test("B7 a name in an entry's description selects nothing", () => {
   assert.deepEqual(keys("A microphone."), ["Entities:Microphone"]);
 });
 
-test("B8 every row of a selected key travels together", () => {
-  const { text } = matched(catalog, "An AuditEvent was written.");
+test("B8 every row of a selected relationship key travels together, without the far-end entry", () => {
+  const { text } = matched(catalog, "the speakers");
   for (const verb of ["scores", "credits", "writes"]) assert.ok(text.includes(`| \`Analysis\` | ${verb} |`), verb);
+  assert.ok(!text.includes("| `Analysis` | `analysisId` |"));
   assert.ok(!text.includes("| `SessionRemoval` | removes |"));
 });
 
-test("B1 B13 the text is selected rows by section in ontology order, then the whole name index", () => {
-  const index = catalog.projection.slice(catalog.projection.indexOf("\n\n## Evidence keys"));
-  assert.equal(matched(catalog, "nothing at all").text, `# Canonical ontology evidence${index}`);
+const INDEX = "\n\n## Evidence keys\n\n" +
+  "Each key is a section name, a colon, and one name listed under it, for example Entities:AuditEvent.\n\n" +
+  "Entities: AuditEvent, StudySession, SessionRemoval, Analysis, Speaker, DataType, Microphone\n" +
+  "Enums: RemovalReason, SessionRemovalState\n" +
+  "Relationships: Analysis, SessionRemoval\n" +
+  "Business Rules & Invariants: SessionRemoval, AuditEvent";
+
+test("B24 the matched name index lists each section's names on one line, after one explanatory sentence", () => {
+  assert.equal(matched(catalog, "nothing at all").text, `# Canonical ontology evidence${INDEX}`);
+  assert.ok(catalog.projection.endsWith("\n- Business Rules & Invariants:AuditEvent"));
+});
+
+test("B1 B13 the text is selected rows by section in ontology order, then the grouped name index", () => {
   assert.deepEqual(matched(catalog, "nothing at all").keys, []);
   assert.equal(matched(catalog, "A microphone.").text,
-    `# Canonical ontology evidence\n\n## Entities\n| \`Microphone\` | \`model\` | Unrelated to removal or audit. |${index}`);
+    `# Canonical ontology evidence\n\n## Entities\n| \`Microphone\` | \`model\` | Unrelated to removal or audit; used by a \`Speaker\`. |${INDEX}`);
   const invariant = matched(catalog, "a SessionRemoval").text;
   assert.ok(invariant.includes("- **`SessionRemoval`** — only forward transitions are allowed;\n  the purge job resumes interrupted removals.\n- **`SessionRemoval`** — the short note"));
 });

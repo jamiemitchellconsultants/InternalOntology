@@ -102,7 +102,7 @@ test("B1 B10 B15 B20 an unchanged config sends a matched projection and records 
       assert.match(prompt, /\| `SessionRemovalState` \|/);
       assert.match(prompt, /\| `SessionRemoval` \| Removes/);
       assert.doesNotMatch(prompt, /\| `Microphone` \|/);
-      assert.match(prompt, /- Entities:Microphone/);
+      assert.match(prompt, /\nEntities: AuditEvent, SessionRemoval, StudySession, Microphone\n/);
       assert.equal(run.outcome, "reviewed");
       const catalog = modules.model.catalogOntology(ontology, sections);
       assert.deepEqual(run.projections.map(({ path, mode, entriesTotal, fullChars }) => ({ path, mode, entriesTotal, fullChars })),

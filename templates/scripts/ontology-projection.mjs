@@ -1,4 +1,4 @@
-// Deterministic ontology projections for the semantic reviewer (ADR 0026, ADR 0027).
+// Deterministic ontology projections for the semantic reviewer (ADRs 0026, 0027, 0030 and 0031).
 // A projector maps (catalog, Markdown text) to { text, keys }: the ontology evidence one request
 // carries, and the evidence keys whose rows it carries in full. No I/O and no model.
 
@@ -31,11 +31,10 @@ export function nameWords(name) {
 
 const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const cells = (row) => row.split("|").slice(1, -1).map((cell) => cell.trim());
-const unticked = (cell) => (cell ?? "").replace(/^`|`$/g, "");
 
-function wholeWord(text, phrase, flags) {
+function wholeWord(phrase, flags) {
   const pattern = phrase.trim().split(/\s+/u).map(escape).join("\\s+");
-  return new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, `u${flags}`).test(text);
+  return new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, `u${flags}`);
 }
 
 function wordsOf(group) {
@@ -46,71 +45,112 @@ function wordsOf(group) {
   return [...new Set(words)];
 }
 
-function hasWord(words, word) {
-  return words.has(word) || words.has(`${word}s`) || words.has(`${word}es`);
+// The grouped name index (B24, ADR 0031): one line per section, names in ontology order.
+function groupedNameIndex(catalog) {
+  const lines = [];
+  let section = null;
+  for (const group of catalog.groups.values()) {
+    if (group.section === section) lines[lines.length - 1] += `, ${group.name}`;
+    else lines.push(`${(section = group.section)}: ${group.name}`);
+  }
+  const example = catalog.groups.keys().next().value;
+  return ["", "", "## Evidence keys", "",
+    `Each key is a section name, a colon, and one name listed under it, for example ${example}.`, "", ...lines].join("\n");
 }
 
-function keysNamed(catalog, name) {
-  const keys = [];
-  for (const [key, group] of catalog.groups) if (group.name === name) keys.push(key);
-  return keys;
-}
-
-function selectEntries(catalog, text, bannedAliases = []) {
-  const words = markdownWords(text);
-  const base = new Set();
+// Built once per catalog and projector (ADR 0030). Every selection and size comes from here.
+function buildIndex(catalog, bannedAliases) {
+  const order = new Map([...catalog.groups.keys()].map((key, position) => [key, position]));
+  const byWord = new Map();
+  const byName = new Map();
   for (const [key, group] of catalog.groups) {
-    if (wholeWord(text, group.name, "") || wordsOf(group).some((word) => hasWord(words, word))) base.add(key);
+    for (const word of wordsOf(group)) {
+      if (!byWord.has(word)) byWord.set(word, []);
+      byWord.get(word).push(key);
+    }
+    if (!byName.has(group.name)) byName.set(group.name, []);
+    byName.get(group.name).push(key);
+  }
+  // Names without whitespace cannot match across a line break, so a unit's matches are the chunk's.
+  const names = [];
+  const phrases = [];
+  for (const [name, keys] of byName) {
+    const matcher = { probe: name.trim().split(/\s+/u)[0], pattern: wholeWord(name, ""), keys };
+    (/\s/u.test(name.trim()) ? phrases : names).push(matcher);
   }
   for (const alias of bannedAliases) {
-    if (!wholeWord(text, alias.phrase, "i")) continue;
-    for (const name of alias.nameInstead) for (const key of keysNamed(catalog, name)) base.add(key);
+    phrases.push({ probe: "", pattern: wholeWord(alias.phrase, "i"), keys: alias.nameInstead.flatMap((name) => byName.get(name) ?? []) });
   }
+  const relationshipsOf = new Map();
+  for (const relationship of catalog.relationships ?? []) {
+    for (const end of [relationship.from, relationship.to]) {
+      if (!relationshipsOf.has(end)) relationshipsOf.set(end, new Set());
+      relationshipsOf.get(end).add(relationship.evidenceKey);
+    }
+  }
+  const groupChars = new Map();
+  for (const [key, group] of catalog.groups) groupChars.set(key, group.rows.reduce((sum, row) => sum + row.length + 1, 0));
+  const indexText = groupedNameIndex(catalog);
+  return { catalog, order, byWord, names, phrases, relationshipsOf, groupChars, indexText,
+    emptyChars: HEADER.length + indexText.length };
+}
+
+const addAll = (target, keys) => { for (const key of keys) target.add(key); return target; };
+
+// Matches that never span a line break: name words, enum value words and names without whitespace.
+function unitMatches(index, text) {
+  const found = new Set();
+  for (const word of markdownWords(text)) {
+    for (const candidate of [word, word.endsWith("s") && word.slice(0, -1), word.endsWith("es") && word.slice(0, -2)]) {
+      if (candidate) addAll(found, index.byWord.get(candidate) ?? []);
+    }
+  }
+  for (const name of index.names) if (text.includes(name.probe) && name.pattern.test(text)) addAll(found, name.keys);
+  return found;
+}
+
+// Matches that can span a break: banned-alias phrases and names with whitespace (B6).
+function phraseMatches(index, text, found) {
+  for (const phrase of index.phrases) if ((!phrase.probe || text.includes(phrase.probe)) && phrase.pattern.test(text)) addAll(found, phrase.keys);
+  return found;
+}
+
+// B7: each base entry adds the relationships whose domain or range it is, and nothing else.
+function withRelationships(index, base) {
   const selected = new Set(base);
-  const baseNames = new Set([...base].map((key) => catalog.groups.get(key).name));
-  for (const key of base) {
-    for (const row of catalog.groups.get(key).rows) {
-      for (const match of row.matchAll(/`([^`]+)`/g)) for (const named of keysNamed(catalog, match[1].trim())) selected.add(named);
-    }
-  }
-  for (const [key, group] of catalog.groups) {
-    if (group.section !== "Relationships") continue;
-    for (const row of group.rows) {
-      const from = group.name;
-      const to = unticked(cells(row)[2]);
-      if (!baseNames.has(from) && !baseNames.has(to)) continue;
-      selected.add(key);
-      for (const named of [...keysNamed(catalog, from), ...keysNamed(catalog, to)]) selected.add(named);
-    }
-  }
+  for (const key of base) addAll(selected, index.relationshipsOf.get(index.catalog.groups.get(key).name) ?? []);
   return selected;
 }
 
-function nameIndex(catalog) {
-  return ["", "", "## Evidence keys", "", ...[...catalog.evidenceKeys].map((key) => `- ${key}`)].join("\n");
+function select(index, text) {
+  return withRelationships(index, phraseMatches(index, text, unitMatches(index, text)));
 }
 
-function renderProjection(catalog, selected) {
+const ordered = (index, selected) => [...selected].sort((a, b) => index.order.get(a) - index.order.get(b));
+
+function render(index, selected) {
   const output = [HEADER];
   let section = null;
-  for (const [key, group] of catalog.groups) {
-    if (!selected.has(key)) continue;
-    if (group.section !== section) {
-      section = group.section;
-      output.push("", `## ${section}`);
-    }
+  for (const key of ordered(index, selected)) {
+    const group = index.catalog.groups.get(key);
+    if (group.section !== section) output.push("", `## ${(section = group.section)}`);
     output.push(...group.rows);
   }
-  return output.join("\n") + nameIndex(catalog);
+  return output.join("\n") + index.indexText;
 }
 
 export function createProjector({ mode = "matched", bannedAliases = [] } = {}) {
   if (!PROJECTION_MODES.includes(mode)) throw new Error(`unknown projection mode: ${JSON.stringify(mode)}`);
-  const project = mode === "full"
-    ? (catalog) => ({ text: catalog.projection, keys: [...catalog.evidenceKeys] })
-    : (catalog, text) => {
-      const selected = selectEntries(catalog, text, bannedAliases);
-      return { text: renderProjection(catalog, selected), keys: [...catalog.groups.keys()].filter((key) => selected.has(key)) };
-    };
+  if (mode === "full") return Object.assign((catalog) => ({ text: catalog.projection, keys: [...catalog.evidenceKeys] }), { mode });
+  const indexes = new WeakMap();
+  const indexFor = (catalog) => {
+    if (!indexes.has(catalog)) indexes.set(catalog, buildIndex(catalog, bannedAliases));
+    return indexes.get(catalog);
+  };
+  const project = (catalog, text) => {
+    const index = indexFor(catalog);
+    const selected = select(index, text);
+    return { text: render(index, selected), keys: ordered(index, selected) };
+  };
   return Object.assign(project, { mode });
 }
