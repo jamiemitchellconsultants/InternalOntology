@@ -2,6 +2,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createEmbeddingAdapter } from "./semantic-index-embed.mjs";
+import { createReleaseTransport, downloadIndex, uploadIndex } from "./semantic-index-release.mjs";
 import { hasIndexEdits, listIndexEntries, readIndexPassages, resolveIndexContext } from "./semantic-index-source.mjs";
 import { indexReadiness, openIndex, withIndexWriter } from "./semantic-index-store.mjs";
 
@@ -18,24 +19,27 @@ function problem(code, message) {
 
 function parseCommand(argv) {
   const [command, ...args] = argv;
-  const optionsFor = { status: [], refresh: [], search: ["query", "limit"] };
-  if (!Object.hasOwn(optionsFor, command)) throw problem("usage", "Use status, refresh, or search.");
+  const optionsFor = { status: [], refresh: [], search: ["query", "limit"], download: ["release", "allow-ancestor"], upload: ["release"] };
+  if (!Object.hasOwn(optionsFor, command)) throw problem("usage", "Use status, refresh, search, download, or upload.");
   const options = {};
   for (let i = 0; i < args.length; i += 1) {
     const match = /^--([a-z-]+)(?:=(.*))?$/s.exec(args[i]);
     if (!match) throw problem("usage", "Expected a named command option.");
     const [, key, inline] = match;
     if (Object.hasOwn(options, key)) throw problem("usage", "Option given more than once: --" + key);
-    if (key === "json" && inline === undefined) {
-      options.json = true;
+    if ((key === "json" || (command === "download" && key === "allow-ancestor")) && inline === undefined) {
+      options[key] = true;
       continue;
     }
-    if (!optionsFor[command].includes(key)) throw problem("usage", "Unexpected option: --" + key);
+    if (!optionsFor[command].includes(key) || key === "allow-ancestor") throw problem("usage", "Unexpected option: --" + key);
     const value = inline ?? args[++i];
     if (!value || (inline === undefined && value.startsWith("-"))) throw problem("usage", "Missing value for --" + key);
     options[key] = value;
   }
   if (command === "search" && !options.query?.trim()) throw problem("usage", "Provide a non-empty --query.");
+  if ((command === "download" || command === "upload") && (!options.release || /[\x00-\x20]/.test(options.release))) {
+    throw problem("usage", "Provide an explicit GitHub Release tag with --release.");
+  }
   const limit = options.limit === undefined ? 5 : Number(options.limit);
   if (options.limit !== undefined && (!/^\d+$/.test(options.limit) || limit < 1 || limit > 100)) {
     throw problem("usage", "--limit must be an integer from 1 to 100.");
@@ -154,22 +158,33 @@ async function search(reader, query, limit, adapter) {
   return best.map(({ position, ...result }) => ({ commit: reader.header.sourceCommit, ...result }));
 }
 
-export async function runIndexCommand(argv, { cwd = process.cwd(), env = process.env, fetchImpl = fetch } = {}) {
+export async function runIndexCommand(argv, { cwd = process.cwd(), env = process.env, fetchImpl = fetch, releaseTransport } = {}) {
   try {
     const { command, options, limit } = parseCommand(argv);
     const resolveCurrent = () => resolveIndexContext(cwd, env);
     const context = resolveCurrent();
-    const adapter = createEmbeddingAdapter(context.policy.embedding, { fetchImpl, token: env.ONTOLOGY_INDEX_EMBEDDING_TOKEN });
+    const adapter = () => createEmbeddingAdapter(context.policy.embedding, { fetchImpl, token: env.ONTOLOGY_INDEX_EMBEDDING_TOKEN });
     let value;
     if (command === "refresh") {
-      value = await refresh(context, adapter, resolveCurrent);
+      value = await refresh(context, adapter(), resolveCurrent);
+    } else if (command === "download" || command === "upload") {
+      const exchange = command === "download" ? downloadIndex : uploadIndex;
+      const exchanged = await exchange({ context, tag: options.release, allowAncestor: Boolean(options["allow-ancestor"]),
+        transport: releaseTransport ?? createReleaseTransport() });
+      const current = resolveCurrent();
+      const { reader, state } = await inspect(current);
+      try {
+        value = { ...describe(current, state, reader?.header.sourceCommit), ...exchanged };
+      } finally {
+        await reader?.close();
+      }
     } else {
       const { reader, state } = await inspect(context);
       try {
         value = describe(context, state, reader?.header.sourceCommit);
         if (command === "search") {
           if (state !== "current") throw problem(state, recovery[state]);
-          const results = await search(reader, options.query, limit, adapter);
+          const results = await search(reader, options.query, limit, adapter());
           const current = resolveCurrent();
           const latest = indexReadiness(reader.header, current);
           if (latest !== "current") throw problem(latest, recovery[latest]);
@@ -182,7 +197,7 @@ export async function runIndexCommand(argv, { cwd = process.cwd(), env = process
     return { exitCode: 0, value: { ok: true, ...value } };
   } catch (error) {
     const argument = ["config", "disabled", "unborn", "usage"].includes(error.code);
-    const code = argument || Object.hasOwn(recovery, error.code) ? error.code : "operation";
+    const code = argument || error.code === "release" || Object.hasOwn(recovery, error.code) ? error.code : "operation";
     return { exitCode: argument ? 2 : 1, value: { ok: false, code, message: error.message } };
   }
 }
@@ -196,6 +211,7 @@ function format(value) {
     JSON.stringify(result.path) + ":" + result.startLine + "-" + result.endLine + " " + result.score.toFixed(4),
   );
   if (value.metrics) lines.push("Source embeddings: " + value.metrics.sourceEmbeddings);
+  if (value.asset) lines.push(value.repository + " " + value.release + " " + value.asset + " (" + value.bytes + " bytes)");
   return lines.join("\n");
 }
 
