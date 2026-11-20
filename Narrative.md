@@ -71,6 +71,7 @@ by rewriting the original.
 | [55](#entry-ship-matched-ontology-projection-for-large-ontologies-135) | 2026-11-20 | Ship matched ontology projection for large ontologies (#135) | product | - Read the pinned source through raw GitHub Contents with strict UTF-8 decoding and keep a Markdown fallback on a source 404. |
 | [56](#entry-docs-plan-semantic-repository-index-implementation) | 2026-11-20 | docs: plan semantic repository index implementation | product | Implement seven separately testable tasks covering configuration, committed source, embeddings, storage, local commands, release exchange, and installer and pilot integration. |
 | [57](#entry-feat-add-optional-semantic-repository-index) | 2026-11-20 | feat: add optional semantic repository index | product | Ship the indexing commands as an opt-in part of the Kit. Keep index state in an ignored file per checkout, with versioned GitHub Release assets as the shared distribution channel. Read model and scope settings from a trusted commit. |
+| [58](#entry-docs-design-opt-in-lan-http-for-semantic-embeddings) | 2026-11-20 | docs: design opt-in LAN HTTP for semantic embeddings | product | Allow `semanticIndex.embedding.allowLanHttp` in trusted committed configuration. |
 
 ---
 
@@ -1399,3 +1400,25 @@ Ship the indexing commands as an opt-in part of the Kit. Keep index state in an 
 Teams can index local commits, reuse matching assets, and refresh incrementally. Query embedding still uses the configured model. A suitable adopting repository and approved model and release are needed for live acceptance and retrieval-quality measurement. Automated tests exercise the workflow with simulated model and GitHub services.
 
 AI-Fingerprint: sha256:7d2a8de4c0c5
+
+---
+
+<a id="entry-docs-design-opt-in-lan-http-for-semantic-embeddings"></a>
+
+## Entry 58 — 2026-11-20 — docs: design opt-in LAN HTTP for semantic embeddings
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The owner-approved Qwen service is reachable on the private network. During JEPA-Speech acceptance it returned valid 4,096-dimensional vectors for synthetic inputs, while the Kit's HTTPS-or-loopback rule rejected its LAN URL at configuration validation. The maintainer chose to support explicitly configured LAN HTTP.
+
+## Decision
+
+Allow `semanticIndex.embedding.allowLanHttp` in trusted committed configuration. Off-loopback HTTP is opt-in, connects directly to a validated private address, rejects public or mixed address answers, and rejects a configured embedding bearer before connecting. The adapter keeps its bounded request and response checks. [ADR 0036](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect-amend/docs/adr/0036-opt-in-private-lan-http-for-embeddings.md)
+
+## Consequences
+
+Developers on the approved network can use the hosted model over plaintext HTTP. An HTTPS endpoint continues to serve deployments that need bearer authentication. Snapshot compatibility follows the embedding space, so the transport option is outside the compatibility fingerprint. Developer planning and implementation amendments come before the installed JEPA-Speech LAN trial in #149.
+
+AI-Fingerprint: sha256:99cca93d341e
