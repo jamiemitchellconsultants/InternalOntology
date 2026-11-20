@@ -56,8 +56,9 @@ function groupedNameIndex(catalog) {
     else lines.push(`${(section = group.section)}: ${group.name}`);
   }
   const example = catalog.groups.keys().next().value;
-  return ["", "", "## Evidence keys", "",
-    `Each key is a section name, a colon, and one name listed under it, for example ${example}.`, "", ...lines].join("\n");
+  const explanation = "Each key is a section name, a colon, and one name listed under it";
+  const help = example === undefined ? `${explanation}.` : `${explanation}, for example ${example}.`;
+  return ["", "", "## Evidence keys", "", help, "", ...lines].join("\n");
 }
 
 // Built once per catalog and projector (ADR 0030). Every selection and size comes from here.

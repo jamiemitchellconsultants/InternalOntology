@@ -368,3 +368,15 @@ test("B18 an indivisible over-budget piece reports its original line and sends n
   assert.deepEqual(result.reviewed, ["docs/b.md"]);
   assert.deepEqual(sent, ["File: docs/b.md\nOffset: 0\nText:\nz"]);
 });
+
+test("B13 B24 an empty optional-only catalog has no example key and can still be planned", () => {
+  const empty = catalogOntology("# Ontology\n", { required: [], optional: ["Entities"] });
+  assert.equal(empty.evidenceKeys.size, 0);
+  const projection = "# Canonical ontology evidence\n\n## Evidence keys\n\n" +
+    "Each key is a section name, a colon, and one name listed under it.\n";
+  assert.deepEqual(matched(empty, ""), { text: projection, keys: [] });
+  const budget = fixed + projection.length + 1;
+  assert.deepEqual(matched.plan(empty, [{ path: PATH, text: "x" }], budget), {
+    chunks: [{ path: PATH, offset: 0, text: "x", keys: [], chars: projection.length }], unreviewed: [],
+  });
+});
