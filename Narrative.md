@@ -64,6 +64,7 @@ by rewriting the original.
 | [48](#entry-feat-matched-ontology-projection-for-the-semantic-reviewer-135) | 2026-11-19 | feat: matched ontology projection for the semantic reviewer (#135) | product | Each request carries a deterministic matched projection by default: the full rows of the entries its chunk selects, plus the name index, so the model can still cite any entry and every citation is checked against the whole catalog ([ADR… |
 | [49](#entry-matched-ontology-projection-design-amendment-after-acceptance-pushback-1) | 2026-11-20 | Matched ontology projection: design amendment after acceptance pushback (#135) | product | - **Plan by paragraph ([ADR 0030](docs/adr/0030-matched-planning-by-paragraph-in-the-projector.md)).** - The matched projector gains a `plan` step. |
 | [50](#entry-docs-define-semantic-repository-index-vision) | 2026-11-20 | docs: define semantic repository index vision | product | Offer semantic repository search as an opt-in capability. The repository owner supplies the embedding model and approves the indexed content. Each checkout uses a rebuildable, Git-ignored vector store. |
+| [51](#entry-docs-define-semantic-repository-index-behaviours) | 2026-11-20 | docs: define semantic repository index behaviours | product | Search uses approved content from the current Git commit, including local commits, with an explicit refresh after a change to the commit or source scope. An exact compatible release asset can be searched with zero source re-embedding. |
 
 ---
 
@@ -1213,3 +1214,25 @@ Offer semantic repository search as an opt-in capability. The repository owner s
 A developer can reuse the published vectors with access to the matching model and refresh the local index as source changes. Release assets keep generated vectors out of Git history and give the snapshot a repository-owned distribution point. The pilot will compare search quality with keyword search and measure refresh work and asset size. Snapshot selection, publication cadence, and implementation choices carry forward to later phases.
 
 AI-Fingerprint: sha256:6cce40ee1dfb
+
+---
+
+<a id="entry-docs-define-semantic-repository-index-behaviours"></a>
+
+## Entry 51 — 2026-11-20 — docs: define semantic repository index behaviours
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted vision calls for owner-supplied embeddings, a checkout-local index, and GitHub Release assets that teammates can reuse. Developers need source citations they can resolve and clear guidance when an index is unavailable, stale, or incompatible. Publishing must associate the shared vectors with the exact source teammates can check out.
+
+## Decision
+
+Search uses approved content from the current Git commit, including local commits, with an explicit refresh after a change to the commit or source scope. An exact compatible release asset can be searched with zero source re-embedding. A compatible ancestor asset can seed a refresh. Explicit uploads require repository write access and a release that points to the pushed indexed commit.
+
+## Consequences
+
+Source locations resolve at a named revision. Interrupted imports and refreshes preserve the last complete local index, and failed uploads preserve existing release assets. The pilot compares retrieval with keyword search and measures reuse and refresh costs. Architecture will choose the storage, client interfaces, embedding integration, and release tooling.
+
+AI-Fingerprint: sha256:40814a485326
