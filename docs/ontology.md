@@ -66,6 +66,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `Ontology` | `ontologyPath`, one Markdown table per section | The canonical vocabulary document a `TargetRepository` maintains (`docs/ontology.md` by default). Identity persists as sections and rows are added, renamed, or removed over the repository's life; this file, in this repository, is one instance of it. |
 | `OntologyConfig` | `ontologyPath`, `sections`, `allowlist`, `bannedAliases`, `ignorePaths`, optional `semanticReview`, optional `sourceGraph`, optional `semanticIndex` | The one per-repository file (`ontology.config.json`) every installed script reads its repository-specific settings through. Identity persists as its fields change; it is what lets the scripts themselves stay identical across repositories. The `semanticReview` settings are read from the trusted default branch, not an unmerged PR. The optional `sourceGraph` settings locate adopter-owned graph data, select eligible evidence roles, and configure a repository browser URL and optional generated Markdown path within the excluded graph root. The optional `semanticReview.projection` setting chooses the `ProjectionMode` of the semantic reviewer and is accepted only under `semanticReview`. The optional `semanticIndex` settings describe the adopter's `IndexSourceScope`, `EmbeddingProfile` and release publishing policy without storing credentials. |
 | `SemanticRepositoryIndex` | checkout, source revision, effective `IndexSourceScope`, embedding space identity, searchable passages | A rebuildable local vector store belonging to one checkout of a `TargetRepository`. A successful build, refresh or import replaces its contents while keeping its identity within that checkout. Reports whether it can be used to search the requested source revision under the owner's current scope and model settings. |
+| `SearchTokenLog` | checkout, time, command, results or lines returned, `TokenEstimate` | A Git-ignored local record in the checkout's index storage of what each search or passage response cost. It holds counts and estimates only, never query text or source text, and supports a baseline report of token use. |
 | `SourceKnowledgeGraph` | source repository, effective Git revision, Turtle resources for assertions, declared coverage, file review records | A reviewable, versioned account of repository facts and clearly marked inferences that extends beyond the canonical vocabulary in `Ontology`. It is stored as Turtle with the source repository; its effective revision is the Git commit containing it, not a hash embedded in its own files. An agent prepares it before a pull request; its assertions ground later agent work and may support downstream views. Missing coverage is explicit. |
 | `GraphNode` | stable identity, kind, label, canonical ontology IRI when kind is concept | A repository concept, source element, dependency, or other subject or object named by a `GraphAssertion`. A concept node links to its canonical `Ontology` IRI instead of reusing the ontology class IRI as a graph node. Its identity remains stable when a label or source location changes. |
 | `GraphAssertion` | stable identity, subject, relationship, object, basis, evidence | One reviewable claim in a `SourceKnowledgeGraph` about a repository fact or relationship. Its basis distinguishes a directly evidenced claim from an inference supported by source observations. Its identity persists when the same claim is refreshed at a later source revision. |
@@ -92,6 +93,9 @@ Internal components that are ours to build. Named so that specs can describe the
 | `EmbeddingProfile` | owner-approved model destination, transport approval, embedding space identity, vector dimensions | The model selection for indexing source and embedding queries. Transport approval can expressly permit private LAN HTTP for the configured destination. The embedding space identity distinguishes model versions and settings that change comparability, including the document and query modes where applicable. Credentials are provided separately from this profile. |
 | `IndexSnapshot` | source repository, indexed Git commit, effective `IndexSourceScope`, embedding space identity, packaged index | A portable copy of a complete `SemanticRepositoryIndex` for a pushed commit, distributed as a GitHub Release asset by the adopting repository. Carries the provenance needed to decide whether it can be reused. |
 | `SemanticSearchResult` | indexed Git commit, repository-relative path, start and end lines | A ranked source location returned from the `SemanticRepositoryIndex`. The line range refers to the file at the indexed commit. |
+| `TokenEstimate` | characters returned, estimated tokens | A deterministic estimate of the tokens in one response, derived from its character count and always labelled as an estimate. The same response always gives the same figure. |
+| `ResponseCap` | maximum estimated tokens, default applies when unset | The owner's limit on the `TokenEstimate` of one search or passage response, set under `semanticIndex` in `OntologyConfig` and read from trusted committed settings. A response over the cap is cut and marked truncated, not failed. |
+| `PassageExtract` | indexed Git commit, repository-relative path, start and end lines, text, `TokenEstimate`, truncation marker | The text of the cited lines of one `SemanticSearchResult`, read from the indexed commit and bounded by the `ResponseCap`. A truncated extract states the lines returned and the first line not returned. |
 | `OidcClientConfig` | `ONTOLOGY_OIDC_TOKEN_URL`, `ONTOLOGY_OIDC_CLIENT_ID`, `ONTOLOGY_OIDC_CLIENT_SECRET` | The three settings that select OIDC client-credentials authentication. All or none must be set; a partial set is an error, never a silent fallback. |
 | `RequestBudget` | `ONTOLOGY_MAX_REQUEST_CHARS`, `ONTOLOGY_MODEL_TIMEOUT_MS` | The complete-request character budget and the model timeout the `DriftReviewer` and the `SemanticReviewWorker` run with. Defaults apply when a setting is unset or empty; a non-integer or non-positive value is an error. When the system prompt plus ontology projection leave too little room, the review is skipped with an explanation rather than failed. |
 | `OntologyProjection` | `ProjectionMode`, name index, full rows, entries sent | The ontology evidence in one `SemanticReviewWorker` request. It always contains the name index, the evidence key of every ontology entry, and adds the full rows of every entry (`full`), or of the entries selected for that Markdown together with the relationships whose domain or range is one of them (`matched`). In `matched` mode the name index is grouped by section. The same Markdown, ontology and mode always give the same projection. |
@@ -137,6 +141,8 @@ enum lock test catches.
 | `ReviewGraphNaming` | CI, for an eligible pull request | The opt-in, model-assisted `GraphNamingRun` over a pull request's graph names, reporting `GraphNamingResult`s that hold the merge until settled. |
 | `SettleGraphNamingResult` | Reviewer with write access | Accept, reject with a reason, or defer to a new issue one or all unsettled `GraphNamingResult`s on a pull request in a single action, recording a `NamingSettlement`. |
 | `RenderSourceKnowledgeGraph` | Maintainer, through a Git workflow | Generate a human-readable Markdown document of the current `SourceKnowledgeGraph`, preserving its recorded claims, evidence access, direct or inferred basis, coverage limits, and references for finding the underlying Turtle. The Turtle remains canonical; rendering does not judge semantic accuracy. |
+| `ShowIndexedPassage` | AI coding agent or developer | Retrieve the `PassageExtract` for one `SemanticSearchResult` so that only the cited lines are read, from the indexed commit and within the `IndexSourceScope`, instead of the whole file. |
+| `ReportIndexTokenUse` | Developer or repository owner | Summarise the `SearchTokenLog` as command count, total and mean `TokenEstimate`, and largest response, so token cost has a baseline. Reads only the local log. |
 
 ---
 
@@ -156,6 +162,10 @@ enum lock test catches.
 | `SemanticRepositoryIndex` | belongs to a checkout of | `TargetRepository` | many → 1 |
 | `SemanticRepositoryIndex` | indexes under | `IndexSourceScope` | many → 1 |
 | `SemanticRepositoryIndex` | returns | `SemanticSearchResult` | 1 → 0 or many per search |
+| `SemanticRepositoryIndex` | records use in | `SearchTokenLog` | 1 → 1 per checkout |
+| `SearchTokenLog` | holds | `TokenEstimate` | 1 → 0 or many |
+| `PassageExtract` | answers | `SemanticSearchResult` | many → 1 |
+| `OntologyConfig` | sets | `ResponseCap` | 1 → 0 or 1 |
 | `IndexSnapshot` | packages | `SemanticRepositoryIndex` | many → 1 |
 | `TermChecker` | reads | `Ontology` | many → 1 |
 | `TermChecker` | reads | `OntologyConfig` | many → 1 |
@@ -263,3 +273,9 @@ enum lock test catches.
 - **`IndexSnapshot`** — a published snapshot represents one verified pushed commit in its own
   `TargetRepository`, and its GitHub Release resolves to the same commit. Credentials stay outside
   the snapshot.
+- **`SearchTokenLog`** — stores no query text and no source text, and a failure to write it never fails a
+  search or passage response.
+- **`ResponseCap`** — a response over the cap is returned cut at the cap with a truncation marker; it
+  is never refused for size. Only trusted committed configuration sets it.
+- **`PassageExtract`** — is read from the indexed Git commit, never the working tree, and only for
+  paths inside the effective `IndexSourceScope`.
