@@ -72,6 +72,7 @@ by rewriting the original.
 | [56](#entry-docs-plan-semantic-repository-index-implementation) | 2026-11-20 | docs: plan semantic repository index implementation | product | Implement seven separately testable tasks covering configuration, committed source, embeddings, storage, local commands, release exchange, and installer and pilot integration. |
 | [57](#entry-feat-add-optional-semantic-repository-index) | 2026-11-20 | feat: add optional semantic repository index | product | Ship the indexing commands as an opt-in part of the Kit. Keep index state in an ignored file per checkout, with versioned GitHub Release assets as the shared distribution channel. Read model and scope settings from a trusted commit. |
 | [58](#entry-docs-design-opt-in-lan-http-for-semantic-embeddings) | 2026-11-20 | docs: design opt-in LAN HTTP for semantic embeddings | product | Allow `semanticIndex.embedding.allowLanHttp` in trusted committed configuration. |
+| [59](#entry-test-document-semantic-index-acceptance) | 2026-11-20 | test: document semantic index acceptance | product | Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. |
 
 ---
 
@@ -1422,3 +1423,25 @@ Allow `semanticIndex.embedding.allowLanHttp` in trusted committed configuration.
 Developers on the approved network can use the hosted model over plaintext HTTP. An HTTPS endpoint continues to serve deployments that need bearer authentication. Snapshot compatibility follows the embedding space, so the transport option is outside the compatibility fingerprint. Developer planning and implementation amendments come before the installed JEPA-Speech LAN trial in #149.
 
 AI-Fingerprint: sha256:99cca93d341e
+
+---
+
+<a id="entry-test-document-semantic-index-acceptance"></a>
+
+## Entry 59 — 2026-11-20 — test: document semantic index acceptance
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The semantic index build shipped local search and GitHub Release snapshot exchange. Acceptance needed evidence that a second developer could reuse the index, verify citations against Git, and recover from incompatible or interrupted operations. Maintainers asked to review executable behaviour in natural-language Markdown.
+
+## Decision
+
+Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. Use a Markdown test description as the maintainer review artefact.
+
+## Consequences
+
+The local suite and the live draft release exchange provide evidence for the supported workflow. The representative JEPA-Speech trial used local Ollama and obtained 8 of 12 semantic top-five hits and 1 of 12 keyword top-five hits. All 60 semantic citations resolved at the pinned commit. The maintainer's authenticated HTTPS Qwen probe accepted both the default and explicit float requests for a two-input batch, returning 4,096-dimensional vectors. The installed Kit refreshed 33 passages on a 12-file JEPA-Speech trial. It validated all 60 citations and measured 12 of 12 semantic top-five hits and 3 of 12 keyword top-five hits. Separate reader-account evidence is pending. The LAN HTTP design amendment has merged, with implementation still pending.
+
+AI-Fingerprint: sha256:8cc6ff3e1719
