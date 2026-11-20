@@ -5,11 +5,13 @@ Execute after the [task plan](../../superpowers/plans/matched-ontology-projectio
 - ADRs [0026](../../adr/0026-matched-projection-as-an-injected-projector.md), [0027](../../adr/0027-deterministic-matching-rule-and-fixed-stop-list.md) and [0028](../../adr/0028-projection-setting-and-run-record-summary.md);
 - the amendment's ADRs [0029](../../adr/0029-semantic-review-reads-the-ontology-source.md), [0030](../../adr/0030-matched-planning-by-paragraph-in-the-projector.md) and [0031](../../adr/0031-relationships-only-and-grouped-name-index.md).
 
-This plan has two parts:
-- **Part 1, the amendment (Tasks 10 to 17),** answers the user's acceptance pushback on #135. Execute it.
-- **Part 2, the first pass (Tasks 1 to 9),** was executed and merged in PR #141. It is kept as the record that Part 1 builds on. Do not execute it again.
+**Resume at Part 3, Tasks 18–21.** This build-review amendment follows PR #160 and ADRs [0034](../../adr/0034-semantic-review-reads-raw-ontology-contents.md) and [0035](../../adr/0035-matched-planner-budgets-whole-code-points.md).
 
-Work on `feature/matched-ontology-projection/build`, created from `main` after this plan has merged. Each task is a separate test-first commit and push. Before each commit:
+- **Part 1, the acceptance amendment.** Tasks 10–16 are pushed through `148d96f` on the build branch. The build review stopped during Task 17. Task 21 takes over its verification and handoff.
+- **Part 2, the first pass.** Tasks 1–9 shipped in PR #141.
+- **Part 3, the build-review amendment.** Tasks 18–21 are the only tasks for this build pass.
+
+Resume the existing `feature/matched-ontology-projection/build` after the Part 3 plan has merged and the build gate opens. Each task is a separate test-first commit and push. Before each commit:
 1. Run the task's focused test.
 2. Stage only that task's files and review `git diff --cached`.
 3. Run `node scripts/check-ontology-terms.mjs`.
@@ -18,13 +20,13 @@ Work on `feature/matched-ontology-projection/build`, created from `main` after t
 Every test in Part 1 was run against a prototype of this plan before the plan was written:
 - the tests pass against the prototype, and `npm test` passed 744 of 744;
 - the shipped tests pass alone from `templates/scripts` on Node 20, 22 and 24;
-- each new test fails against `main` where it should, except the one that pins today's behaviour for an `ontologyPath` without `.md`;
+- each new test fails against `main` where it should, except the non-`.md` path test and the B25 equivalence test. The former pins today's Markdown read, and the latter also passes with current generated Markdown;
 - the existing assertions that this plan updates are the only existing failures;
 - with Task 15 left out, every acceptance and reviewer test still passes, so the order below keeps the suite green.
 
 Keep the test names. Code fragments are contracts. Where a fragment gives a whole function, use it as written: the tests pin its behaviour, but not every detail of it.
 
-# Part 1 — the amendment
+# Part 1 — the acceptance amendment (Tasks 10–16 pushed)
 
 ## Task 10 — `ttlPathFor` moves into `owl-ontology.mjs`
 
@@ -305,7 +307,7 @@ test("B25 when build-ontology --check passes, the reviewer's ontology is the com
 if (path.startsWith("/contents/docs/ontology.ttl?ref=")) throw new Error(`GitHub API GET returned 404 for ${path}`);
 ```
 
-- [ ] **Step 5: Run the tests.** Run `node --test templates/scripts/semantic-review-github.test.mjs tests/semantic-ontology-source.test.mjs tests/semantic-feature-acceptance.test.mjs`. The new B25 tests fail, except "B25 an ontology path without .md is read as Markdown only", which pins today's behaviour.
+- [ ] **Step 5: Run the tests.** Run `node --test templates/scripts/semantic-review-github.test.mjs tests/semantic-ontology-source.test.mjs tests/semantic-feature-acceptance.test.mjs`. Exactly three new collector tests fail. "B25 an ontology path without .md is read as Markdown only" and "B25 when build-ontology --check passes, the reviewer's ontology is the committed ontology.md, with the same catalog" both pass. The old collector already reads the current generated Markdown in the equivalence fixture. The stale-Markdown fixture proves the source switch.
 - [ ] **Step 6: Implement.** In `semantic-review-github.mjs`:
   - Import `parseTurtle`, `renderOntologyMarkdown`, `triplesToModel` and `ttlPathFor` from `./owl-ontology.mjs`.
   - Add this function above `collectReviewInput`:
@@ -937,6 +939,8 @@ export function createProjector({ mode = "matched", bannedAliases = [] } = {}) {
 - [ ] **Step 4: Check and commit.** Run the acceptance test, `node scripts/check-ontology-terms.mjs` and `npm test`, then commit: `docs: runbook covers the ontology source, relationships only and planning by paragraph (#135)`.
 
 ## Task 17 — wrap-up, re-measurement and handoff
+
+Task 21 replaces this checkpoint. Keep the measurement script below for its use.
 
 - [ ] **Step 1: Check the ontology.** Confirm that `docs/ontology.md` still matches the code: the `OntologyProjection` row (relationships only, the grouped name index), `ProjectionMode`, and the `OntologyConfig` and `SemanticReviewRun` rows. The amendment adds no domain term.
 - [ ] **Step 2: Run the full suite.** Run `npm test` and check its exit status.
@@ -1815,3 +1819,347 @@ test("B23 the installed runbook describes the modes, the record line and the cav
   - links to ADRs 0026–0028;
   - the per-consumer follow-up: re-run the installer with `--force --with-semantic-review`, and set `"full"` only after updating;
   - what was not verified: a live model run on a real pull request, and the JEPA-Speech replay, which U12 assigns to acceptance.
+
+# Part 3 — the build-review amendment
+
+Execute Tasks 18–21 in order after this plan merges and the build gate opens. The worktree must be on the existing `feature/matched-ontology-projection/build` branch with the seven Task 10–16 commits ending at `148d96f` (or that commit as an ancestor). Fetch main and read these approved plans from main if the build branch predates them. Preserve the published commits. Task 17 is replaced by Task 21. Part 2 shipped in #141.
+
+The two ADRs are [0034](../../adr/0034-semantic-review-reads-raw-ontology-contents.md) and [0035](../../adr/0035-matched-planner-budgets-whole-code-points.md). Keep the existing test names and assertions. The fixture changes below switch existing collector doubles to the new transport. Run the new assertions against the build baseline first. Stage only the task's files, review the cached diff, run the ontology term check and run unfiltered `npm test` before each commit. Check the actual exit status and push each commit. Stop and report unexpected results.
+
+## Task 18 — read raw ontology contents at the reviewed revision
+
+**Files:** `templates/scripts/semantic-review-github.mjs`, `templates/scripts/semantic-review-github.test.mjs`, `tests/semantic-ontology-source.test.mjs`, `tests/semantic-feature-acceptance.test.mjs`.
+
+**Consumes:** `ttlPathFor(ontologyPath)`, the shared Turtle renderer, and the existing GitHub client request boundary. **Produces:** `client.getContentText(path, ref) → Promise<string>`, a pinned GitHub Contents GET with `Accept: application/vnd.github.raw+json` and strict UTF-8 decoding. HTTP errors carry numeric `status`. JSON operations and changed Markdown blob decoding use their existing paths. Only the Turtle request's numeric 404 permits the Markdown fallback (B25).
+
+- [ ] **Step 1: Add the raw transport tests.** Append to `templates/scripts/semantic-review-github.test.mjs`. The HTTP stand-in keeps the real client and collector under test.
+
+```js
+function rawCollectorClient(responses) {
+  const calls = [];
+  const client = createGitHubClient({ token: "token", repository: "org/repo", fetchImpl: async (url, request) => {
+    const { pathname, search } = new URL(url);
+    if (pathname.endsWith("/pulls/7/files")) return new Response("[]");
+    const path = pathname.slice("/repos/org/repo/contents/".length);
+    calls.push({ path, search, method: request.method, accept: request.headers.Accept });
+    assert.ok(Object.hasOwn(responses, path), path);
+    return responses[path];
+  } });
+  return { calls, client };
+}
+
+const rawCall = (path) => ({ path, search: `?ref=${headSha}`, method: "GET", accept: "application/vnd.github.raw+json" });
+
+test("B25 a numeric source 404 tries raw Markdown once at the same reviewed revision", async () => {
+  const { client, calls } = rawCollectorClient({
+    "docs/my%20ontology.ttl": new Response('{"message":"Not found"}', { status: 404 }),
+    "docs/my%20ontology.md": new Response("\uFEFF# proposed ontology — café\n"),
+  });
+  const result = await collectReviewInput(client, listed, { ontologyPath: "docs/my ontology.md", ignorePaths: [] });
+  assert.equal(result.ontologyText, "# proposed ontology — café\n");
+  assert.deepEqual(calls, [rawCall("docs/my%20ontology.ttl"), rawCall("docs/my%20ontology.md")]);
+});
+
+test("B25 a raw path without a Markdown extension is read once as Markdown", async () => {
+  const { client, calls } = rawCollectorClient({
+    "docs/ontology.markdown": new Response("# proposed ontology\n"),
+  });
+  const result = await collectReviewInput(client, listed, { ontologyPath: "docs/ontology.markdown", ignorePaths: [] });
+  assert.equal(result.ontologyText, "# proposed ontology\n");
+  assert.deepEqual(calls, [rawCall("docs/ontology.markdown")]);
+});
+
+test("B25 a non-404 response mentioning 404 cannot trigger the raw Markdown fallback", async () => {
+  const { client, calls } = rawCollectorClient({
+    "docs/ontology.ttl": new Response('{"message":"upstream returned 404 while handling this request"}', { status: 500 }),
+  });
+  await assert.rejects(collectReviewInput(client, listed, { ontologyPath: "docs/ontology.md", ignorePaths: [] }),
+    { status: 500, message: /returned 500/ });
+  assert.deepEqual(calls, [rawCall("docs/ontology.ttl")]);
+});
+
+test("B25 invalid UTF-8 in a raw source fails without trying Markdown", async () => {
+  const { client, calls } = rawCollectorClient({
+    "docs/ontology.ttl": new Response(Uint8Array.of(0xc3, 0x28)),
+  });
+  await assert.rejects(collectReviewInput(client, listed, { ontologyPath: "docs/ontology.md", ignorePaths: [] }),
+    { code: "ERR_ENCODING_INVALID_ENCODED_DATA" });
+  assert.deepEqual(calls, [rawCall("docs/ontology.ttl")]);
+});
+```
+
+- [ ] **Step 2: Add the collector-to-planner test.** In `tests/semantic-ontology-source.test.mjs`, extend the owl import containing `ttlPathFor` with `modelToTriples, renderOntologyMarkdown, serializeTurtle`, and the GitHub import with `createGitHubClient`. Import `createProjector` from `../templates/scripts/ontology-projection.mjs` and extend the model import with `REQUEST_OVERHEAD`. Append:
+
+```js
+test("B17 B25 a raw Turtle source above 1 MiB reaches matched planning", async () => {
+  const contexts = ["Cedar", "Quartz", "Aspen", "Hazel", "Birch", "Maple",
+    "Willow", "Pine", "Juniper", "Spruce", "Cypress", "Alder"];
+  const model = { projectName: "Widgets", invariants: [], sections: { Entities: contexts.flatMap((context) =>
+    Array.from({ length: 90 }, (_, index) => ({ name: `${context}Element${index}`,
+      cells: { Properties: "", Description: "One entry in the example ontology. ".repeat(32).trimEnd() } }))) } };
+  const source = serializeTurtle(modelToTriples(model), { namespaceUri: "https://ontology.example/w#" });
+  assert.ok(Buffer.byteLength(source) > 2 ** 20);
+  const sha = "a".repeat(40);
+  const path = "docs/broad.md";
+  const text = contexts.map((context) => `The ${context} records are reconciled.`).join("\n\n");
+  const calls = [];
+  const client = createGitHubClient({ token: "token", repository: "org/repo", fetchImpl: async (url, request) => {
+    const { pathname, search } = new URL(url);
+    if (pathname.endsWith("/contents/docs/ontology.ttl")) {
+      calls.push({ pathname, search, accept: request.headers.Accept });
+      if (request.headers.Accept !== "application/vnd.github.raw+json") {
+        return new Response('{"message":"file exceeds the inline Contents limit"}', { status: 403 });
+      }
+      return new Response(source);
+    }
+    assert.equal(request.headers.Accept, "application/vnd.github+json");
+    if (pathname.endsWith("/pulls/7/files")) return new Response(JSON.stringify([
+      { filename: path, status: "modified", sha: "broad" },
+    ]));
+    assert.ok(pathname.endsWith("/git/blobs/broad"), pathname);
+    return new Response(JSON.stringify({ encoding: "base64", content: Buffer.from(text).toString("base64") }));
+  } });
+  const input = await collectReviewInput(client, { number: 7, head: { sha }, changed_files: 1 },
+    { ontologyPath: "docs/ontology.md", ignorePaths: [] });
+  assert.deepEqual(calls, [{ pathname: "/repos/org/repo/contents/docs/ontology.ttl",
+    search: `?ref=${sha}`, accept: "application/vnd.github.raw+json" }]);
+  assert.deepEqual(input.files, [{ path, text }]);
+  assert.deepEqual(input.unreviewed, []);
+
+  const sections = { required: ["Entities"], optional: [] };
+  const catalog = catalogOntology(input.ontologyText, sections);
+  assert.equal(catalog.evidenceKeys.size, 1080);
+  assert.equal(catalog.projection, catalogOntology(renderOntologyMarkdown(model), sections).projection);
+  const project = createProjector();
+  const { chunks, unreviewed } = project.plan(catalog, input.files, 200_000);
+  assert.deepEqual(unreviewed, []);
+  assert.ok(chunks.length > 1);
+  assert.equal(chunks.map((chunk) => chunk.text).join(""), text);
+  for (const chunk of chunks) {
+    const own = project(catalog, chunk.text);
+    assert.deepEqual(chunk.keys, own.keys);
+    assert.equal(chunk.chars, own.text.length);
+    assert.ok(REQUEST_OVERHEAD + path.length + chunk.chars + chunk.text.length <= 200_000);
+  }
+});
+```
+
+- [ ] **Step 3: Run the focused tests on the build baseline.** Run `node --test templates/scripts/semantic-review-github.test.mjs tests/semantic-ontology-source.test.mjs tests/semantic-feature-acceptance.test.mjs`. The four new shipped tests and the large-source test fail. The previously shipped Task 12 tests and catalog-equivalence assertion pass.
+
+- [ ] **Step 4: Migrate the existing test doubles.** In the shipped GitHub test, attach numeric `status: 404` to the error thrown by `absent` using `Object.assign`. The existing three collector mocks gain a `getContentText` property. The changed-blob test returns `"# proposed ontology"` for `docs/ontology.md` and calls `absent(path)` otherwise, and its `get` now serves only Git blobs. Both listing tests use `getContentText: async (path) => path === "docs/ontology.ttl" ? absent(path) : "# ontology"`. Keep the invalid blob's `get` returning `{ encoding: "base64", content: "%%%" }`. Remove the unused `get` from the pagination mock. In `sourceClient`, replace `get` with `getContentText: async (file) => { ... }`, push `"/contents/" + file` into `calls`, use `Object.hasOwn(contents, file)` to detect a missing fixture, propagate a stored exception, and return the stored string directly. Give its 500 error a numeric `status: 500` without changing the assertion.
+
+  In `tests/semantic-ontology-source.test.mjs`, replace only the `get` operation of `diskClient` with `getContentText: async (path) => readFileSync(join(dir, path), "utf8")`. This fixture supplies the source that the equality test needs. In `tests/semantic-feature-acceptance.test.mjs`, remove both ontology Contents branches from `get` and add this operation to `makeClient`:
+
+```js
+    getContentText: async (path, ref) => {
+      calls.push(`/contents/${path}?ref=${ref}`);
+      if (path === "docs/ontology.md") return sourceOntology;
+      throw Object.assign(new Error(`GitHub API GET returned 404 for ${path}`), { status: 404 });
+    },
+```
+
+- [ ] **Step 5: Add raw Contents to the real client.** Add a private option `{ raw = false } = {}` after `body` in `request`. Select `application/vnd.github.raw+json` for a raw request and keep the current JSON accept header otherwise. Keep the current error message and attach `status: response.status` to the error with `Object.assign`. Keep Link parsing and use these branches for the response data:
+
+```js
+    const data = raw
+      ? new TextDecoder("utf-8", { fatal: true }).decode(await response.arrayBuffer())
+      : await response.json();
+```
+
+  Add this method beside `get`. Reuse the existing request validation, authentication and GitHub origin.
+
+```js
+    async getContentText(path, ref) {
+      const encoded = path.split("/").map(encodeURIComponent).join("/");
+      return (await request(`/contents/${encoded}?ref=${encodeURIComponent(ref)}`, "GET", undefined, { raw: true })).data;
+    },
+```
+
+  Replace `readOntologyText` with:
+
+```js
+async function readOntologyText(client, ontologyPath, headSha) {
+  const sourcePath = ttlPathFor(ontologyPath);
+  if (sourcePath === ontologyPath) return client.getContentText(ontologyPath, headSha);
+  let source;
+  try {
+    source = await client.getContentText(sourcePath, headSha);
+  } catch (error) {
+    if (error?.status !== 404) throw error;
+    return client.getContentText(ontologyPath, headSha);
+  }
+  return renderOntologyMarkdown(triplesToModel(parseTurtle(source)));
+}
+```
+
+- [ ] **Step 6: Verify and commit.** Rerun the focused tests from Step 3 and the matched-projection acceptance test, which pins full-mode request bytes. Run the shipped GitHub test alone from `templates/scripts`. Stage the four files, review the cached diff, run the ontology term check and run `npm test`. All must pass. Commit `fix: read pinned ontology files through raw GitHub Contents (#135)` and push.
+
+## Task 19 — enforce the matched piece budget in the planner
+
+**Files:** `templates/scripts/ontology-projection.mjs`, `templates/scripts/ontology-projection.test.mjs`.
+
+**Consumes:** the current matched planner, its cached index, and `reviewFiles`. **Produces:** `plan` returns only chunks whose own `chars + text.length` fit the room after the request overhead and path. When a whole code point cannot fit, the file has no planned chunks and receives B18's line reason with the original line offset and the indivisible piece's projection size. The pre-send guard and HTTP 413 path keep their existing behaviour.
+
+- [ ] **Step 1: Add these tests to the shipped projector test.** The new helper checks coverage, exact offsets, projection size and keys, and the complete character budget.
+
+```js
+const PIECE_SOURCE = [
+  "## Entities", "",
+  "| Name | Description |", "| --- | --- |",
+  "| `Cat` | A small animal. |",
+  `| \`Microphone\` | ${"A device that captures sound. ".repeat(12).trimEnd()} |`,
+].join("\n");
+const PIECE_SECTIONS = { required: ["Entities"], optional: [] };
+const PIECE_CATALOG = catalogOntology(PIECE_SOURCE, PIECE_SECTIONS);
+
+function checkPieces(text, budget) {
+  const { chunks, unreviewed } = matched.plan(PIECE_CATALOG, [{ path: PATH, text }], budget);
+  assert.deepEqual(unreviewed, []);
+  assert.equal(chunks.map((chunk) => chunk.text).join(""), text);
+  let offset = 0;
+  for (const chunk of chunks) {
+    assert.equal(chunk.path, PATH);
+    assert.equal(chunk.offset, offset);
+    const own = matched(PIECE_CATALOG, chunk.text);
+    assert.deepEqual(chunk.keys, own.keys);
+    assert.equal(chunk.chars, own.text.length);
+    assert.ok(fixed + chunk.chars + chunk.text.length <= budget, JSON.stringify(chunk.text));
+    assert.doesNotMatch(chunk.text, /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/u);
+    offset += chunk.text.length;
+  }
+  return chunks;
+}
+
+test("B17 a cut inside a word records the new match when it fits", () => {
+  const text = "Catapult Microphone";
+  const whole = matched(PIECE_CATALOG, text);
+  assert.deepEqual(whole.keys, ["Entities:Microphone"]);
+  const budget = fixed + whole.text.length + 3;
+  const first = checkPieces(text, budget)[0];
+  assert.equal(first.text, "Cat");
+  assert.deepEqual(first.keys, ["Entities:Cat"]);
+  assert.equal(first.chars, matched(PIECE_CATALOG, "Cat").text.length);
+});
+
+test("B17 a cut that adds an over-budget match is divided again during planning", () => {
+  const text = "Catapult";
+  const whole = matched(PIECE_CATALOG, text);
+  assert.deepEqual(whole.keys, []);
+  const budget = fixed + whole.text.length + 3;
+  const exposed = matched(PIECE_CATALOG, "Cat");
+  assert.deepEqual(exposed.keys, ["Entities:Cat"]);
+  assert.ok(fixed + exposed.text.length + 3 > budget);
+  assert.deepEqual(checkPieces(text, budget).map((chunk) => chunk.text), ["Ca", "t", "apu", "lt"]);
+});
+
+test("B17 a surrogate pair may fit using its own projection when its line has one unit of room", () => {
+  const text = "😀Microphone";
+  const whole = matched(PIECE_CATALOG, text);
+  assert.deepEqual(whole.keys, ["Entities:Microphone"]);
+  const budget = fixed + whole.text.length + 1;
+  const first = checkPieces(text, budget)[0];
+  assert.equal(first.text, "😀");
+  assert.deepEqual(first.keys, []);
+  assert.equal(first.chars, matched(PIECE_CATALOG, "😀").text.length);
+});
+
+test("B18 an indivisible over-budget piece reports its original line and sends none of that file", async () => {
+  const text = "x\n\n😀";
+  const files = [{ path: PATH, text }, { path: "docs/b.md", text: "z" }];
+  const chars = matched(PIECE_CATALOG, "😀").text.length;
+  const budget = fixed + chars + 1;
+  const entry = { path: PATH, code: "too-large",
+    reason: `line at offset 3 selects too much of the ontology for the configured budget (projection ${chars} characters, budget ${budget}; raise ONTOLOGY_MAX_REQUEST_CHARS)` };
+
+  const planned = matched.plan(PIECE_CATALOG, files, budget);
+  assert.deepEqual(planned.unreviewed, [entry]);
+  assert.deepEqual(planned.chunks, [{ path: "docs/b.md", offset: 0, text: "z", keys: [], chars }]);
+
+  const sent = [];
+  const result = await reviewFiles({ files, ontologyText: PIECE_SOURCE, sections: PIECE_SECTIONS,
+    model: "m", baseUrl: "https://model.example/v1", headSha: "a".repeat(40), project: matched,
+    auth: createModelAuth({ env: { K: "k" }, staticKeyVar: "K" }), maxRequestChars: budget,
+    fetchImpl: async (_url, request) => {
+      sent.push(JSON.parse(request.body).messages[1].content);
+      return { ok: true, json: async () => ({ choices: [{ message: { content: '{"findings":[]}' } }] }) };
+    } });
+  assert.deepEqual(result.unreviewed, [entry]);
+  assert.deepEqual(result.reviewed, ["docs/b.md"]);
+  assert.deepEqual(sent, ["File: docs/b.md\nOffset: 0\nText:\nz"]);
+});
+```
+
+- [ ] **Step 2: Run the test file.** Run `node --test templates/scripts/ontology-projection.test.mjs`. The two positive checks for a new match that fits and a pair that fits each pass on the baseline. The over-budget in-word test fails because the planner returns the oversized piece. The indivisible-piece test fails because the planner returns chunks for the rejected file and no B18 entry.
+
+- [ ] **Step 3: Give each piece its own budget gate.** In `planFile`, insert this function after `tryAdd` and before `place`. Use the existing `cutLine`, which keeps line endings, whitespace preference and code point boundaries. When subdividing, the first-code-point-width check prevents the fallback from returning the same indivisible piece. The positive-width smaller pieces terminate.
+
+```js
+  const placePiece = (piece, lineOffset) => {
+    const selected = select(index, piece.text);
+    const chars = charsOf(index, selected);
+    if (chars + piece.text.length <= room) {
+      finish(piece, selected);
+      return;
+    }
+    const firstWidth = piece.text.codePointAt(0) > 0xffff ? 2 : 1;
+    if (piece.text.length === firstWidth) {
+      throw new LineTooLarge(lineReason(lineOffset, chars, maxRequestChars));
+    }
+    for (const part of cutLine(piece, Math.ceil(piece.text.length / 2))) placePiece(part, lineOffset);
+  };
+```
+
+  Keep the original line-projection room check in `place`. Replace its final one-line loop with:
+
+```js
+    for (const piece of cutLine(unit, room - chars)) placePiece(piece, unit.offset);
+```
+
+  The existing `plan` catches the typed failure outside `planFile`, which has its own local chunk array. This discards the file's previously collected chunks without blocking later files.
+
+- [ ] **Step 4: Verify and commit.** Run `node --test templates/scripts/ontology-projection.test.mjs templates/scripts/semantic-review-model.test.mjs`, then run the shipped projector test alone from `templates/scripts`. Stage only the two files, review the cached diff, lint ontology terms and run `npm test`. All pass, including the existing pre-send and 413 tests. Commit `fix: enforce matched piece budgets before review (#135)` and push.
+
+## Task 20 — omit the example key when the matched catalog is empty
+
+**Files:** `templates/scripts/ontology-projection.mjs`, `templates/scripts/ontology-projection.test.mjs`.
+
+- [ ] **Step 1: Add the test and run it.** Append to the shipped projector test:
+
+```js
+test("B13 B24 an empty optional-only catalog has no example key and can still be planned", () => {
+  const empty = catalogOntology("# Ontology\n", { required: [], optional: ["Entities"] });
+  assert.equal(empty.evidenceKeys.size, 0);
+  const projection = "# Canonical ontology evidence\n\n## Evidence keys\n\n" +
+    "Each key is a section name, a colon, and one name listed under it.\n";
+  assert.deepEqual(matched(empty, ""), { text: projection, keys: [] });
+  const budget = fixed + projection.length + 1;
+  assert.deepEqual(matched.plan(empty, [{ path: PATH, text: "x" }], budget), {
+    chunks: [{ path: PATH, offset: 0, text: "x", keys: [], chars: projection.length }], unreviewed: [],
+  });
+});
+```
+
+  Run `node --test templates/scripts/ontology-projection.test.mjs`. The new test fails because the index prints an undefined example.
+
+- [ ] **Step 2: Implement.** In `groupedNameIndex`, after obtaining the first key, build the explanation and use it in the return value:
+
+```js
+  const explanation = "Each key is a section name, a colon, and one name listed under it";
+  const help = example === undefined ? `${explanation}.` : `${explanation}, for example ${example}.`;
+  return ["", "", "## Evidence keys", "", help, "", ...lines].join("\n");
+```
+
+- [ ] **Step 3: Verify and commit.** Run the focused projector test, stage the two files, review the cached diff, lint ontology terms and run `npm test`. All pass. Commit `fix: omit an example key from an empty matched index (#135)` and push.
+
+## Task 21 — verify, measure and hand off the completed build
+
+**Files:** none. This replaces Task 17 as the completion checkpoint. Reuse its measurement script and follow its required handoff contents.
+
+- [ ] **Step 1: Verify the final tree.** Review the ontology against the B24 and B25 concepts and check the working and staged trees. Run the ontology term check and the unfiltered full suite. Run `ontology-projection.test.mjs`, `semantic-review-model.test.mjs`, `semantic-review-github.test.mjs` and `semantic-review-worker.test.mjs` individually from `templates/scripts` on Docker Node 20, 22 and 24. Read each exit status. The prototype passed 754 tests in the full suite and 117 shipped tests per Node version. Check the count and exit status of each run.
+- [ ] **Step 2: Re-measure and replay.** Use Task 17's script with the built projector and the current checkouts of InternalOntology and JEPA-Speech. Compare against **Measurements** in the task plan. For a like-for-like check, measure the old InternalOntology input revision `63c1e5b` separately if its current input differs. Use a scratch checkout or Git object reads. Repeat the ten recorded findings from the hidden run markers on JEPA-Speech PRs #210 and #217. Plan each Markdown file and render `docs/ontology.ttl` at that record's revision, require the quote-containing chunk to have its cited key, and verify each chunk's size and keys against `project`. JEPA-Speech is read-only.
+
+  Retrieve the comment pages with `gh api --paginate --slurp "repos/jamiemitchellconsultants/JEPA-Speech/issues/<number>/comments?per_page=100"` for 210 and 217. In comments from GitHub Actions, group the `ontology-semantic-run v1` markers by run id, concatenate the `data` values in part order, decode Base64 and parse the JSON. Require a complete part set and schema 1. The replay keys are the recorded `headSha`, path, quote and evidence key. Read the file, ontology and section config with `git show <revision>:<path>` in the consumer checkout.
+
+- [ ] **Step 3: Verify the new boundaries.** Record that the Task 18 fixture goes through the pinned raw client, Turtle renderer and actual planner at greater than 1 MiB, and that the Task 19 file with an indivisible over-budget piece reports B18's original-line reason before any model request for that file. Run the focused tests again if the earlier logs are unavailable. The synthetic name-index ceiling is a projection limit, while GitHub's raw Contents endpoint has a separate size limit.
+- [ ] **Step 4: Commit the verification checkpoint.** With an empty index and a green final suite, make the Task 21 verification-only commit with `git commit --allow-empty -m "test: verify the matched projection build amendment (#135)"` and push. Retain the push status. The user phase opens the build PR from this branch.
+- [ ] **Step 5: Complete the issue and handoff.** Tick the two exact [Dev] Build criteria as they are met. Lint the handoff draft with `node scripts/check-ontology-terms.mjs --also <file>` and post it with `node scripts/feature.mjs handoff --feature 135 --body-file <file>`. Use the feature handoff template. Include links to ADRs 0029–0031 and 0034–0035, measured figures, tests and replay results, and the consumer reinstall command `--force --with-semantic-review`. Include the missing-Turtle fallback, the local-only acceptance commit `b1a2a41` on `feature/matched-ontology-projection/user` that the user phase regenerates, and the required live model run in JEPA-Speech with permission before committing or pushing there. Stop at the checkpoint.
