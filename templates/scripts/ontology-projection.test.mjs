@@ -283,3 +283,88 @@ test("each request is projected once: a file that fits one chunk is not projecte
   assert.equal(assertPlanned(files[0], planned, budget).length, 1);
   assertPlanned(files[1], planned);
 });
+
+const PIECE_SOURCE = [
+  "## Entities", "",
+  "| Name | Description |", "| --- | --- |",
+  "| `Cat` | A small animal. |",
+  `| \`Microphone\` | ${"A device that captures sound. ".repeat(12).trimEnd()} |`,
+].join("\n");
+const PIECE_SECTIONS = { required: ["Entities"], optional: [] };
+const PIECE_CATALOG = catalogOntology(PIECE_SOURCE, PIECE_SECTIONS);
+
+function checkPieces(text, budget) {
+  const { chunks, unreviewed } = matched.plan(PIECE_CATALOG, [{ path: PATH, text }], budget);
+  assert.deepEqual(unreviewed, []);
+  assert.equal(chunks.map((chunk) => chunk.text).join(""), text);
+  let offset = 0;
+  for (const chunk of chunks) {
+    assert.equal(chunk.path, PATH);
+    assert.equal(chunk.offset, offset);
+    const own = matched(PIECE_CATALOG, chunk.text);
+    assert.deepEqual(chunk.keys, own.keys);
+    assert.equal(chunk.chars, own.text.length);
+    assert.ok(fixed + chunk.chars + chunk.text.length <= budget, JSON.stringify(chunk.text));
+    assert.doesNotMatch(chunk.text, /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/u);
+    offset += chunk.text.length;
+  }
+  return chunks;
+}
+
+test("B17 a cut inside a word records the new match when it fits", () => {
+  const text = "Catapult Microphone";
+  const whole = matched(PIECE_CATALOG, text);
+  assert.deepEqual(whole.keys, ["Entities:Microphone"]);
+  const budget = fixed + whole.text.length + 3;
+  const first = checkPieces(text, budget)[0];
+  assert.equal(first.text, "Cat");
+  assert.deepEqual(first.keys, ["Entities:Cat"]);
+  assert.equal(first.chars, matched(PIECE_CATALOG, "Cat").text.length);
+});
+
+test("B17 a cut that adds an over-budget match is divided again during planning", () => {
+  const text = "Catapult";
+  const whole = matched(PIECE_CATALOG, text);
+  assert.deepEqual(whole.keys, []);
+  const budget = fixed + whole.text.length + 3;
+  const exposed = matched(PIECE_CATALOG, "Cat");
+  assert.deepEqual(exposed.keys, ["Entities:Cat"]);
+  assert.ok(fixed + exposed.text.length + 3 > budget);
+  assert.deepEqual(checkPieces(text, budget).map((chunk) => chunk.text), ["Ca", "t", "apu", "lt"]);
+});
+
+test("B17 a surrogate pair may fit using its own projection when its line has one unit of room", () => {
+  const text = "😀Microphone";
+  const whole = matched(PIECE_CATALOG, text);
+  assert.deepEqual(whole.keys, ["Entities:Microphone"]);
+  const budget = fixed + whole.text.length + 1;
+  const first = checkPieces(text, budget)[0];
+  assert.equal(first.text, "😀");
+  assert.deepEqual(first.keys, []);
+  assert.equal(first.chars, matched(PIECE_CATALOG, "😀").text.length);
+});
+
+test("B18 an indivisible over-budget piece reports its original line and sends none of that file", async () => {
+  const text = "x\n\n😀";
+  const files = [{ path: PATH, text }, { path: "docs/b.md", text: "z" }];
+  const chars = matched(PIECE_CATALOG, "😀").text.length;
+  const budget = fixed + chars + 1;
+  const entry = { path: PATH, code: "too-large",
+    reason: `line at offset 3 selects too much of the ontology for the configured budget (projection ${chars} characters, budget ${budget}; raise ONTOLOGY_MAX_REQUEST_CHARS)` };
+
+  const planned = matched.plan(PIECE_CATALOG, files, budget);
+  assert.deepEqual(planned.unreviewed, [entry]);
+  assert.deepEqual(planned.chunks, [{ path: "docs/b.md", offset: 0, text: "z", keys: [], chars }]);
+
+  const sent = [];
+  const result = await reviewFiles({ files, ontologyText: PIECE_SOURCE, sections: PIECE_SECTIONS,
+    model: "m", baseUrl: "https://model.example/v1", headSha: "a".repeat(40), project: matched,
+    auth: createModelAuth({ env: { K: "k" }, staticKeyVar: "K" }), maxRequestChars: budget,
+    fetchImpl: async (_url, request) => {
+      sent.push(JSON.parse(request.body).messages[1].content);
+      return { ok: true, json: async () => ({ choices: [{ message: { content: '{"findings":[]}' } }] }) };
+    } });
+  assert.deepEqual(result.unreviewed, [entry]);
+  assert.deepEqual(result.reviewed, ["docs/b.md"]);
+  assert.deepEqual(sent, ["File: docs/b.md\nOffset: 0\nText:\nz"]);
+});

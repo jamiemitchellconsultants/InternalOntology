@@ -221,6 +221,19 @@ function planFile(index, file, maxRequestChars) {
     current = { offset: current ? current.offset : unit.offset, text, found, selected };
     return true;
   };
+  const placePiece = (piece, lineOffset) => {
+    const selected = select(index, piece.text);
+    const chars = charsOf(index, selected);
+    if (chars + piece.text.length <= room) {
+      finish(piece, selected);
+      return;
+    }
+    const firstWidth = piece.text.codePointAt(0) > 0xffff ? 2 : 1;
+    if (piece.text.length === firstWidth) {
+      throw new LineTooLarge(lineReason(lineOffset, chars, maxRequestChars));
+    }
+    for (const part of cutLine(piece, Math.ceil(piece.text.length / 2))) placePiece(part, lineOffset);
+  };
   const place = (unit, isLine) => {
     unit.found = unitMatches(index, unit.text);
     if (tryAdd(unit)) return;
@@ -232,7 +245,7 @@ function planFile(index, file, maxRequestChars) {
     }
     const chars = charsOf(index, select(index, unit.text));
     if (room - chars < 1) throw new LineTooLarge(lineReason(unit.offset, chars, maxRequestChars));
-    for (const piece of cutLine(unit, room - chars)) finish(piece, select(index, piece.text));
+    for (const piece of cutLine(unit, room - chars)) placePiece(piece, unit.offset);
   };
   for (const paragraph of splitParagraphs(file.text)) place(paragraph, false);
   flush();
