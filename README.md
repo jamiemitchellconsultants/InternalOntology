@@ -30,7 +30,7 @@ node bin/install-ontology.mjs --target /path/to/repo
 | `--default-branch <name>` | Branch the workflows' `push` triggers fire on. Defaults to the remote's default branch (`origin/HEAD`), else the target's current branch, else `main`. The installer prints the branch it chose and where it came from. |
 | `--with-drift-review` | Also install the advisory semantic reviewer, its tests, workflow and runbook. It authenticates with a short-lived Keycloak token (OIDC client credentials) or a legacy static key; see the installed runbook. Requests are budgeted at 200,000 characters by default; set the repository variable ONTOLOGY_MAX_REQUEST_CHARS to change it. |
 | `--with-semantic-review` | Install the opt-in blocking semantic reviewer, its trusted workflows, tests and [setup runbook](templates/docs/ontology-semantic-review.md). The shipped config stays disabled until maintainers activate it. |
-| `--with-semantic-index` | Install checkout-local semantic search, GitHub Release snapshot commands, and the [setup reference](templates/docs/semantic-index.md). |
+| `--with-semantic-index` | Install checkout-local semantic search, GitHub Release snapshot commands, the [setup reference](templates/docs/semantic-index.md), and a semantic index protocol block in the agent instruction file. |
 | `--with-source-graph` | Install the opt-in source graph checker, reader, workflow and [runbook](templates/docs/source-knowledge-graph.md). |
 | `--source-graph-root <path>` | Select the graph root and enable source graph installation. |
 | `--with-enum-tests <lang>` | Also install a worked-example enum lock test: `csharp`, `typescript`, or `python`. Installed with a `.example` suffix — see [Then seed it](#then-seed-it). |
