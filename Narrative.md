@@ -62,7 +62,10 @@ by rewriting the original.
 | [46](#entry-docs-design-for-matched-ontology-projection-135) | 2026-11-19 | docs: design for matched ontology projection (#135) | product | The semantic reviewer now sends, by default, only the entries deterministically matched to the Markdown. |
 | [47](#entry-docs-implementation-plans-for-matched-ontology-projection-135) | 2026-11-19 | docs: implementation plans for matched ontology projection (#135) | product | - **Guard against over-budget chunks.** `reviewFiles` checks each request's size after projecting its chunk. A chunk that would exceed the `RequestBudget` is split before it is sent, exactly as on a 413. |
 | [48](#entry-feat-matched-ontology-projection-for-the-semantic-reviewer-135) | 2026-11-19 | feat: matched ontology projection for the semantic reviewer (#135) | product | Each request carries a deterministic matched projection by default: the full rows of the entries its chunk selects, plus the name index, so the model can still cite any entry and every citation is checked against the whole catalog ([ADR… |
-| [49](#entry-docs-design-semantic-repository-index-architecture) | 2026-11-20 | docs: design semantic repository index architecture | product | Use a checkout-local CLI and separately approved committed configuration. Read the selected Git tree, use exact cosine search, and store a portable vector file with atomic promotion. |
+| [49](#entry-matched-ontology-projection-design-amendment-after-acceptance-pushback-1) | 2026-11-20 | Matched ontology projection: design amendment after acceptance pushback (#135) | product | - **Plan by paragraph ([ADR 0030](docs/adr/0030-matched-planning-by-paragraph-in-the-projector.md)).** - The matched projector gains a `plan` step. |
+| [50](#entry-docs-define-semantic-repository-index-behaviours) | 2026-11-20 | docs: define semantic repository index behaviours | product | Search uses approved content from the current Git commit, including local commits, with an explicit refresh after a change to the commit or source scope. An exact compatible release asset can be searched with zero source re-embedding. |
+| [51](#entry-docs-amend-matched-ontology-projection-plans-after-acceptance-pushback-1) | 2026-11-20 | docs: amend matched ontology projection plans after acceptance pushback (#135) | product | - **A projector stays a callable function**, carrying `mode` and, when matched, `plan`. ADR 0030 describes an object with `mode`, `project` and `plan`. |
+| [52](#entry-docs-design-semantic-repository-index-architecture) | 2026-11-20 | docs: design semantic repository index architecture | product | Use a checkout-local CLI and separately approved committed configuration. Read the selected Git tree, use exact cosine search, and store a portable vector file with atomic promotion. |
 
 ---
 
@@ -1148,9 +1151,116 @@ Request size now grows with the entries a chunk selects rather than with the who
 
 ---
 
+<a id="entry-matched-ontology-projection-design-amendment-after-acceptance-pushback-1"></a>
+
+## Entry 49 — 2026-11-20 — Matched ontology projection: design amendment after acceptance pushback (#135)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+User acceptance of #135 passed every behaviour as written, but showed that the matched `OntologyProjection` would not keep large ontologies inside the `RequestBudget`, which is the reason the feature exists. Measured with the shipped projector:
+- **Broad files.** Planning a file against the projection of its whole text made a broad file too-large in matched mode, exactly as in full. In a 1,920-entry synthetic ontology, a 3.4 KB file naming one entry per context projected 330,898 of 331,071 characters, although each paragraph projected about 74,500. JEPA-Speech's graph README already projects 63% of its full projection, and six of the ten recorded findings came from it.
+- **The one hop.** It accounted for most of each request on real ontologies: the median matched request was 79% of the full projection on JEPA-Speech, and 52% with relationships only.
+- **The name index.** At about 30 characters per entry, it alone filled the 200,000-character default at about 6,700 entries.
+
+Separately, `ontology.ttl` is the source of truth and `ontology.md` is generated from it, but the reviewer read only the generated file.
+
+## Decision
+
+- **Plan by paragraph ([ADR 0030](docs/adr/0030-matched-planning-by-paragraph-in-the-projector.md)).**
+  - The matched projector gains a `plan` step. It indexes the catalog once, selects for each paragraph once, and packs paragraphs, then lines, then pieces of a line, while each request fits with its own projection.
+  - `full` mode keeps today's planner, so it stays byte for byte.
+  - The two too-large causes, the name index or a line that selects too much, get their own reasons.
+  - Rejected: packing in the model module, re-projecting the whole candidate text for every paragraph, planning against the largest paragraph's projection, and a fixed chunk size.
+- **Relationships only, and a grouped name index ([ADR 0031](docs/adr/0031-relationships-only-and-grouped-name-index.md)).**
+  - A matched entry adds the relationships whose domain or range it is, and nothing else.
+  - In matched mode the name index lists the names under each section, introduced by one explanatory sentence. The system prompt is unchanged.
+  - Rejected: keeping the hop, adding far-end entries, no hop at all, keeping one key per line, and indexing only nearby entries.
+- **Read the ontology source ([ADR 0029](docs/adr/0029-semantic-review-reads-the-ontology-source.md)).**
+  - The reviewer reads `ontology.ttl` at the reviewed revision and renders it exactly as `build-ontology.mjs` does, so evidence keys, rows and finding identities are unchanged.
+  - It falls back to `ontology.md` when the source is absent, as on a fresh install before its first build.
+  - Rejected: selecting from the triples directly, and making the run unavailable without a `.ttl`.
+- **Deferred with measurements:** limiting name words that many entries share, and matching alternative labels.
+
+## Consequences
+
+- **Broad files.** A file whose paragraphs each fit is always reviewed. Matched requests on JEPA-Speech should shrink from a median of 79% to about 52% of the full projection, and all ten recorded findings are kept.
+- **Ontology ceiling.** The grouped index is 40% to 49% smaller, which lifts the ceiling at the default budget to about 10,000 to 11,500 entries. Above that, raising `ONTOLOGY_MAX_REQUEST_CHARS` remains the remedy.
+- **Live check needed.** The model must now form `Section:Name` from the grouped index. `resolveEvidenceKey` tolerates a bare name, but acceptance must include a live model run.
+- **Paraphrase caveat.** A paraphrase caught only through a neighbouring entry's rows is no longer caught. The runbook caveat must say so.
+- **Fallback.** A repository whose `ontology.md` is stale is reviewed against its `ontology.ttl`. One without a `.ttl` keeps today's behaviour.
+- **Later phases to regenerate:** the plan, the build, the runbook, and the acceptance tests (b1a2a41 on `feature/matched-ontology-projection/user`). Once this merges, run `node scripts/feature.mjs clear-pushback --feature 135 --phase analyst`.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-docs-define-semantic-repository-index-behaviours"></a>
+
+## Entry 50 — 2026-11-20 — docs: define semantic repository index behaviours
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The accepted vision calls for owner-supplied embeddings, a checkout-local index, and GitHub Release assets that teammates can reuse. Developers need source citations they can resolve and clear guidance when an index is unavailable, stale, or incompatible. Publishing must associate the shared vectors with the exact source teammates can check out.
+
+## Decision
+
+Search uses approved content from the current Git commit, including local commits, with an explicit refresh after a change to the commit or source scope. An exact compatible release asset can be searched with zero source re-embedding. A compatible ancestor asset can seed a refresh. Explicit uploads require repository write access and a release that points to the pushed indexed commit.
+
+## Consequences
+
+Source locations resolve at a named revision. Interrupted imports and refreshes preserve the last complete local index, and failed uploads preserve existing release assets. The pilot compares retrieval with keyword search and measures reuse and refresh costs. Architecture will choose the storage, client interfaces, embedding integration, and release tooling.
+
+AI-Fingerprint: sha256:40814a485326
+
+---
+
+<a id="entry-docs-amend-matched-ontology-projection-plans-after-acceptance-pushback-1"></a>
+
+## Entry 51 — 2026-11-20 — docs: amend matched ontology projection plans after acceptance pushback (#135)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+User acceptance of #135 pushed back because the matched `OntologyProjection` did not scale. The analyst amended B7, B17, B18, B24 and B25, and the architect added ADRs 0029 to 0031 (#150). The plan step had to turn them into tasks without re-deciding anything. Several details were left to the developer:
+- the index's shape and how it is cached;
+- how a chunk's projection size is computed without rendering;
+- the reason strings;
+- how a projector carries `plan`.
+
+The design's size figures were estimates made before building, and the tool had no command to reopen a later phase after an amendment in lite mode.
+
+## Decision
+
+- **A projector stays a callable function**, carrying `mode` and, when matched, `plan`. ADR 0030 describes an object with `mode`, `project` and `plan`. A function with those properties keeps the worker and every existing stub projector unchanged.
+- **Planned chunks carry their own `keys` and size.** `plan` computes each chunk's projection size from its selection, using a formula that mirrors the renderer. Every test checks it against `project` of the chunk's text, so the union-of-paragraphs shortcut can never drift from the real projection.
+- **Pieces of a line stand alone.** Paragraphs and lines are packed together, because a line break separates every word and name. A piece cut inside a word is never joined to a neighbour, and its true projection is recorded. The existing pre-send guard halves it if the cut makes it select more than its line.
+- **Phrases are checked on the joined text.** Banned aliases, and names with whitespace, are matched against the chunk's whole text, so a phrase across a paragraph break is still selected. Other names and words are matched once per paragraph or line.
+- **Only a 404 falls back to `ontology.md`.** A source that exists but cannot be read or parsed fails the run, and an `ontologyPath` without `.md` is read once as Markdown.
+- **The name-index reason** gives the size of an empty selection's projection: the header and the grouped name index.
+- **The [Dev] Plan and [Dev] Build boxes on #135 were unticked by hand** with the library's own `untickSection`, at the maintainer's choice. In lite mode, `pushback` unticks only the phase it names, and no command reopens later phases. The plan boxes are re-ticked after this PR merges.
+
+Rejected: dropping the per-file pre-pass for every projector. It would have changed the stub-projector tests and the path an embedding projector without `plan` would take. Keeping it for projectors without `plan` leaves `full` and those tests untouched.
+
+## Consequences
+
+- The build can run task by task from the detailed plan. Every test is written out and has been run.
+- The measured results meet or beat the design's estimates, except InternalOntology's index reduction, 39.3% against a 40% low end, because its section names are short against its entry names.
+- Packing fills each chunk while it fits, so a broad file's requests approach the budget. That is within the design, but it means matched requests at scale are few and large rather than many and small.
+- The grouped name index still needs a live model run. That belongs to the user phase, in JEPA-Speech.
+- Lite mode still has no command to reopen later phases after an amendment. This PR records the manual step; a command for it is a possible follow-up to the feature tool.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
 <a id="entry-docs-design-semantic-repository-index-architecture"></a>
 
-## Entry 49 — 2026-11-20 — docs: design semantic repository index architecture
+## Entry 52 — 2026-11-20 — docs: design semantic repository index architecture
 
 *Kind: product. Status: accepted.*
 
