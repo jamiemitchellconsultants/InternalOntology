@@ -82,6 +82,8 @@ dependencies. The suite must pass before any commit. CI (`.github/workflows/test
 several shipped test files alone from `templates/scripts/`, as an adopting repository does. Keep
 tests independent of the host's git defaults and of timers that do not keep the event loop alive.
 
+When asking a maintainer to review or approve a `.mjs` file, create and share a natural-language Markdown version as the review artefact. For executable tests, describe the setup, what each test does, the expected results, and the limits of what it verifies. Keep the Markdown version aligned with the executable and write each paragraph or list item on one source line.
+
 <!-- ontology-protocol:start -->
 ## Ontology protocol
 
