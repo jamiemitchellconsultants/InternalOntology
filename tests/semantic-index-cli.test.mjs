@@ -273,3 +273,77 @@ test("B2 a failed log write is reported without failing the search", async () =>
     assert.equal(Object.keys(value).at(-1), "tokenLog");
   });
 });
+
+test("B5 show returns only the cited lines from the indexed commit", async () => {
+  await withSearchRepo(async ({ dir, write, commit, options, run }) => {
+    write("src/a.txt", "one\ntwo\nthree\n");
+    const indexed = commit();
+    options.now = () => new Date("2026-11-21T12:00:00.000Z");
+    await run("refresh");
+    write("src/a.txt", "working tree edit\n");
+    const { exitCode, value } = await run("show", "--path", "src/a.txt", "--lines", "2-3", "--commit", indexed);
+    assert.equal(exitCode, 0);
+    assert.deepEqual([value.commit, value.path, value.startLine, value.endLine, value.text], [indexed, "src/a.txt", 2, 3, "two\nthree\n"]);
+    assert.equal(value.dirty, true);
+    const { tokens, ...payload } = value;
+    assert.equal(tokens.estimate, estimateTokens(JSON.stringify(payload)));
+    assert.deepEqual(logLines(dir).at(-1), { time: "2026-11-21T12:00:00.000Z", command: "show", count: 2, tokens: tokens.estimate, truncated: false });
+    const text = formatIndexResponse((await runIndexCommand(["show", "--path", "src/a.txt", "--lines", "2-3"], options)).value);
+    assert.match(text, new RegExp(`"src/a.txt":2-3 at ${indexed}\\ntwo\\nthree\\nEstimated tokens: \\d+$`));
+  });
+});
+
+test("B5 show refuses another commit, an unapproved path and a range outside the file", async () => {
+  await withSearchRepo(async ({ dir, write, commit, run }) => {
+    write("unapproved.txt", "private\n");
+    commit();
+    await run("refresh");
+    for (const args of [
+      ["--path", "src/a.txt", "--lines", "1-1", "--commit", "0".repeat(40)],
+      ["--path", "unapproved.txt", "--lines", "1-1"],
+      ["--path", "src/a.txt", "--lines", "1-9"],
+    ]) {
+      const { exitCode, value } = await run("show", ...args);
+      assert.equal(exitCode, 2, args.join(" "));
+      assert.equal(value.code, "refused");
+      assert.equal(Object.hasOwn(value, "text"), false);
+    }
+    for (const args of [["--lines", "1-1"], ["--path", "src/a.txt", "--lines", "3"], ["--path", "src/a.txt", "--lines", "0-2"],
+      ["--path", "src/a.txt", "--lines", "4-2"], ["--path", "src/a.txt", "--lines", "1-1", "--commit", "abc"]]) {
+      assert.equal((await run("show", ...args)).value.code, "usage", args.join(" "));
+    }
+    assert.throws(() => readFileSync(join(dir, ".ontology-index/token-log.jsonl")), /ENOENT/);
+  });
+});
+
+test("B5 show on a stale index is refused with the recovery message", async () => {
+  await withSearchRepo(async ({ write, commit, run }) => {
+    await run("refresh");
+    write("src/a.txt", "moved on\n");
+    commit();
+    const { exitCode, value } = await run("show", "--path", "src/a.txt", "--lines", "1-1");
+    assert.equal(exitCode, 1);
+    assert.equal(value.code, "stale");
+  });
+});
+
+test("B8 and B10 a capped passage returns whole leading lines and names the next line", async () => {
+  await withSearchRepo(async ({ write, policy, setPolicy, commit, options, run }) => {
+    write("src/long.txt", Array.from({ length: 40 }, (_, i) => `line ${i + 1} with some text\n`).join(""));
+    write("src/wide.txt", "w".repeat(4000) + "\n");
+    setPolicy({ ...policy, responseCap: 150 });
+    options.env.ONTOLOGY_INDEX_CONFIG_REF = commit();
+    await run("refresh");
+    const { exitCode, value } = await run("show", "--path", "src/long.txt", "--lines", "1-40");
+    assert.equal(exitCode, 0);
+    const kept = value.text.split("\n").length - 1;
+    assert.ok(kept >= 1 && kept < 40);
+    assert.ok(value.text.endsWith("\n"));
+    assert.deepEqual(value.truncated, { lastLine: kept, nextLine: kept + 1 });
+    const { tokens, truncated, ...withoutMarker } = value;
+    assert.ok(estimateTokens(JSON.stringify(withoutMarker)) <= 150);
+    const wide = (await run("show", "--path", "src/wide.txt", "--lines", "1-1")).value;
+    assert.equal(wide.text, "");
+    assert.deepEqual(wide.truncated, { lastLine: null, nextLine: 1 });
+  });
+});

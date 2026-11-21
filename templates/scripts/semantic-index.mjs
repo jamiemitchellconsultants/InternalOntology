@@ -3,7 +3,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createEmbeddingAdapter } from "./semantic-index-embed.mjs";
 import { createReleaseTransport, downloadIndex, uploadIndex } from "./semantic-index-release.mjs";
-import { hasIndexEdits, listIndexEntries, readIndexPassages, resolveIndexContext } from "./semantic-index-source.mjs";
+import { hasIndexEdits, listIndexEntries, readIndexedLines, readIndexPassages, resolveIndexContext } from "./semantic-index-source.mjs";
 import { appendTokenRecord } from "./semantic-index-token-log.mjs";
 import { estimateTokens, fitToCap } from "./semantic-index-tokens.mjs";
 import { indexReadiness, openIndex, withIndexWriter } from "./semantic-index-store.mjs";
@@ -21,8 +21,8 @@ function problem(code, message) {
 
 function parseCommand(argv) {
   const [command, ...args] = argv;
-  const optionsFor = { status: [], refresh: [], search: ["query", "limit"], download: ["release", "allow-ancestor"], upload: ["release"] };
-  if (!Object.hasOwn(optionsFor, command)) throw problem("usage", "Use status, refresh, search, download, or upload.");
+  const optionsFor = { status: [], refresh: [], search: ["query", "limit"], show: ["path", "lines", "commit"], download: ["release", "allow-ancestor"], upload: ["release"] };
+  if (!Object.hasOwn(optionsFor, command)) throw problem("usage", "Use status, refresh, search, show, usage, download, or upload.");
   const options = {};
   for (let i = 0; i < args.length; i += 1) {
     const match = /^--([a-z-]+)(?:=(.*))?$/s.exec(args[i]);
@@ -41,6 +41,18 @@ function parseCommand(argv) {
   if (command === "search" && !options.query?.trim()) throw problem("usage", "Provide a non-empty --query.");
   if ((command === "download" || command === "upload") && (!options.release || /[\x00-\x20]/.test(options.release))) {
     throw problem("usage", "Provide an explicit GitHub Release tag with --release.");
+  }
+  if (command === "show") {
+    if (!options.path) throw problem("usage", "Provide --path for show.");
+    const range = /^(\d+)-(\d+)$/.exec(options.lines ?? "");
+    if (!range || Number(range[1]) < 1 || Number(range[1]) > Number(range[2])) {
+      throw problem("usage", "--lines must be <start>-<end> with 1 <= start <= end.");
+    }
+    options.startLine = Number(range[1]);
+    options.endLine = Number(range[2]);
+    if (options.commit !== undefined && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(options.commit)) {
+      throw problem("usage", "--commit must be a full commit ID.");
+    }
   }
   if (options.compact && !options.json) throw problem("usage", "--compact needs --json.");
   const limit = options.limit === undefined ? 5 : Number(options.limit);
@@ -212,13 +224,29 @@ export async function runIndexCommand(argv, { cwd = process.cwd(), env = process
             render, cap: context.policy.responseCap, root: context.root, command: "search", now,
           }) };
         }
+        if (command === "show") {
+          if (state !== "current") throw problem(state, recovery[state]);
+          const commit = reader.header.sourceCommit;
+          if (options.commit !== undefined && options.commit !== commit) {
+            throw problem("refused", "Show reads only the indexed commit " + commit + ".");
+          }
+          const { path, startLine, endLine } = options;
+          const lines = readIndexedLines(context.sourceTree, context.policy.scope, { path, startLine, endLine });
+          return { exitCode: 0, value: await measureAndLog({
+            total: lines.length,
+            build: (n) => ({ ok: true, ...describe(context, "current", commit), commit, path, startLine, endLine, text: lines.slice(0, n).join("") }),
+            mark: (kept) => ({ lastLine: kept ? startLine + kept - 1 : null, nextLine: startLine + kept }),
+            render: options.json ? JSON.stringify : formatIndexResponse,
+            cap: context.policy.responseCap, root: context.root, command: "show", now,
+          }) };
+        }
       } finally {
         await reader?.close();
       }
     }
     return { exitCode: 0, value: { ok: true, ...value } };
   } catch (error) {
-    const argument = ["config", "disabled", "unborn", "usage"].includes(error.code);
+    const argument = ["config", "disabled", "unborn", "usage", "refused"].includes(error.code);
     const code = argument || error.code === "release" || Object.hasOwn(recovery, error.code) ? error.code : "operation";
     return { exitCode: argument ? 2 : 1, value: { ok: false, code, message: error.message } };
   }
@@ -229,12 +257,20 @@ export function formatIndexResponse(value) {
   const lines = [value.state + (value.indexCommit ? " at " + value.indexCommit : "")];
   if (value.message) lines.push(value.message);
   if (value.dirty) lines.push("Search uses committed content. Approved files have uncommitted edits.");
+  if (value.text !== undefined) lines.push(
+    JSON.stringify(value.path) + ":" + value.startLine + "-" + value.endLine + " at " + value.commit,
+    value.text.replace(/\n$/, ""),
+  );
   for (const result of value.results ?? []) lines.push(
     JSON.stringify(result.path) + ":" + result.startLine + "-" + result.endLine + " " + result.score.toFixed(4),
   );
   if (value.metrics) lines.push("Source embeddings: " + value.metrics.sourceEmbeddings);
   if (value.asset) lines.push(value.repository + " " + value.release + " " + value.asset + " (" + value.bytes + " bytes)");
-  if (value.truncated) lines.push(
+  if (value.truncated && value.text !== undefined) lines.push(
+    "Truncated at the response cap: " + (value.truncated.lastLine === null ? "no lines returned" :
+      "lines " + value.startLine + "-" + value.truncated.lastLine + " returned") + "; request again from line " + value.truncated.nextLine + ".",
+  );
+  else if (value.truncated) lines.push(
     "Truncated at the response cap: " + value.truncated.returned + " results returned, " + value.truncated.omitted + " omitted.",
   );
   if (value.tokens) lines.push("Estimated tokens: " + value.tokens.estimate);
