@@ -1,10 +1,11 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createEmbeddingAdapter } from "./semantic-index-embed.mjs";
 import { createReleaseTransport, downloadIndex, uploadIndex } from "./semantic-index-release.mjs";
 import { hasIndexEdits, listIndexEntries, readIndexedLines, readIndexPassages, resolveIndexContext } from "./semantic-index-source.mjs";
-import { appendTokenRecord } from "./semantic-index-token-log.mjs";
+import { appendTokenRecord, readTokenRecords, summariseTokenUse } from "./semantic-index-token-log.mjs";
 import { estimateTokens, fitToCap } from "./semantic-index-tokens.mjs";
 import { indexReadiness, openIndex, withIndexWriter } from "./semantic-index-store.mjs";
 
@@ -21,7 +22,7 @@ function problem(code, message) {
 
 function parseCommand(argv) {
   const [command, ...args] = argv;
-  const optionsFor = { status: [], refresh: [], search: ["query", "limit"], show: ["path", "lines", "commit"], download: ["release", "allow-ancestor"], upload: ["release"] };
+  const optionsFor = { status: [], refresh: [], search: ["query", "limit"], show: ["path", "lines", "commit"], download: ["release", "allow-ancestor"], upload: ["release"], usage: ["since"] };
   if (!Object.hasOwn(optionsFor, command)) throw problem("usage", "Use status, refresh, search, show, usage, download, or upload.");
   const options = {};
   for (let i = 0; i < args.length; i += 1) {
@@ -53,6 +54,9 @@ function parseCommand(argv) {
     if (options.commit !== undefined && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(options.commit)) {
       throw problem("usage", "--commit must be a full commit ID.");
     }
+  }
+  if (command === "usage" && options.since !== undefined && Number.isNaN(Date.parse(options.since))) {
+    throw problem("usage", "--since must be an ISO 8601 time.");
   }
   if (options.compact && !options.json) throw problem("usage", "--compact needs --json.");
   const limit = options.limit === undefined ? 5 : Number(options.limit);
@@ -187,6 +191,14 @@ async function measureAndLog({ total, build, mark, render, cap, root, command, n
 export async function runIndexCommand(argv, { cwd = process.cwd(), env = process.env, fetchImpl = fetch, releaseTransport, now = () => new Date() } = {}) {
   try {
     const { command, options, limit } = parseCommand(argv);
+    if (command === "usage") {
+      const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+      const { records, skipped } = await readTokenRecords(root);
+      const summary = summariseTokenUse(records, { since: options.since ?? null });
+      const value = { ok: true, ...summary, skipped, estimated: true };
+      if (summary.commands === 0) value.message = "No token log records yet, so no baseline exists.";
+      return { exitCode: 0, value };
+    }
     const resolveCurrent = () => resolveIndexContext(cwd, env);
     const context = resolveCurrent();
     const adapter = () => createEmbeddingAdapter(context.policy.embedding, { fetchImpl, token: env.ONTOLOGY_INDEX_EMBEDDING_TOKEN });
@@ -254,6 +266,16 @@ export async function runIndexCommand(argv, { cwd = process.cwd(), env = process
 
 export function formatIndexResponse(value) {
   if (!value.ok) return value.message;
+  if (value.byCommand) {
+    if (value.commands === 0) return value.message;
+    const usage = ["Commands: " + value.commands, "Estimated tokens: " + value.totalTokens + " total, " + value.meanTokens + " mean per command"];
+    if (value.largest) usage.push("Largest: " + value.largest.tokens + " (" + value.largest.command + " at " + value.largest.time + ")");
+    for (const [name, group] of Object.entries(value.byCommand)) {
+      usage.push(name + ": " + group.commands + " commands, " + group.totalTokens + " total, " + group.meanTokens + " mean");
+    }
+    if (value.skipped !== 0) usage.push("Skipped " + value.skipped + " unreadable records.");
+    return usage.join("\n");
+  }
   const lines = [value.state + (value.indexCommit ? " at " + value.indexCommit : "")];
   if (value.message) lines.push(value.message);
   if (value.dirty) lines.push("Search uses committed content. Approved files have uncommitted edits.");

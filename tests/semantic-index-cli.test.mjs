@@ -347,3 +347,30 @@ test("B8 and B10 a capped passage returns whole leading lines and names the next
     assert.deepEqual(wide.truncated, { lastLine: null, nextLine: 1 });
   });
 });
+
+test("B3 usage summarises the local log and reports an empty baseline", async () => {
+  await withSearchRepo(async ({ dir, setPolicy, commit, options, requested, run }) => {
+    const empty = await run("usage");
+    assert.equal(empty.exitCode, 0);
+    assert.equal(empty.value.commands, 0);
+    assert.match(empty.value.message, /no baseline exists/);
+    await run("refresh");
+    const times = ["2026-11-20T09:00:00.000Z", "2026-11-21T09:00:00.000Z", "2026-11-21T10:00:00.000Z"];
+    options.now = () => new Date(times.shift());
+    await run("search", "--query", "query");
+    await run("search", "--query", "query", "--compact");
+    await run("show", "--path", "src/a.txt", "--lines", "1-1");
+    const before = requested.length;
+    setPolicy({ enabled: false });
+    options.env.ONTOLOGY_INDEX_CONFIG_REF = commit();
+    const all = await run("usage");
+    assert.equal(all.value.commands, 3);
+    assert.deepEqual(Object.keys(all.value.byCommand), ["search", "show"]);
+    assert.equal(all.value.estimated, true);
+    assert.equal((await run("usage", "--since", "2026-11-21T00:00:00Z")).value.commands, 2);
+    assert.equal(requested.length, before);
+    assert.match(formatIndexResponse(all.value), /^Commands: 3\nEstimated tokens: \d+ total, [\d.]+ mean per command\n/);
+    assert.equal((await run("usage", "--since", "yesterday")).value.code, "usage");
+    assert.ok(readFileSync(join(dir, ".ontology-index/token-log.jsonl"), "utf8").length > 0);
+  });
+});
