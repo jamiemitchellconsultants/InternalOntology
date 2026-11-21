@@ -169,3 +169,15 @@ function commitLink(git) {
   git("commit", "-qm", "track symlink fixture");
   return git("rev-parse", "HEAD").trim();
 }
+
+test("B9 an invalid cap is a configuration error that names the setting and makes no model request", async () => {
+  await withSearchRepo(async ({ policy, setPolicy, commit, options, requested, run }) => {
+    setPolicy({ ...policy, responseCap: 0 });
+    options.env.ONTOLOGY_INDEX_CONFIG_REF = commit();
+    const result = await run("search", "--query", "query");
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.value.code, "config");
+    assert.match(result.value.message, /semanticIndex\.responseCap/);
+    assert.deepEqual(requested, []);
+  });
+});

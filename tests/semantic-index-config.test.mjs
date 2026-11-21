@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { validateConfig } from "../templates/scripts/ontology-config.mjs";
+import { DEFAULT_RESPONSE_CAP, validateConfig } from "../templates/scripts/ontology-config.mjs";
 
 const base = { ontologyPath: "docs/ontology.md", sections: { required: [], optional: [] } };
 const policy = {
@@ -46,4 +46,17 @@ test("B13 rejects malformed settings and normalizes GitHub identity", () => {
   const result = candidate({ scope: { include: ["Src/", "src/"] }, release: { repository: "github.com/Owner/Repo", publishers: ["DEV", "dev"] } });
   assert.deepEqual(result.scope.include, ["Src/", "src/"]);
   assert.deepEqual(result.release, { repository: "github.com/owner/repo", publishers: ["dev"] });
+});
+
+test("B9 defaults the response cap to 4000 estimated tokens", () => {
+  assert.equal(DEFAULT_RESPONSE_CAP, 4000);
+  assert.equal(parse({ ...base, semanticIndex: policy }).responseCap, 4000);
+  assert.equal(parse({ ...base, semanticIndex: { ...policy, responseCap: 250 } }).responseCap, 250);
+});
+
+test("B9 rejects a cap that is not a positive integer and names the setting", () => {
+  for (const responseCap of [0, -1, 1.5, "4000", null, true, 2 ** 53]) {
+    assert.throws(() => parse({ ...base, semanticIndex: { ...policy, responseCap } }), /semanticIndex\.responseCap must be a positive integer/);
+  }
+  assert.throws(() => parse({ ...base, semanticIndex: { enabled: false, responseCap: 10 } }), /unknown key/);
 });

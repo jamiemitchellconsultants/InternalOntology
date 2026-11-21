@@ -47,8 +47,9 @@ export function resolveIndexContext(cwd, env) {
     if (!regularBlob(configurationTree, CONFIG_FILENAME)) throw new Error("Missing committed configuration");
     const raw = JSON.parse(configurationTree.readBounded(CONFIG_FILENAME, MAX_BLOB_BYTES).toString("utf8"));
     policy = validateConfig(raw, { ontologyExists: (path) => configurationTree.has(path) }).semanticIndex;
-  } catch {
-    throw problem("config", "Read valid semantic index settings from a trusted committed ref. Fetch the default branch or set ONTOLOGY_INDEX_CONFIG_REF.");
+  } catch (error) {
+    const capProblem = String(error?.message).startsWith(`${CONFIG_FILENAME}: semanticIndex.responseCap`) ? ` ${error.message}` : "";
+    throw problem("config", `Read valid semantic index settings from a trusted committed ref. Fetch the default branch or set ONTOLOGY_INDEX_CONFIG_REF.${capProblem}`);
   }
   if (!policy?.enabled) throw problem("disabled", "Semantic indexing is disabled in the trusted configuration.");
   let sourceTree;

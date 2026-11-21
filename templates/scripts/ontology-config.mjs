@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 
 export const CONFIG_FILENAME = "ontology.config.json";
+export const DEFAULT_RESPONSE_CAP = 4000;
 
 const KNOWN_KEYS = new Set([
   "$schema",
@@ -154,14 +155,20 @@ function validateIndexRelease(value) {
 function validateSemanticIndex(value) {
   if (value === undefined) return null;
   const label = "semanticIndex";
-  checkIndexObject(value, label, value?.enabled === false ? ["enabled"] : ["enabled", "scope", "embedding", "release"]);
+  checkIndexObject(value, label, value?.enabled === false ? ["enabled"] : ["enabled", "scope", "embedding", "release", "responseCap"]);
   if (typeof value.enabled !== "boolean") throw new Error(`${CONFIG_FILENAME}: ${label}.enabled must be a boolean`);
   if (!value.enabled) return { enabled: false };
   checkIndexObject(value.scope, `${label}.scope`, ["include", "exclude"]);
   const include = indexSelectors(value.scope.include, `${label}.scope.include`);
   if (!include.length) throw new Error(`${CONFIG_FILENAME}: ${label}.scope.include must name at least one path or directory prefix`);
   const exclude = indexSelectors(value.scope.exclude, `${label}.scope.exclude`);
-  return { enabled: true, scope: { include, exclude }, embedding: validateIndexEmbedding(value.embedding), release: validateIndexRelease(value.release) };
+  if (value.responseCap !== undefined && (!Number.isSafeInteger(value.responseCap) || value.responseCap < 1)) {
+    throw new Error(`${CONFIG_FILENAME}: ${label}.responseCap must be a positive integer of estimated tokens`);
+  }
+  return {
+    enabled: true, scope: { include, exclude }, embedding: validateIndexEmbedding(value.embedding), release: validateIndexRelease(value.release),
+    responseCap: value.responseCap ?? DEFAULT_RESPONSE_CAP,
+  };
 }
 
 // allowProjection: only semanticReview has a projection setting (ADR 0028); namingReview does not.
