@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { checkCap, compactLocations, compareEstimates, graphFirstSavings, measurePilot, protocolCost, rankKeywordLocations } from "../scripts/measure-semantic-index.mjs";
+import { checkCap, compactLocations, compareDiscovery, compareEstimates, discoveryFromTranscript, graphFirstSavings, measurePilot, protocolCost, rankKeywordLocations } from "../scripts/measure-semantic-index.mjs";
 import { treeFromRevision } from "../templates/scripts/source-graph-git.mjs";
 import { withTempRepo } from "./helpers/temp-repo.mjs";
 
@@ -105,5 +105,53 @@ test("B4, B10, B14 and B16 the --tokens CLI reports only the supplied sections",
     assert.deepEqual(report.protocol, { previousTokens: 10, currentTokens: 5, change: -5, dropped: [] });
     write("none.json", "{}");
     assert.throws(() => execFileSync(process.execPath, [script, "--tokens", join(dir, "none.json")], { stdio: "pipe" }), /Supply at least one/);
+  });
+});
+
+const assistant = (id, content, usage = { input_tokens: 10, cache_read_input_tokens: 90 }) =>
+  JSON.stringify({ type: "assistant", message: { id, content, usage } });
+const tool = (name, input) => ({ type: "tool_use", name, input });
+
+test("B11 counts discovery up to the first edit from a session transcript", () => {
+  const jsonl = [
+    JSON.stringify({ type: "user", message: { content: "find the refund rule" } }),
+    assistant("m1", [tool("Bash", { command: "node scripts/semantic-index.mjs search --query refund --json --compact" })]),
+    assistant("m1", [tool("Read", { file_path: "src/refund.ts" })]),
+    assistant("m2", [tool("Grep", { pattern: "refund" }), tool("Bash", { command: "rg refund src" }), tool("Read", { file_path: "src/refund.ts" })]),
+    assistant("m3", [tool("Edit", { file_path: "src/refund.ts" })]),
+    assistant("m4", [tool("Read", { file_path: "src/after.ts" })]),
+  ].join("\n");
+  assert.deepEqual(discoveryFromTranscript(jsonl), { inputTokens: 300, filesOpened: 1, searchCalls: 2, indexCommands: 1, edited: true });
+  assert.equal(discoveryFromTranscript(assistant("m1", [tool("Read", { file_path: "a" })])).edited, false);
+  assert.throws(() => discoveryFromTranscript("{}\nnot json"), /line 2 is not JSON/);
+});
+
+test("B12 compares each task with the baseline and with running without the index", () => {
+  const figures = (inputTokens, filesOpened, searchCalls, indexCommands, edited = true) => ({ inputTokens, filesOpened, searchCalls, indexCommands, edited });
+  const report = compareDiscovery([
+    { id: "t1", note: "trusted the first result", baseline: figures(1000, 4, 3, 2), withIndex: figures(600, 2, 1, 2), withoutIndex: figures(1500, 6, 5, 0) },
+    { id: "t2", note: "needed one exact search", baseline: figures(500, 2, 1, 1), withIndex: figures(500, 2, 1, 1), withoutIndex: figures(400, 2, 2, 0, false) },
+  ]);
+  assert.deepEqual(report.tasks[0].vsBaseline, { inputTokens: -400, filesOpened: -2, searchCalls: -2, indexCommands: 0 });
+  assert.deepEqual(report.totals.vsWithoutIndex, { inputTokens: -800, filesOpened: -4, searchCalls: -5, indexCommands: 3 });
+  assert.deepEqual(report.incomplete, ["t2"]);
+  assert.throws(() => compareDiscovery([{ id: "t3", note: "", baseline: figures(1, 1, 1, 1), withIndex: figures(1, 1, 1, 1), withoutIndex: figures(1, 1, 1, 1) }]), /t3 needs a developer note/);
+});
+
+test("B11 and B12 the --tokens CLI reads transcript paths and figures objects for tasks", async () => {
+  await withTempRepo(async ({ dir, write }) => {
+    write("runs/baseline.jsonl", [
+      assistant("m1", [tool("Grep", { pattern: "x" }), tool("Read", { file_path: "a" }), tool("Read", { file_path: "b" })]),
+      assistant("m2", [tool("Edit", { file_path: "a" })]),
+    ].join("\n"));
+    const figures = { inputTokens: 100, filesOpened: 1, searchCalls: 1, indexCommands: 1, edited: true };
+    write("tokens.json", JSON.stringify({
+      tasks: [{ id: "t1", note: "note", baseline: "runs/baseline.jsonl", withIndex: figures, withoutIndex: figures }],
+    }));
+    const script = fileURLToPath(new URL("../scripts/measure-semantic-index.mjs", import.meta.url));
+    const report = JSON.parse(execFileSync(process.execPath, [script, "--tokens", join(dir, "tokens.json")], { encoding: "utf8" }));
+    assert.deepEqual(Object.keys(report), ["discovery"]);
+    assert.deepEqual(report.discovery.tasks[0].vsBaseline, { inputTokens: -100, filesOpened: -1, searchCalls: 0, indexCommands: 1 });
+    assert.deepEqual(report.discovery.incomplete, []);
   });
 });
