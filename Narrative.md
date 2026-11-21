@@ -63,19 +63,20 @@ by rewriting the original.
 | [47](#entry-docs-implementation-plans-for-matched-ontology-projection-135) | 2026-11-19 | docs: implementation plans for matched ontology projection (#135) | product | - **Guard against over-budget chunks.** `reviewFiles` checks each request's size after projecting its chunk. A chunk that would exceed the `RequestBudget` is split before it is sent, exactly as on a 413. |
 | [48](#entry-feat-matched-ontology-projection-for-the-semantic-reviewer-135) | 2026-11-19 | feat: matched ontology projection for the semantic reviewer (#135) | product | Each request carries a deterministic matched projection by default: the full rows of the entries its chunk selects, plus the name index, so the model can still cite any entry and every citation is checked against the whole catalog ([ADR… |
 | [49](#entry-matched-ontology-projection-design-amendment-after-acceptance-pushback-1) | 2026-11-20 | Matched ontology projection: design amendment after acceptance pushback (#135) | product | - **Plan by paragraph ([ADR 0030](docs/adr/0030-matched-planning-by-paragraph-in-the-projector.md)).** - The matched projector gains a `plan` step. |
-| [50](#entry-docs-define-semantic-repository-index-behaviours) | 2026-11-20 | docs: define semantic repository index behaviours | product | Search uses approved content from the current Git commit, including local commits, with an explicit refresh after a change to the commit or source scope. An exact compatible release asset can be searched with zero source re-embedding. |
-| [51](#entry-docs-amend-matched-ontology-projection-plans-after-acceptance-pushback-1) | 2026-11-20 | docs: amend matched ontology projection plans after acceptance pushback (#135) | product | - **A projector stays a callable function**, carrying `mode` and, when matched, `plan`. ADR 0030 describes an object with `mode`, `project` and `plan`. |
-| [52](#entry-docs-design-semantic-repository-index-architecture) | 2026-11-20 | docs: design semantic repository index architecture | product | Use a checkout-local CLI and separately approved committed configuration. Read the selected Git tree, use exact cosine search, and store a portable vector file with atomic promotion. |
-| [53](#entry-docs-refine-matched-projection-transport-and-budget-boundaries-135) | 2026-11-20 | Docs: refine matched projection transport and budget boundaries (#135) | product | - The semantic reviewer requests raw Contents bytes at the reviewed head SHA for both the Turtle source and the Markdown fallback. It decodes strict UTF-8 and uses the numeric HTTP 404 from the source read as the only fallback trigger. |
-| [54](#entry-docs-plan-the-matched-projection-build-review-amendment-135) | 2026-11-20 | Docs: plan the matched projection build-review amendment (#135) | product | - Task 18 adds the pinned raw read, verifies strict decoding and numeric 404 behaviour, and exercises a valid source over 1 MiB through the collector and planner. JSON API operations and full-mode request bytes retain their existing tests. |
-| [55](#entry-ship-matched-ontology-projection-for-large-ontologies-135) | 2026-11-20 | Ship matched ontology projection for large ontologies (#135) | product | - Read the pinned source through raw GitHub Contents with strict UTF-8 decoding and keep a Markdown fallback on a source 404. |
-| [56](#entry-docs-plan-semantic-repository-index-implementation) | 2026-11-20 | docs: plan semantic repository index implementation | product | Implement seven separately testable tasks covering configuration, committed source, embeddings, storage, local commands, release exchange, and installer and pilot integration. |
-| [57](#entry-feat-add-optional-semantic-repository-index) | 2026-11-20 | feat: add optional semantic repository index | product | Ship the indexing commands as an opt-in part of the Kit. Keep index state in an ignored file per checkout, with versioned GitHub Release assets as the shared distribution channel. Read model and scope settings from a trusted commit. |
-| [58](#entry-test-document-semantic-index-acceptance) | 2026-11-20 | test: document semantic index acceptance | product | Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. |
-| [59](#entry-docs-add-agent-protocol-for-the-semantic-index) | 2026-11-20 | docs: add agent protocol for the semantic index | product | Ship the guidance as an installed protocol block, the same mechanism the ontology and source graph protocols use, enabled only by `--with-semantic-index`. |
-| [60](#entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi) | 2026-11-20 | docs: add perceived quality and token cost outcome to semantic index vision | product | Record perceived benefit as the primary evidence for the new outcome, and token cost as a paired measure that shows whether the benefit is cheap or expensive. Outcome 5 starts as an observation with no target until a baseline exists. |
-| [61](#entry-docs-feature-design-for-semantic-index-token-efficiency) | 2026-11-20 | docs(feature): design for semantic index token efficiency | product | Estimate tokens from characters and log counts only in a local file. Add a passage command that returns only the cited lines from the indexed commit, and a compact JSON form. |
-| [62](#entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency) | 2026-11-21 | docs(feature): implementation plan for semantic index token efficiency | product | Build the estimator and log first so that a baseline exists before anything is tuned. Then add the cap, the passage reader, search, `show`, `usage`, the protocol and the pilot measures. |
+| [50](#entry-docs-define-semantic-repository-index-vision) | 2026-11-20 | docs: define semantic repository index vision | product | Offer semantic repository search as an opt-in capability. The repository owner supplies the embedding model and approves the indexed content. Each checkout uses a rebuildable, Git-ignored vector store. |
+| [51](#entry-docs-define-semantic-repository-index-behaviours) | 2026-11-20 | docs: define semantic repository index behaviours | product | Search uses approved content from the current Git commit, including local commits, with an explicit refresh after a change to the commit or source scope. An exact compatible release asset can be searched with zero source re-embedding. |
+| [52](#entry-docs-amend-matched-ontology-projection-plans-after-acceptance-pushback-1) | 2026-11-20 | docs: amend matched ontology projection plans after acceptance pushback (#135) | product | - **A projector stays a callable function**, carrying `mode` and, when matched, `plan`. ADR 0030 describes an object with `mode`, `project` and `plan`. |
+| [53](#entry-docs-design-semantic-repository-index-architecture) | 2026-11-20 | docs: design semantic repository index architecture | product | Use a checkout-local CLI and separately approved committed configuration. Read the selected Git tree, use exact cosine search, and store a portable vector file with atomic promotion. |
+| [54](#entry-docs-refine-matched-projection-transport-and-budget-boundaries-135) | 2026-11-20 | Docs: refine matched projection transport and budget boundaries (#135) | product | - The semantic reviewer requests raw Contents bytes at the reviewed head SHA for both the Turtle source and the Markdown fallback. It decodes strict UTF-8 and uses the numeric HTTP 404 from the source read as the only fallback trigger. |
+| [55](#entry-docs-plan-the-matched-projection-build-review-amendment-135) | 2026-11-20 | Docs: plan the matched projection build-review amendment (#135) | product | - Task 18 adds the pinned raw read, verifies strict decoding and numeric 404 behaviour, and exercises a valid source over 1 MiB through the collector and planner. JSON API operations and full-mode request bytes retain their existing tests. |
+| [56](#entry-ship-matched-ontology-projection-for-large-ontologies-135) | 2026-11-20 | Ship matched ontology projection for large ontologies (#135) | product | - Read the pinned source through raw GitHub Contents with strict UTF-8 decoding and keep a Markdown fallback on a source 404. |
+| [57](#entry-docs-plan-semantic-repository-index-implementation) | 2026-11-20 | docs: plan semantic repository index implementation | product | Implement seven separately testable tasks covering configuration, committed source, embeddings, storage, local commands, release exchange, and installer and pilot integration. |
+| [58](#entry-feat-add-optional-semantic-repository-index) | 2026-11-20 | feat: add optional semantic repository index | product | Ship the indexing commands as an opt-in part of the Kit. Keep index state in an ignored file per checkout, with versioned GitHub Release assets as the shared distribution channel. Read model and scope settings from a trusted commit. |
+| [59](#entry-test-document-semantic-index-acceptance) | 2026-11-20 | test: document semantic index acceptance | product | Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. |
+| [60](#entry-docs-add-agent-protocol-for-the-semantic-index) | 2026-11-20 | docs: add agent protocol for the semantic index | product | Ship the guidance as an installed protocol block, the same mechanism the ontology and source graph protocols use, enabled only by `--with-semantic-index`. |
+| [61](#entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi) | 2026-11-20 | docs: add perceived quality and token cost outcome to semantic index vision | product | Record perceived benefit as the primary evidence for the new outcome, and token cost as a paired measure that shows whether the benefit is cheap or expensive. Outcome 5 starts as an observation with no target until a baseline exists. |
+| [62](#entry-docs-feature-design-for-semantic-index-token-efficiency) | 2026-11-20 | docs(feature): design for semantic index token efficiency | product | Estimate tokens from characters and log counts only in a local file. Add a passage command that returns only the cited lines from the indexed commit, and a compact JSON form. |
+| [63](#entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency) | 2026-11-21 | docs(feature): implementation plan for semantic index token efficiency | product | Build the estimator and log first so that a baseline exists before anything is tuned. Then add the cap, the passage reader, search, `show`, `usage`, the protocol and the pilot measures. |
 
 ---
 
@@ -1206,9 +1207,31 @@ Separately, `ontology.ttl` is the source of truth and `ontology.md` is generated
 
 ---
 
+<a id="entry-docs-define-semantic-repository-index-vision"></a>
+
+## Entry 50 — 2026-11-20 — docs: define semantic repository index vision
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+Developers and coding agents often know the behaviour they need to find before they know the exact names used in an unfamiliar repository. The Ontology Kit already gives them canonical vocabulary and optional source graph evidence. Code Context and Greptile demonstrate semantic retrieval and cross-file context. Adopting repositories need control over the embedding model and a way to share precomputed vectors with teammates.
+
+## Decision
+
+Offer semantic repository search as an opt-in capability. The repository owner supplies the embedding model and approves the indexed content. Each checkout uses a rebuildable, Git-ignored vector store. Developers with repository access can download a snapshot from the adopting repository's GitHub Releases, and a publisher with write access can upload a snapshot for a pushed commit.
+
+## Consequences
+
+A developer can reuse the published vectors with access to the matching model and refresh the local index as source changes. Release assets keep generated vectors out of Git history and give the snapshot a repository-owned distribution point. The pilot will compare search quality with keyword search and measure refresh work and asset size. Snapshot selection, publication cadence, and implementation choices carry forward to later phases.
+
+AI-Fingerprint: sha256:6cce40ee1dfb
+
+---
+
 <a id="entry-docs-define-semantic-repository-index-behaviours"></a>
 
-## Entry 50 — 2026-11-20 — docs: define semantic repository index behaviours
+## Entry 51 — 2026-11-20 — docs: define semantic repository index behaviours
 
 *Kind: product. Status: accepted.*
 
@@ -1230,7 +1253,7 @@ AI-Fingerprint: sha256:40814a485326
 
 <a id="entry-docs-amend-matched-ontology-projection-plans-after-acceptance-pushback-1"></a>
 
-## Entry 51 — 2026-11-20 — docs: amend matched ontology projection plans after acceptance pushback (#135)
+## Entry 52 — 2026-11-20 — docs: amend matched ontology projection plans after acceptance pushback (#135)
 
 *Kind: product. Status: accepted.*
 
@@ -1270,7 +1293,7 @@ Rejected: dropping the per-file pre-pass for every projector. It would have chan
 
 <a id="entry-docs-design-semantic-repository-index-architecture"></a>
 
-## Entry 52 — 2026-11-20 — docs: design semantic repository index architecture
+## Entry 53 — 2026-11-20 — docs: design semantic repository index architecture
 
 *Kind: product. Status: accepted.*
 
@@ -1298,7 +1321,7 @@ AI-Fingerprint: sha256:5095f31f39a2
 
 <a id="entry-docs-refine-matched-projection-transport-and-budget-boundaries-135"></a>
 
-## Entry 53 — 2026-11-20 — Docs: refine matched projection transport and budget boundaries (#135)
+## Entry 54 — 2026-11-20 — Docs: refine matched projection transport and budget boundaries (#135)
 
 *Kind: product. Status: accepted.*
 
@@ -1321,7 +1344,7 @@ The build review found two cases outside the original green tests. A kit-generat
 
 <a id="entry-docs-plan-the-matched-projection-build-review-amendment-135"></a>
 
-## Entry 54 — 2026-11-20 — Docs: plan the matched projection build-review amendment (#135)
+## Entry 55 — 2026-11-20 — Docs: plan the matched projection build-review amendment (#135)
 
 *Kind: product. Status: accepted.*
 
@@ -1343,7 +1366,7 @@ A disposable prototype verified the expected failures before each change and pas
 
 <a id="entry-ship-matched-ontology-projection-for-large-ontologies-135"></a>
 
-## Entry 55 — 2026-11-20 — Ship matched ontology projection for large ontologies (#135)
+## Entry 56 — 2026-11-20 — Ship matched ontology projection for large ontologies (#135)
 
 *Kind: product. Status: accepted.*
 
@@ -1365,7 +1388,7 @@ At the 200,000-character default budget, the local broad-file trial with 1,920 o
 
 <a id="entry-docs-plan-semantic-repository-index-implementation"></a>
 
-## Entry 56 — 2026-11-20 — docs: plan semantic repository index implementation
+## Entry 57 — 2026-11-20 — docs: plan semantic repository index implementation
 
 *Kind: product. Status: accepted.*
 
@@ -1387,7 +1410,7 @@ AI-Fingerprint: sha256:7696fcffa70f
 
 <a id="entry-feat-add-optional-semantic-repository-index"></a>
 
-## Entry 57 — 2026-11-20 — feat: add optional semantic repository index
+## Entry 58 — 2026-11-20 — feat: add optional semantic repository index
 
 *Kind: product. Status: accepted.*
 
@@ -1409,7 +1432,7 @@ AI-Fingerprint: sha256:7d2a8de4c0c5
 
 <a id="entry-test-document-semantic-index-acceptance"></a>
 
-## Entry 58 — 2026-11-20 — test: document semantic index acceptance
+## Entry 59 — 2026-11-20 — test: document semantic index acceptance
 
 *Kind: product. Status: accepted.*
 
@@ -1431,7 +1454,7 @@ AI-Fingerprint: sha256:8cc6ff3e1719
 
 <a id="entry-docs-add-agent-protocol-for-the-semantic-index"></a>
 
-## Entry 59 — 2026-11-20 — docs: add agent protocol for the semantic index
+## Entry 60 — 2026-11-20 — docs: add agent protocol for the semantic index
 
 *Kind: product. Status: accepted.*
 
@@ -1453,7 +1476,7 @@ Adopters installing or upgrading with `--with-semantic-index` get the block in t
 
 <a id="entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi"></a>
 
-## Entry 60 — 2026-11-20 — docs: add perceived quality and token cost outcome to semantic index vision
+## Entry 61 — 2026-11-20 — docs: add perceived quality and token cost outcome to semantic index vision
 
 *Kind: product. Status: accepted.*
 
@@ -1475,7 +1498,7 @@ Later work can cite outcome 5 when tuning result size and telemetry. A follow-up
 
 <a id="entry-docs-feature-design-for-semantic-index-token-efficiency"></a>
 
-## Entry 61 — 2026-11-20 — docs(feature): design for semantic index token efficiency
+## Entry 62 — 2026-11-20 — docs(feature): design for semantic index token efficiency
 
 *Kind: product. Status: accepted.*
 
@@ -1497,7 +1520,7 @@ The developer can plan from the traceability table without re-deciding structure
 
 <a id="entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency"></a>
 
-## Entry 62 — 2026-11-21 — docs(feature): implementation plan for semantic index token efficiency
+## Entry 63 — 2026-11-21 — docs(feature): implementation plan for semantic index token efficiency
 
 *Kind: product. Status: accepted.*
 
