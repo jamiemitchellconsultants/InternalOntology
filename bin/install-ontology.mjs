@@ -140,7 +140,7 @@ export function buildPlan(options) {
   }
 
   if (options.withSemanticIndex) {
-    const scripts = ["semantic-index", "semantic-index-source", "semantic-index-embed", "semantic-index-store", "semantic-index-release", "semantic-index-tokens"];
+    const scripts = ["semantic-index", "semantic-index-source", "semantic-index-embed", "semantic-index-store", "semantic-index-release", "semantic-index-tokens", "semantic-index-token-log"];
     if (!options.withSourceGraph) scripts.push("source-graph-git");
     for (const path of [...scripts.map((name) => `scripts/${name}.mjs`), "docs/semantic-index.md"]) {
       plan.push({ template: path, dest: path, substitute: false, ownedBy: "kit" });
