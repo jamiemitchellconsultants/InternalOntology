@@ -1,23 +1,21 @@
 ## Semantic index protocol
 
-Use this only when `scripts/semantic-index.mjs` exists and `semanticIndex.enabled` is true in `ontology.config.json`. Otherwise search with exact tools as usual.
+Use this only when `scripts/semantic-index.mjs` exists and `semanticIndex.enabled` is true in `ontology.config.json`. Each command below runs as `node scripts/semantic-index.mjs <command>`.
 
 ### When to use it
 
-Use the index to locate code, tests or documentation when you do not yet know the file, symbol or subsystem, for example "where is a late cancellation rejected?". Skip it when the task names an exact file or symbol; use `grep` or a direct read instead. Read the ontology first and use its terms in queries.
+Use the index to locate code, tests or documentation when you do not know the file, symbol or subsystem; skip it when the task names one. Read the ontology first and use its terms in queries. If `sourceGraph` is enabled and `scripts/query-source-graph.mjs` exists, ask the graph first with `node scripts/query-source-graph.mjs search <term>`, and search the index only when the reader reports the area as unknown, excluded or empty.
 
 ### How to use it
 
-1. Run `node scripts/semantic-index.mjs status --json`. If the state is `missing`, `stale`, `incompatible` or `unreadable`, run `node scripts/semantic-index.mjs refresh --json` once. A refresh sends approved source to the configured embedding endpoint, so do not run it if the task or the user has said not to.
-2. Run `node scripts/semantic-index.mjs search --query "<descriptive question>" --limit 5 --json`. Use one focused question per search and read the first relevant result before searching again.
-3. If refresh or search still fails, report the error and fall back to exact search. Do not retry in a loop, edit `.ontology-index/` by hand, or remove `.ontology-index/writer.lock` without checking its recorded PID and hostname.
+1. Run `status --json`. If the state is `missing`, `stale`, `incompatible` or `unreadable`, run `refresh --json` once, unless the task or the user has said not to: refresh sends approved source to the configured embedding endpoint.
+2. Run `search --query "<one focused question>" --limit 5 --json --compact` and read the first relevant result before searching again.
+3. If refresh or search still fails, report the error and use exact search. Do not retry in a loop, edit `.ontology-index/` by hand, or remove `.ontology-index/writer.lock` without checking its recorded PID and hostname.
 
-### Treat results as leads, not evidence
+### Results are leads, not evidence
 
-A result is a similarity match, not a statement of fact. Open the cited file at the cited commit with `git show <commit>:<path>` and read the cited lines before relying on them. Cite the commit, path and line range, never the score alone. A dirty notice means approved paths have uncommitted edits that the results do not reflect, so read the working tree before changing those files.
-
-An empty result is not proof that nothing exists. It means the index found nothing within its scope, so say so and confirm with exact search. The index covers only the approved scope in `semanticIndex.scope`. When it conflicts with the ontology, use the ontology term and name the conflict.
+Before relying on a result, read its cited lines with `show --path <path> --lines <start>-<end> --json` or `git show <commit>:<path>`. Cite the commit, path and line range, never the score alone. A dirty notice means approved files have uncommitted edits, so read the working tree before changing them. A truncated response says what it left out; request the rest only if you need it. An empty result is not proof that nothing exists: say the index found nothing within its scope and confirm with exact search. When the index conflicts with the ontology, use the ontology term and name the conflict.
 
 ### What you must not do
 
-Do not run `upload` or `download` unless the task asks for a release snapshot, because both change the release or replace the local store. Do not add endpoints, tokens or model settings to Git. Do not widen `semanticIndex.scope` to make a query succeed. Settings are read from the trusted branch and only a maintainer changes them.
+Do not run `upload` or `download` unless the task asks for a release snapshot. Do not add endpoints, tokens or model settings to Git. Do not widen `semanticIndex.scope` to make a query succeed; only a maintainer changes settings.
