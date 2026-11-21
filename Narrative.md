@@ -71,11 +71,12 @@ by rewriting the original.
 | [55](#entry-ship-matched-ontology-projection-for-large-ontologies-135) | 2026-11-20 | Ship matched ontology projection for large ontologies (#135) | product | - Read the pinned source through raw GitHub Contents with strict UTF-8 decoding and keep a Markdown fallback on a source 404. |
 | [56](#entry-docs-plan-semantic-repository-index-implementation) | 2026-11-20 | docs: plan semantic repository index implementation | product | Implement seven separately testable tasks covering configuration, committed source, embeddings, storage, local commands, release exchange, and installer and pilot integration. |
 | [57](#entry-feat-add-optional-semantic-repository-index) | 2026-11-20 | feat: add optional semantic repository index | product | Ship the indexing commands as an opt-in part of the Kit. Keep index state in an ignored file per checkout, with versioned GitHub Release assets as the shared distribution channel. Read model and scope settings from a trusted commit. |
-| [58](#entry-test-document-semantic-index-acceptance) | 2026-11-20 | test: document semantic index acceptance | product | Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. |
-| [59](#entry-docs-add-agent-protocol-for-the-semantic-index) | 2026-11-20 | docs: add agent protocol for the semantic index | product | Ship the guidance as an installed protocol block, the same mechanism the ontology and source graph protocols use, enabled only by `--with-semantic-index`. |
-| [60](#entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi) | 2026-11-20 | docs: add perceived quality and token cost outcome to semantic index vision | product | Record perceived benefit as the primary evidence for the new outcome, and token cost as a paired measure that shows whether the benefit is cheap or expensive. Outcome 5 starts as an observation with no target until a baseline exists. |
-| [61](#entry-docs-feature-design-for-semantic-index-token-efficiency) | 2026-11-20 | docs(feature): design for semantic index token efficiency | product | Estimate tokens from characters and log counts only in a local file. Add a passage command that returns only the cited lines from the indexed commit, and a compact JSON form. |
-| [62](#entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency) | 2026-11-21 | docs(feature): implementation plan for semantic index token efficiency | product | Build the estimator and log first so that a baseline exists before anything is tuned. Then add the cap, the passage reader, search, `show`, `usage`, the protocol and the pilot measures. |
+| [58](#entry-docs-design-opt-in-lan-http-for-semantic-embeddings) | 2026-11-20 | docs: design opt-in LAN HTTP for semantic embeddings | product | Allow `semanticIndex.embedding.allowLanHttp` in trusted committed configuration. |
+| [59](#entry-test-document-semantic-index-acceptance) | 2026-11-20 | test: document semantic index acceptance | product | Pair the walkthroughs and their evidence with repeatable tests of the installed commands. Use an isolated model and release fixture for the local tests and a private synthetic adopter with a live GitHub draft and Ollama for the pilot. |
+| [60](#entry-docs-add-agent-protocol-for-the-semantic-index) | 2026-11-20 | docs: add agent protocol for the semantic index | product | Ship the guidance as an installed protocol block, the same mechanism the ontology and source graph protocols use, enabled only by `--with-semantic-index`. |
+| [61](#entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi) | 2026-11-20 | docs: add perceived quality and token cost outcome to semantic index vision | product | Record perceived benefit as the primary evidence for the new outcome, and token cost as a paired measure that shows whether the benefit is cheap or expensive. Outcome 5 starts as an observation with no target until a baseline exists. |
+| [62](#entry-docs-feature-design-for-semantic-index-token-efficiency) | 2026-11-20 | docs(feature): design for semantic index token efficiency | product | Estimate tokens from characters and log counts only in a local file. Add a passage command that returns only the cited lines from the indexed commit, and a compact JSON form. |
+| [63](#entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency) | 2026-11-21 | docs(feature): implementation plan for semantic index token efficiency | product | Build the estimator and log first so that a baseline exists before anything is tuned. Then add the cap, the passage reader, search, `show`, `usage`, the protocol and the pilot measures. |
 
 ---
 
@@ -1407,9 +1408,31 @@ AI-Fingerprint: sha256:7d2a8de4c0c5
 
 ---
 
+<a id="entry-docs-design-opt-in-lan-http-for-semantic-embeddings"></a>
+
+## Entry 58 — 2026-11-20 — docs: design opt-in LAN HTTP for semantic embeddings
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The owner-approved Qwen service is reachable on the private network. During JEPA-Speech acceptance it returned valid 4,096-dimensional vectors for synthetic inputs, while the Kit's HTTPS-or-loopback rule rejected its LAN URL at configuration validation. The maintainer chose to support explicitly configured LAN HTTP.
+
+## Decision
+
+Allow `semanticIndex.embedding.allowLanHttp` in trusted committed configuration. Off-loopback HTTP is opt-in, connects directly to a validated private address, rejects public or mixed address answers, and rejects a configured embedding bearer before connecting. The adapter keeps its bounded request and response checks. [ADR 0036](https://github.com/jamiemitchellconsultants/InternalOntology/blob/feature/semantic-repository-index/architect-amend/docs/adr/0036-opt-in-private-lan-http-for-embeddings.md)
+
+## Consequences
+
+Developers on the approved network can use the hosted model over plaintext HTTP. An HTTPS endpoint continues to serve deployments that need bearer authentication. Snapshot compatibility follows the embedding space, so the transport option is outside the compatibility fingerprint. Developer planning and implementation amendments come before the installed JEPA-Speech LAN trial in #149.
+
+AI-Fingerprint: sha256:99cca93d341e
+
+---
+
 <a id="entry-test-document-semantic-index-acceptance"></a>
 
-## Entry 58 — 2026-11-20 — test: document semantic index acceptance
+## Entry 59 — 2026-11-20 — test: document semantic index acceptance
 
 *Kind: product. Status: accepted.*
 
@@ -1431,7 +1454,7 @@ AI-Fingerprint: sha256:8cc6ff3e1719
 
 <a id="entry-docs-add-agent-protocol-for-the-semantic-index"></a>
 
-## Entry 59 — 2026-11-20 — docs: add agent protocol for the semantic index
+## Entry 60 — 2026-11-20 — docs: add agent protocol for the semantic index
 
 *Kind: product. Status: accepted.*
 
@@ -1453,7 +1476,7 @@ Adopters installing or upgrading with `--with-semantic-index` get the block in t
 
 <a id="entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi"></a>
 
-## Entry 60 — 2026-11-20 — docs: add perceived quality and token cost outcome to semantic index vision
+## Entry 61 — 2026-11-20 — docs: add perceived quality and token cost outcome to semantic index vision
 
 *Kind: product. Status: accepted.*
 
@@ -1475,7 +1498,7 @@ Later work can cite outcome 5 when tuning result size and telemetry. A follow-up
 
 <a id="entry-docs-feature-design-for-semantic-index-token-efficiency"></a>
 
-## Entry 61 — 2026-11-20 — docs(feature): design for semantic index token efficiency
+## Entry 62 — 2026-11-20 — docs(feature): design for semantic index token efficiency
 
 *Kind: product. Status: accepted.*
 
@@ -1497,7 +1520,7 @@ The developer can plan from the traceability table without re-deciding structure
 
 <a id="entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency"></a>
 
-## Entry 62 — 2026-11-21 — docs(feature): implementation plan for semantic index token efficiency
+## Entry 63 — 2026-11-21 — docs(feature): implementation plan for semantic index token efficiency
 
 *Kind: product. Status: accepted.*
 
