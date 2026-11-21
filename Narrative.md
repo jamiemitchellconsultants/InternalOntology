@@ -76,6 +76,7 @@ by rewriting the original.
 | [60](#entry-docs-add-agent-protocol-for-the-semantic-index) | 2026-11-20 | docs: add agent protocol for the semantic index | product | Ship the guidance as an installed protocol block, the same mechanism the ontology and source graph protocols use, enabled only by `--with-semantic-index`. |
 | [61](#entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi) | 2026-11-20 | docs: add perceived quality and token cost outcome to semantic index vision | product | Record perceived benefit as the primary evidence for the new outcome, and token cost as a paired measure that shows whether the benefit is cheap or expensive. Outcome 5 starts as an observation with no target until a baseline exists. |
 | [62](#entry-docs-feature-design-for-semantic-index-token-efficiency) | 2026-11-20 | docs(feature): design for semantic index token efficiency | product | Estimate tokens from characters and log counts only in a local file. Add a passage command that returns only the cited lines from the indexed commit, and a compact JSON form. |
+| [63](#entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency) | 2026-11-21 | docs(feature): implementation plan for semantic index token efficiency | product | Build the estimator and log first so that a baseline exists before anything is tuned. Then add the cap, the passage reader, search, `show`, `usage`, the protocol and the pilot measures. |
 
 ---
 
@@ -1512,5 +1513,27 @@ Estimate tokens from characters and log counts only in a local file. Add a passa
 ## Consequences
 
 The developer can plan from the traceability table without re-deciding structure. The default cap of 4000 estimated tokens is a placeholder until a baseline exists. Passage merge and any change to model, ranking, chunking or snapshot format remain out of scope. Nothing ships until the plan and build phases.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency"></a>
+
+## Entry 63 — 2026-11-21 — docs(feature): implementation plan for semantic index token efficiency
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The architecture (PR #181, ADRs 0037 to 0040) left four questions to the developer: the task order, how to keep default search output unchanged while adding `--compact`, how to test the shortened protocol's rule fidelity, and how the pilot gets per-task discovery cost from session records. B2 requires an estimate on every response, while ADR 0038 requires default output to stay byte-identical, so the two had to be reconciled.
+
+## Decision
+
+Build the estimator and log first so that a baseline exists before anything is tuned. Then add the cap, the passage reader, search, `show`, `usage`, the protocol and the pilot measures. The owner chose to make output append-only: every existing field and line is unchanged, and responses only gain trailing `truncated`, `tokens` and `tokenLog` items. `status`, `refresh`, `download` and `upload` stay fully byte-identical. Rule fidelity is a test that checks each protocol rule by pattern and asserts the estimate is below the previous 588 tokens. Discovery cost is read from Claude Code session transcripts up to the first edit, and figures from other agents can be entered by hand.
+
+## Consequences
+
+Callers that compare default search output byte for byte will see trailing items, but no existing field changes. The pilot's transcript reader depends on the Claude Code transcript format. The build can be run by another agent from the detailed plan without further decisions. The build criteria stay open until that work is committed.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
