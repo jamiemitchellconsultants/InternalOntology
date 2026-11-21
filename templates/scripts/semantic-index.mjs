@@ -55,7 +55,7 @@ function parseCommand(argv) {
       throw problem("usage", "--commit must be a full commit ID.");
     }
   }
-  if (command === "usage" && options.since !== undefined && Number.isNaN(Date.parse(options.since))) {
+  if (command === "usage" && options.since !== undefined && (!ISO_TIME.test(options.since) || Number.isNaN(Date.parse(options.since)))) {
     throw problem("usage", "--since must be an ISO 8601 time.");
   }
   if (options.compact && !options.json) throw problem("usage", "--compact needs --json.");
@@ -75,6 +75,8 @@ async function inspect(context) {
   }
   return { reader, state: indexReadiness(reader.header, context) };
 }
+
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
 
 function describe(context, state, indexCommit) {
   const value = {
@@ -219,7 +221,7 @@ export async function runIndexCommand(argv, { cwd = process.cwd(), env = process
     } else {
       const { reader, state } = await inspect(context);
       try {
-        value = describe(context, state, reader?.header.sourceCommit);
+        if (command === "status") value = describe(context, state, reader?.header.sourceCommit);
         if (command === "search") {
           if (state !== "current") throw problem(state, recovery[state]);
           const results = await search(reader, options.query, limit, adapter());
@@ -229,9 +231,10 @@ export async function runIndexCommand(argv, { cwd = process.cwd(), env = process
           const commit = reader.header.sourceCommit;
           const rows = options.compact ? results.map(({ commit: _commit, ...location }) => location) : results;
           const render = options.json ? JSON.stringify : formatIndexResponse;
+          const described = describe(current, latest, commit);
           return { exitCode: 0, value: await measureAndLog({
             total: rows.length,
-            build: (n) => ({ ok: true, ...describe(current, latest, commit), results: rows.slice(0, n) }),
+            build: (n) => ({ ok: true, ...described, results: rows.slice(0, n) }),
             mark: (kept) => ({ returned: kept, omitted: rows.length - kept }),
             render, cap: context.policy.responseCap, root: context.root, command: "search", now,
           }) };
@@ -243,10 +246,11 @@ export async function runIndexCommand(argv, { cwd = process.cwd(), env = process
             throw problem("refused", "Show reads only the indexed commit " + commit + ".");
           }
           const { path, startLine, endLine } = options;
+          const described = describe(context, "current", commit);
           const lines = readIndexedLines(context.sourceTree, context.policy.scope, { path, startLine, endLine });
           return { exitCode: 0, value: await measureAndLog({
             total: lines.length,
-            build: (n) => ({ ok: true, ...describe(context, "current", commit), commit, path, startLine, endLine, text: lines.slice(0, n).join("") }),
+            build: (n) => ({ ok: true, ...described, commit, path, startLine, endLine, text: lines.slice(0, n).join("") }),
             mark: (kept) => ({ lastLine: kept ? startLine + kept - 1 : null, nextLine: startLine + kept }),
             render: options.json ? JSON.stringify : formatIndexResponse,
             cap: context.policy.responseCap, root: context.root, command: "show", now,
@@ -279,18 +283,19 @@ export function formatIndexResponse(value) {
   const lines = [value.state + (value.indexCommit ? " at " + value.indexCommit : "")];
   if (value.message) lines.push(value.message);
   if (value.dirty) lines.push("Search uses committed content. Approved files have uncommitted edits.");
-  if (value.text !== undefined) lines.push(
-    JSON.stringify(value.path) + ":" + value.startLine + "-" + value.endLine + " at " + value.commit,
-    value.text.replace(/\n$/, ""),
-  );
+  if (value.text !== undefined) {
+    lines.push(JSON.stringify(value.path) + ":" + value.startLine + "-" + value.endLine + " at " + value.commit);
+    if (value.text !== "") lines.push(value.text.replace(/\n$/, ""));
+  }
   for (const result of value.results ?? []) lines.push(
     JSON.stringify(result.path) + ":" + result.startLine + "-" + result.endLine + " " + result.score.toFixed(4),
   );
   if (value.metrics) lines.push("Source embeddings: " + value.metrics.sourceEmbeddings);
   if (value.asset) lines.push(value.repository + " " + value.release + " " + value.asset + " (" + value.bytes + " bytes)");
   if (value.truncated && value.text !== undefined) lines.push(
-    "Truncated at the response cap: " + (value.truncated.lastLine === null ? "no lines returned" :
-      "lines " + value.startLine + "-" + value.truncated.lastLine + " returned") + "; request again from line " + value.truncated.nextLine + ".",
+    value.truncated.lastLine === null
+      ? `Truncated at the response cap: line ${value.truncated.nextLine} alone exceeds the cap; read it with git show ${value.commit}:${value.path}.`
+      : "Truncated at the response cap: lines " + value.startLine + "-" + value.truncated.lastLine + " returned; request again from line " + value.truncated.nextLine + ".",
   );
   else if (value.truncated) lines.push(
     "Truncated at the response cap: " + value.truncated.returned + " results returned, " + value.truncated.omitted + " omitted.",

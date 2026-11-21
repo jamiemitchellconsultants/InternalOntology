@@ -55,6 +55,8 @@ Run `refresh` for a missing or stale index. It reuses compatible vectors for unc
 
 Every search and show states an estimate of the tokens in its response, and `usage` summarises those estimates. The file `.ontology-index/token-log.jsonl` keeps counts only, with no query text, source text or path, and rotates at 1 MiB. A response over the cap is cut, says what remains, and is not an error.
 
+`show` accepts an optional `--commit` that must equal the indexed commit, and a truncated `show` reports the last line returned and the next line to request.
+
 ## Share a release snapshot
 
 ```bash

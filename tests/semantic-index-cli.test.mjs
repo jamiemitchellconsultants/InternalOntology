@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { test } from "node:test";
 import { withTempRepo } from "./helpers/temp-repo.mjs";
@@ -345,6 +347,9 @@ test("B8 and B10 a capped passage returns whole leading lines and names the next
     const wide = (await run("show", "--path", "src/wide.txt", "--lines", "1-1")).value;
     assert.equal(wide.text, "");
     assert.deepEqual(wide.truncated, { lastLine: null, nextLine: 1 });
+    const wideText = formatIndexResponse(wide);
+    assert.match(wideText, /Truncated at the response cap: line 1 alone exceeds the cap; read it with git show [0-9a-f]{40,64}:src\/wide\.txt\./);
+    assert.doesNotMatch(wideText, /\n\n/);
   });
 });
 
@@ -371,6 +376,44 @@ test("B3 usage summarises the local log and reports an empty baseline", async ()
     assert.equal(requested.length, before);
     assert.match(formatIndexResponse(all.value), /^Commands: 3\nEstimated tokens: \d+ total, [\d.]+ mean per command\n/);
     assert.equal((await run("usage", "--since", "yesterday")).value.code, "usage");
+    assert.equal((await run("usage", "--since", "1")).value.code, "usage");
     assert.ok(readFileSync(join(dir, ".ontology-index/token-log.jsonl"), "utf8").length > 0);
+  });
+});
+
+test("show --compact is a usage error", async () => {
+  await withSearchRepo(async ({ run }) => {
+    await run("refresh");
+    assert.equal((await run("show", "--path", "src/a.txt", "--lines", "1-1", "--compact")).value.code, "usage");
+  });
+});
+
+test("a capped search and show check for index edits once", async () => {
+  await withSearchRepo(async ({ write, policy, setPolicy, commit, options, run }) => {
+    write("src/c.txt", "third\n");
+    write("src/d.txt", "fourth\n");
+    write("src/long.txt", Array.from({ length: 40 }, (_, i) => `line ${i + 1} with some text\n`).join(""));
+    setPolicy({ ...policy, responseCap: 120 });
+    options.env.ONTOLOGY_INDEX_CONFIG_REF = commit();
+    await run("refresh");
+    const shimDir = mkdtempSync(join(tmpdir(), "git-shim-"));
+    const logFile = join(shimDir, "calls.log");
+    const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+    writeFileSync(join(shimDir, "git"), `#!/bin/sh\necho "$1" >> "${logFile}"\nexec "${realGit}" "$@"\n`);
+    chmodSync(join(shimDir, "git"), 0o755);
+    const originalPath = process.env.PATH;
+    process.env.PATH = shimDir + ":" + originalPath;
+    try {
+      for (const args of [["search", "--query", "query"], ["show", "--path", "src/long.txt", "--lines", "1-40"]]) {
+        writeFileSync(logFile, "");
+        const { value } = await run(...args);
+        assert.ok(value.truncated);
+        const diffs = readFileSync(logFile, "utf8").split("\n").filter((name) => name === "diff");
+        assert.equal(diffs.length, 2, args[0]);
+      }
+    } finally {
+      process.env.PATH = originalPath;
+      rmSync(shimDir, { recursive: true, force: true });
+    }
   });
 });

@@ -53,19 +53,23 @@ function parseRecord(line) {
 }
 
 async function readLog(path) {
+  let stats;
   try {
-    return await readFile(path, "utf8");
+    stats = await lstat(path);
   } catch (error) {
-    if (error.code === "ENOENT") return "";
+    if (error.code === "ENOENT") return { text: "", ignored: 0 };
     throw error;
   }
+  if (!stats.isFile()) return { text: "", ignored: 1 };
+  return { text: await readFile(path, "utf8"), ignored: 0 };
 }
 
 export async function readTokenRecords(root) {
   const records = [];
   let skipped = 0;
   for (const name of [PREVIOUS_TOKEN_LOG, TOKEN_LOG]) {
-    const text = await readLog(join(root, ".ontology-index", name));
+    const { text, ignored } = await readLog(join(root, ".ontology-index", name));
+    skipped += ignored;
     for (const line of text.split("\n")) {
       if (line.trim() === "") continue;
       const record = parseRecord(line);

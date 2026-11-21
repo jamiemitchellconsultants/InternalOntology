@@ -81,3 +81,12 @@ test("B3 an absent log is an empty baseline", async () => {
     assert.equal(existsSync(join(root, ".ontology-index/token-log.jsonl")), false);
   });
 });
+
+test("B3 a symlinked log file is not read and is counted as skipped", async () => {
+  await withStore(async (root, store) => {
+    writeFileSync(join(root, "elsewhere.jsonl"), JSON.stringify(record("2026-11-21T10:00:00.000Z", "search", 50)) + "\n");
+    symlinkSync(join(root, "elsewhere.jsonl"), join(store, "token-log.jsonl"));
+    const { records, skipped } = await readTokenRecords(root);
+    assert.deepEqual([records, skipped], [[], 1]);
+  });
+});
