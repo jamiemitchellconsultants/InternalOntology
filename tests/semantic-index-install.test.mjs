@@ -8,7 +8,7 @@ import { buildPlan, install, parseCliArgs } from "../bin/install-ontology.mjs";
 import { withTempRepo } from "./helpers/temp-repo.mjs";
 
 test("B13 opt-in installs byte-identical scripts and an ignored checkout store", async () => {
-  const scripts = ["semantic-index.mjs", "semantic-index-source.mjs", "semantic-index-embed.mjs", "semantic-index-store.mjs", "semantic-index-release.mjs", "source-graph-git.mjs"];
+  const scripts = ["semantic-index.mjs", "semantic-index-source.mjs", "semantic-index-embed.mjs", "semantic-index-store.mjs", "semantic-index-release.mjs", "semantic-index-tokens.mjs", "source-graph-git.mjs"];
   const combined = buildPlan({ withSemanticIndex: true, withSourceGraph: true });
   assert.equal(combined.filter(({ dest }) => dest === "scripts/source-graph-git.mjs").length, 1);
   assert.equal(buildPlan({}).some(({ dest }) => dest === "scripts/semantic-index.mjs"), false);
