@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { withTempRepo } from "./helpers/temp-repo.mjs";
-import { runIndexCommand } from "../templates/scripts/semantic-index.mjs";
+import { estimateTokens } from "../templates/scripts/semantic-index-tokens.mjs";
+import { formatIndexResponse, runIndexCommand } from "../templates/scripts/semantic-index.mjs";
 
 test("B1, B2 and B10 report readiness, cite the commit and reuse unchanged vectors", async () => {
   await withTempRepo(async ({ dir, write, git }) => {
@@ -179,5 +180,96 @@ test("B9 an invalid cap is a configuration error that names the setting and make
     assert.equal(result.value.code, "config");
     assert.match(result.value.message, /semanticIndex\.responseCap/);
     assert.deepEqual(requested, []);
+  });
+});
+
+const DEFAULT_KEYS = ["ok", "state", "configurationCommit", "sourceCommit", "indexCommit", "committedOnly", "dirty", "results"];
+const logLines = (dir) => readFileSync(join(dir, ".ontology-index/token-log.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+
+test("B1, B2 and B6 append an estimate to search and keep the existing JSON unchanged", async () => {
+  await withSearchRepo(async ({ dir, first, options, run }) => {
+    options.now = () => new Date("2026-11-21T10:00:00.000Z");
+    await run("refresh");
+    const { value } = await run("search", "--query", "query");
+    const { tokens, ...rest } = value;
+    assert.deepEqual(Object.keys(rest), DEFAULT_KEYS);
+    assert.equal(Object.keys(value).at(-1), "tokens");
+    assert.deepEqual(rest.results.map(({ commit, path }) => [commit, path]), [[first, "src/a.txt"], [first, "src/b.txt"]]);
+    assert.deepEqual(tokens, { estimate: estimateTokens(JSON.stringify(rest)), estimated: true });
+    assert.deepEqual(logLines(dir), [{ time: "2026-11-21T10:00:00.000Z", command: "search", count: 2, tokens: tokens.estimate, truncated: false }]);
+    assert.doesNotMatch(readFileSync(join(dir, ".ontology-index/token-log.jsonl"), "utf8"), /query|original|src\//);
+    assert.equal(Object.hasOwn((await run("status")).value, "tokens"), false);
+  });
+});
+
+test("B2 and B6 text search output gains only a trailing estimate line", async () => {
+  await withSearchRepo(async ({ options, run }) => {
+    await run("refresh");
+    const { value } = await runIndexCommand(["search", "--query", "query"], options);
+    const { tokens, ...rest } = value;
+    const lines = formatIndexResponse(value).split("\n");
+    assert.equal(lines.at(-1), "Estimated tokens: " + tokens.estimate);
+    assert.equal(lines.slice(0, -1).join("\n"), formatIndexResponse(rest));
+    assert.match(lines[1], /^"src\/a\.txt":1-1 1\.0000$/);
+    assert.equal(tokens.estimate, estimateTokens(formatIndexResponse(rest)));
+  });
+});
+
+test("B6 and B7 compact JSON states the commit once and returns the same results", async () => {
+  await withSearchRepo(async ({ first, options, run }) => {
+    await run("refresh");
+    const full = (await run("search", "--query", "query")).value;
+    const compact = (await run("search", "--query", "query", "--compact")).value;
+    assert.equal(compact.indexCommit, first);
+    assert.deepEqual(compact.results, full.results.map(({ commit, ...location }) => location));
+    assert.ok(compact.tokens.estimate < full.tokens.estimate);
+    assert.equal((await runIndexCommand(["search", "--query", "query", "--compact"], options)).value.code, "usage");
+  });
+});
+
+test("B8, B9 and B10 cut search at the trusted cap and say what was omitted", async () => {
+  await withSearchRepo(async ({ dir, write, policy, setPolicy, commit, options, run }) => {
+    write("src/c.txt", "third\n");
+    write("src/d.txt", "fourth\n");
+    setPolicy({ ...policy, responseCap: 120 });
+    options.env.ONTOLOGY_INDEX_CONFIG_REF = commit();
+    options.env.ONTOLOGY_INDEX_RESPONSE_CAP = "100000";
+    await run("refresh");
+    const { exitCode, value } = await run("search", "--query", "query");
+    assert.equal(exitCode, 0);
+    const returned = value.results.length;
+    assert.ok(returned >= 1 && returned < 4, "fixture should truncate between one and three results");
+    assert.deepEqual(value.truncated, { returned, omitted: 4 - returned });
+    const { tokens, tokenLog, ...payload } = value;
+    assert.equal(tokens.estimate, estimateTokens(JSON.stringify(payload)));
+    const { truncated, ...withoutMarker } = payload;
+    assert.ok(estimateTokens(JSON.stringify(withoutMarker)) <= 120);
+    assert.deepEqual(logLines(dir).at(-1), { ...logLines(dir).at(-1), count: returned, truncated: true });
+  });
+});
+
+test("B8 a cap below the fixed fields returns no results and still succeeds", async () => {
+  await withSearchRepo(async ({ policy, setPolicy, commit, options, run }) => {
+    setPolicy({ ...policy, responseCap: 1 });
+    options.env.ONTOLOGY_INDEX_CONFIG_REF = commit();
+    await run("refresh");
+    const { exitCode, value } = await run("search", "--query", "query");
+    assert.equal(exitCode, 0);
+    assert.deepEqual(value.results, []);
+    assert.deepEqual(value.truncated, { returned: 0, omitted: 2 });
+    const text = formatIndexResponse((await runIndexCommand(["search", "--query", "query"], options)).value);
+    assert.match(text, /Truncated at the response cap: 0 results returned, 2 omitted\./);
+  });
+});
+
+test("B2 a failed log write is reported without failing the search", async () => {
+  await withSearchRepo(async ({ dir, run }) => {
+    await run("refresh");
+    mkdirSync(join(dir, ".ontology-index/token-log.jsonl"));
+    const { exitCode, value } = await run("search", "--query", "query");
+    assert.equal(exitCode, 0);
+    assert.equal(typeof value.tokens.estimate, "number");
+    assert.match(value.tokenLog, /^Token log not recorded: /);
+    assert.equal(Object.keys(value).at(-1), "tokenLog");
   });
 });

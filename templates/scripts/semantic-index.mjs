@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { createEmbeddingAdapter } from "./semantic-index-embed.mjs";
 import { createReleaseTransport, downloadIndex, uploadIndex } from "./semantic-index-release.mjs";
 import { hasIndexEdits, listIndexEntries, readIndexPassages, resolveIndexContext } from "./semantic-index-source.mjs";
+import { appendTokenRecord } from "./semantic-index-token-log.mjs";
+import { estimateTokens, fitToCap } from "./semantic-index-tokens.mjs";
 import { indexReadiness, openIndex, withIndexWriter } from "./semantic-index-store.mjs";
 
 const recovery = {
@@ -27,7 +29,7 @@ function parseCommand(argv) {
     if (!match) throw problem("usage", "Expected a named command option.");
     const [, key, inline] = match;
     if (Object.hasOwn(options, key)) throw problem("usage", "Option given more than once: --" + key);
-    if ((key === "json" || (command === "download" && key === "allow-ancestor")) && inline === undefined) {
+    if ((key === "json" || (command === "search" && key === "compact") || (command === "download" && key === "allow-ancestor")) && inline === undefined) {
       options[key] = true;
       continue;
     }
@@ -40,6 +42,7 @@ function parseCommand(argv) {
   if ((command === "download" || command === "upload") && (!options.release || /[\x00-\x20]/.test(options.release))) {
     throw problem("usage", "Provide an explicit GitHub Release tag with --release.");
   }
+  if (options.compact && !options.json) throw problem("usage", "--compact needs --json.");
   const limit = options.limit === undefined ? 5 : Number(options.limit);
   if (options.limit !== undefined && (!/^\d+$/.test(options.limit) || limit < 1 || limit > 100)) {
     throw problem("usage", "--limit must be an integer from 1 to 100.");
@@ -158,7 +161,18 @@ async function search(reader, query, limit, adapter) {
   return best.map(({ position, ...result }) => ({ commit: reader.header.sourceCommit, ...result }));
 }
 
-export async function runIndexCommand(argv, { cwd = process.cwd(), env = process.env, fetchImpl = fetch, releaseTransport } = {}) {
+async function measureAndLog({ total, build, mark, render, cap, root, command, now }) {
+  const kept = fitToCap(total, (n) => render(build(n)), cap);
+  const payload = build(kept);
+  if (kept < total) payload.truncated = mark(kept);
+  const estimate = estimateTokens(render(payload));
+  const response = { ...payload, tokens: { estimate, estimated: true } };
+  const logged = await appendTokenRecord(root, { time: now().toISOString(), command, count: kept, tokens: estimate, truncated: kept < total });
+  if (!logged.recorded) response.tokenLog = logged.message;
+  return response;
+}
+
+export async function runIndexCommand(argv, { cwd = process.cwd(), env = process.env, fetchImpl = fetch, releaseTransport, now = () => new Date() } = {}) {
   try {
     const { command, options, limit } = parseCommand(argv);
     const resolveCurrent = () => resolveIndexContext(cwd, env);
@@ -188,7 +202,15 @@ export async function runIndexCommand(argv, { cwd = process.cwd(), env = process
           const current = resolveCurrent();
           const latest = indexReadiness(reader.header, current);
           if (latest !== "current") throw problem(latest, recovery[latest]);
-          value = { ...describe(current, latest, reader.header.sourceCommit), results };
+          const commit = reader.header.sourceCommit;
+          const rows = options.compact ? results.map(({ commit: _commit, ...location }) => location) : results;
+          const render = options.json ? JSON.stringify : formatIndexResponse;
+          return { exitCode: 0, value: await measureAndLog({
+            total: rows.length,
+            build: (n) => ({ ok: true, ...describe(current, latest, commit), results: rows.slice(0, n) }),
+            mark: (kept) => ({ returned: kept, omitted: rows.length - kept }),
+            render, cap: context.policy.responseCap, root: context.root, command: "search", now,
+          }) };
         }
       } finally {
         await reader?.close();
@@ -202,7 +224,7 @@ export async function runIndexCommand(argv, { cwd = process.cwd(), env = process
   }
 }
 
-function format(value) {
+export function formatIndexResponse(value) {
   if (!value.ok) return value.message;
   const lines = [value.state + (value.indexCommit ? " at " + value.indexCommit : "")];
   if (value.message) lines.push(value.message);
@@ -212,13 +234,18 @@ function format(value) {
   );
   if (value.metrics) lines.push("Source embeddings: " + value.metrics.sourceEmbeddings);
   if (value.asset) lines.push(value.repository + " " + value.release + " " + value.asset + " (" + value.bytes + " bytes)");
+  if (value.truncated) lines.push(
+    "Truncated at the response cap: " + value.truncated.returned + " results returned, " + value.truncated.omitted + " omitted.",
+  );
+  if (value.tokens) lines.push("Estimated tokens: " + value.tokens.estimate);
+  if (value.tokenLog) lines.push(value.tokenLog);
   return lines.join("\n");
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2);
   const { value, exitCode } = await runIndexCommand(argv);
-  const output = argv.includes("--json") ? JSON.stringify(value) : format(value);
+  const output = argv.includes("--json") ? JSON.stringify(value) : formatIndexResponse(value);
   console.log(output);
   process.exitCode = exitCode;
 }
