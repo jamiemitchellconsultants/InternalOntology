@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { measurePilot, rankKeywordLocations } from "../scripts/measure-semantic-index.mjs";
+import { checkCap, compactLocations, compareEstimates, graphFirstSavings, measurePilot, protocolCost, rankKeywordLocations } from "../scripts/measure-semantic-index.mjs";
 import { treeFromRevision } from "../templates/scripts/source-graph-git.mjs";
 import { withTempRepo } from "./helpers/temp-repo.mjs";
 
@@ -48,5 +48,62 @@ test("B3 the pilot CLI's labelled baseline comes from the pinned tree and query"
     const script = fileURLToPath(new URL("../scripts/measure-semantic-index.mjs", import.meta.url));
     const report = JSON.parse(execFileSync(process.execPath, [script, join(dir, "report.json"), dir], { encoding: "utf8" }));
     assert.equal(report.keywordHits, 1);
+  });
+});
+
+test("B4 compares estimates with an independent count and names the largest gap", () => {
+  assert.deepEqual(compareEstimates([{ id: "a", estimate: 110, independent: 100 }, { id: "b", estimate: 90, independent: 100 }, { id: "c", estimate: 130, independent: 100 }]),
+    { samples: 3, meanDifference: 10, meanRelativeDifference: 0.1, largest: { id: "c", difference: 30 } });
+  assert.throws(() => compareEstimates([]), /estimate/i);
+  assert.throws(() => compareEstimates([{ id: "a", estimate: 1, independent: 0 }]), /independent/);
+});
+
+test("B7 compact results give the same hits as default results", () => {
+  const commit = "1".repeat(40);
+  const hit = { commit, path: "src/rule.txt", startLine: 3, endLine: 4 };
+  const locate = () => true;
+  const compact = { indexCommit: commit, results: [{ path: hit.path, startLine: 3, endLine: 4, score: 0.9 }] };
+  const rows = compactLocations(compact);
+  assert.deepEqual(rows, [{ ...hit, score: 0.9 }]);
+  const questions = (semantic) => [{ id: "q", expected: [hit], semantic, keyword: [] }];
+  assert.equal(measurePilot({ commit, locate, questions: questions(rows) }).semanticRate,
+    measurePilot({ commit, locate, questions: questions([{ ...hit, score: 0.9 }]) }).semanticRate);
+});
+
+test("B10 checks the largest response against the cap plus the notice", () => {
+  assert.deepEqual(checkCap({ cap: 100, notice: 20, responses: [{ id: "a", tokens: 90 }, { id: "b", tokens: 115 }] }),
+    { cap: 100, notice: 20, largest: { id: "b", tokens: 115 }, withinCap: true });
+  assert.equal(checkCap({ cap: 100, notice: 20, responses: [{ id: "a", tokens: 121 }] }).withinCap, false);
+});
+
+test("B14 reports the protocol's token change and any rule no longer followed", () => {
+  const report = protocolCost({ previousText: "x".repeat(400), currentText: "x".repeat(300), rules: ["leads", "refresh", "empty"],
+    runs: [{ protocol: "previous", followed: ["leads", "refresh"] }, { protocol: "current", followed: ["leads"] }] });
+  assert.deepEqual(report, { previousTokens: 100, currentTokens: 75, change: -25, dropped: ["refresh"] });
+  assert.throws(() => protocolCost({ previousText: "", currentText: "", rules: ["a"], runs: [{ protocol: "current", followed: ["b"] }] }), /rule/);
+});
+
+test("B16 totals graph-first searches and tokens and lists uncited answers", () => {
+  assert.deepEqual(graphFirstSavings([
+    { id: "a", previous: { searches: 3, tokens: 900 }, current: { searches: 0, tokens: 200 }, citesEvidence: true },
+    { id: "b", previous: { searches: 1, tokens: 300 }, current: { searches: 1, tokens: 300 }, citesEvidence: false },
+  ]), { questions: 2, previous: { searches: 4, tokens: 1200 }, current: { searches: 1, tokens: 500 }, change: { searches: -3, tokens: -700 }, uncited: ["b"] });
+});
+
+test("B4, B10, B14 and B16 the --tokens CLI reports only the supplied sections", async () => {
+  await withTempRepo(async ({ dir, write }) => {
+    write("previous.md", "x".repeat(40));
+    write("current.md", "x".repeat(20));
+    write("tokens.json", JSON.stringify({
+      cap: { cap: 10, notice: 2, responses: [{ id: "a", tokens: 11 }] },
+      protocol: { previous: "previous.md", current: "current.md", rules: ["r"], runs: [{ protocol: "previous", followed: ["r"] }, { protocol: "current", followed: ["r"] }] },
+    }));
+    const script = fileURLToPath(new URL("../scripts/measure-semantic-index.mjs", import.meta.url));
+    const report = JSON.parse(execFileSync(process.execPath, [script, "--tokens", join(dir, "tokens.json")], { encoding: "utf8" }));
+    assert.deepEqual(Object.keys(report), ["cap", "protocol"]);
+    assert.equal(report.cap.withinCap, true);
+    assert.deepEqual(report.protocol, { previousTokens: 10, currentTokens: 5, change: -5, dropped: [] });
+    write("none.json", "{}");
+    assert.throws(() => execFileSync(process.execPath, [script, "--tokens", join(dir, "none.json")], { stdio: "pipe" }), /Supply at least one/);
   });
 });
