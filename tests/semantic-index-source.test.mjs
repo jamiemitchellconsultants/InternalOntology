@@ -3,8 +3,9 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { withTempRepo } from "./helpers/temp-repo.mjs";
-import { resolveIndexContext, listIndexEntries, readIndexPassages, hasIndexEdits, verifyIndexSource } from
+import { resolveIndexContext, listIndexEntries, readIndexPassages, readIndexedLines, hasIndexEdits, verifyIndexSource } from
   "../templates/scripts/semantic-index-source.mjs";
+import { treeFromRevision } from "../templates/scripts/source-graph-git.mjs";
 
 const policy = {
   enabled: true,
@@ -79,5 +80,29 @@ test("B9 and B15 bound committed text and validate the complete passage inventor
     write("src/long.txt", long);
     assert.equal(hasIndexEdits(context), true);
     assert.throws(() => context.sourceTree.readBounded("src/long.txt", 1024), /read limit/);
+  });
+});
+
+test("B5 reads only the cited lines from the commit, not the working tree", async () => {
+  await withTempRepo(async ({ dir, write, git }) => {
+    write("src/a.txt", "one\ntwo\r\nthree");
+    write("src/bin.dat", "A\0B");
+    write("src/private/x.txt", "secret\n");
+    write("other.txt", "outside\n");
+    git("add", ".");
+    git("commit", "-qm", "passages");
+    const tree = treeFromRevision(dir, "HEAD");
+    write("src/a.txt", "changed\n");
+    const scope = { include: ["src/"], exclude: ["src/private/"] };
+    assert.deepEqual(readIndexedLines(tree, scope, { path: "src/a.txt", startLine: 2, endLine: 3 }), ["two\r\n", "three"]);
+    const refused = (path, startLine, endLine, pattern) => assert.throws(
+      () => readIndexedLines(tree, scope, { path, startLine, endLine }),
+      (error) => error.code === "refused" && pattern.test(error.message));
+    refused("other.txt", 1, 1, /outside the approved index scope/);
+    refused("src/private/x.txt", 1, 1, /outside the approved index scope/);
+    refused("src/../other.txt", 1, 1, /outside the approved index scope/);
+    refused("src/missing.txt", 1, 1, /outside the approved index scope/);
+    refused("src/bin.dat", 1, 1, /no indexed text/);
+    refused("src/a.txt", 3, 4, /Lines 3-4 are outside src\/a\.txt, which has 3 lines/);
   });
 });
