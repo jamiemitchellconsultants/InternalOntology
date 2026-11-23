@@ -93,3 +93,30 @@ test("B19: reusing a retired id in a pull request fails the installed check", as
     assert.match(check.err, /design-id-reused/);
   });
 });
+
+test("B22: after a schema upgrade, regenerating the Markdown makes the render check pass again", async () => {
+  await installed(async (repo) => {
+    const render = await import(pathToFileURL(join(repo.dir, "scripts/source-graph-render-test-helpers.mjs")).href);
+    render.seedRenderRepo(repo);
+    const schemaPath = join(repo.dir, "docs/source-knowledge-graph/graph-schema.ttl");
+    const current = readFileSync(schemaPath, "utf8");
+    assert.match(current, /kit:schemaVersion 2 ;/);
+    // The installed checker rejects a version 1 schema file, so the previous kit's text is simulated by a schema that differs in content only.
+    const old = `${current}# schema text from the previous kit\n`;
+    repo.write("docs/source-knowledge-graph/graph-schema.ttl", old);
+    repo.commit("old kit schema");
+    const first = run(repo, "render-source-graph", []);
+    assert.equal(first.code, 0, first.err);
+    repo.commit("render with the old schema");
+    assert.equal(run(repo, "render-source-graph", ["--check"]).code, 0);
+    install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true, force: true });
+    assert.equal(readFileSync(schemaPath, "utf8"), current);
+    repo.commit("upgrade the kit");
+    assert.notEqual(run(repo, "render-source-graph", ["--check"]).code, 0, "stale Markdown must fail the check");
+    const regenerated = run(repo, "render-source-graph", []);
+    assert.equal(regenerated.code, 0, regenerated.err);
+    repo.commit("regenerate the graph Markdown");
+    const check = run(repo, "render-source-graph", ["--check"]);
+    assert.equal(check.code, 0, check.err);
+  });
+});

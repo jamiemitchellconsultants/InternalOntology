@@ -115,6 +115,8 @@ repository, so `--force` replaces them wholesale — a script fix becomes a one-
 points), or the enum test: those are yours, and an upgrade must not silently revert your seeded
 ontology or your reasoned allowlist.
 
+An upgrade that changes the source graph schema leaves the generated graph Markdown stale, so the render check fails until you run `node scripts/render-source-graph.mjs` and commit the result in the same pull request.
+
 If you genuinely want the adopter-owned templates back — starting over, say — pass
 `--reset-content` as well. It is destructive: it discards your ontology content and your allowlist
 back to the blank shipped templates, so use it deliberately, not as a matter of routine.
