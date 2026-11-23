@@ -79,6 +79,7 @@ by rewriting the original.
 | [63](#entry-docs-feature-design-for-semantic-index-token-efficiency) | 2026-11-20 | docs(feature): design for semantic index token efficiency | product | Estimate tokens from characters and log counts only in a local file. Add a passage command that returns only the cited lines from the indexed commit, and a compact JSON form. |
 | [64](#entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency) | 2026-11-21 | docs(feature): implementation plan for semantic index token efficiency | product | Build the estimator and log first so that a baseline exists before anything is tuned. Then add the cap, the passage reader, search, `show`, `usage`, the protocol and the pilot measures. |
 | [65](#entry-design-source-graph-links-to-feature-documents-185) | 2026-11-23 | Design: source graph links to feature documents (#185) | product | Make behaviours and decisions core graph node kinds in schema version 2, identified by `<slug>#B<n>` and by ADR number, with a design status and links to a replacement or successor ([ADR… |
+| [66](#entry-plan-source-graph-links-to-feature-documents-185) | 2026-11-23 | Plan: source graph links to feature documents (#185) | product | Slice the build into five increments, each delivering a set of behaviour ids end to end and leaving the kit releasable, with schema version 2 and older-manifest acceptance first as the walking skeleton. |
 
 ---
 
@@ -1581,6 +1582,30 @@ Make behaviours and decisions core graph node kinds in schema version 2, identif
 ## Consequences
 
 Developers and agents gain behaviour-first and code-first lookups, and amendments get a list of affected code and tests. Adopters upgrade without a failing check and move to schema version 2 only when they record their first behaviour or decision. The checker now reads feature documents and ADRs, so the three behaviour declaration forms become a contract. Whether a link is true remains a maintainer's judgement, retired links are visible but not enforced, persona-skill hooks and a dedicated division view are left for later, and the division import is verified in acceptance rather than changed.
+
+---
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-plan-source-graph-links-to-feature-documents-185"></a>
+
+## Entry 66 — 2026-11-23 — Plan: source graph links to feature documents (#185)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The design for #185 adds behaviour and decision nodes to the source graph, a checker that holds them to their documents, non-failing reports of retired links, two lookups and a protocol change. It touches the vocabulary, checker, reader, renderer, workflow, installer and protocol, and raising the schema version could break every existing graph if it landed in the wrong order. The build may be run by a smaller model from the detailed plan, so each step has to be unambiguous and each increment safe to stop after.
+
+## Decision
+
+Slice the build into five increments, each delivering a set of behaviour ids end to end and leaving the kit releasable, with schema version 2 and older-manifest acceptance first as the walking skeleton. Hold every later increment to one shared, fixed fixture (a lite `payments` feature and two ADRs) so checker, renderer, reader and the installed end-to-end run test the same documents. Rejected: slicing by component (checker, then reader, then protocol), which would leave behaviours half delivered between sessions, and a separate fixture per test file, which would let the documents drift apart.
+
+## Consequences
+
+Work can stop safely after any increment, and adopters can take increment 1 alone without a red check. The fixture's line numbers become part of the test contract, so editing it means updating the tests that cite them. The plan is long because it carries complete tests for a smaller model; the protocol paragraph, runbook section and how-it-works paragraph are fixed copy, and the trial and division import remain for the user phase.
 
 ---
 
