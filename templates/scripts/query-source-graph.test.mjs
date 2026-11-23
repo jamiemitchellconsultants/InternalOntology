@@ -316,6 +316,7 @@ test("B6: code lists the behaviours it implements and the decisions it is docume
     assert.equal(text.code, 0, text.err);
     assert.match(text.out, /^code :node-ledger Ledger$/m);
     assert.match(text.out, /^:node-ledger kit:documented-by :decision-0001$/m);
+    assert.doesNotMatch(text.out, /^:node-ledger Ledger $/m);
   });
 });
 

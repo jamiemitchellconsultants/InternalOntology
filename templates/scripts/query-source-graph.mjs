@@ -191,7 +191,7 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
       }
     }
     for (const m of result.matches || []) { stdout.write(`${m.node.iri} ${m.node.label}\n`); m.assertions.forEach(print); }
-    if (result.node) stdout.write(`${result.node.iri} ${result.node.label} ${result.node.denotes || ""}\n`);
+    if (result.node && command !== "code") stdout.write(`${result.node.iri} ${result.node.label} ${result.node.denotes || ""}\n`);
     (result.edges || []).forEach(print);
     for (const path of result.paths || []) path.forEach((edge, i) => { stdout.write(`step ${i + 1}\n`); print(edge); });
     const empty = (result.matches && !result.matches.length) || (result.edges && !result.edges.length) || (result.paths && !result.paths.length);
