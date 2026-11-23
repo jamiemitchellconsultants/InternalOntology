@@ -254,6 +254,11 @@ test("B3: a behaviour lists its components, symbols and tests with evidence and 
     for (const heading of ["components", "symbols", "tests"]) assert.match(text.out, new RegExp(`^${heading}$`, "m"));
     assert.match(text.out, /^:node-ledger kit:implements :behaviour-payments-B1$/m);
     assert.match(text.out, /\(tentative\)/);
+    const at = (needle) => text.out.indexOf(needle);
+    const symbolsAt = at("\nsymbols\n"), testsAt = at("\ntests\n");
+    assert.ok(symbolsAt > 0 && testsAt > symbolsAt);
+    assert.ok(at(":node-pay kit:implements :behaviour-payments-B1") > symbolsAt && at(":node-pay kit:implements :behaviour-payments-B1") < testsAt);
+    assert.ok(at(":behaviour-payments-B1 kit:tested-by :node-test") > testsAt);
     const json = JSON.parse(run(repo, ["behaviour", "payments#B1", "--json"]).out);
     assert.equal(json.stale, false);
     assert.equal(json.components[0].evidence[0].status, "current");
@@ -279,7 +284,7 @@ test("B4: a behaviour with no links says so and prints coverage, never that it i
   await designRepo(async (repo) => {
     const text = run(repo, ["behaviour", "payments#B2"]);
     assert.equal(text.code, 0, text.err);
-    assert.match(text.out, /^No graph assertion links payments#B2; that does not mean the behaviour is unimplemented or untested\.$/m);
+    assert.match(text.out, /^No component, symbol or test is linked to payments#B2; that does not mean the behaviour is unimplemented or untested\.$/m);
     assert.match(text.out, /^src\/\*\*: kit:covered$/m);
   });
 });
@@ -362,5 +367,92 @@ test("B24: the behaviour and code lookups make no network call", async () => {
       assert.equal(run(repo, ["behaviour", "payments#B1"]).code, 0);
       assert.equal(run(repo, ["code", ":node-ledger"]).code, 0);
     } finally { globalThis.fetch = original; }
+  });
+});
+
+const containsTwice = block(":assertion-v2", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-e5"],
+  ["kit:object", ":node-impl"], ["kit:relationship", "kit:contains"], ["kit:subject", ":node-ledger"]]);
+const selfContains = block(":assertion-v3", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-e5"],
+  ["kit:object", ":node-ledger"], ["kit:relationship", "kit:contains"], ["kit:subject", ":node-ledger"]]);
+
+test("C4: code lists one via entry per distinct containing component, keeping the first assertion", async () => {
+  await designRepo(async (repo, { graph }) => {
+    const result = codeLinks(graph, "node-impl");
+    assert.deepEqual(result.via.map((v) => v.component.iri), [":node-ledger"]);
+    assert.equal(run(repo, ["code", "node-impl"]).out.match(/^via component :node-ledger Ledger$/gm).length, 1);
+  }, (spec) => { spec.assertions.push(contains, containsTwice); });
+});
+
+test("C4: a component never lists itself as its own containing component", async () => {
+  await designRepo(async (repo, { graph }) => {
+    assert.deepEqual(codeLinks(graph, ":node-ledger").via, []);
+    assert.doesNotMatch(run(repo, ["code", ":node-ledger"]).out, /^via component/m);
+  }, (spec) => { spec.assertions.push(selfContains); });
+});
+
+test("C5: a component with no design links prints the coverage inventory", async () => {
+  await designRepo(async (repo) => {
+    const out = run(repo, ["code", ":node-bare"]).out;
+    assert.match(out, /^No behaviour or decision is linked to :node-bare, directly or via its component; that does not mean the code has no reason to exist\.$/m);
+    assert.match(out, /^src\/\*\*: kit:covered$/m);
+    assert.match(out, /^docker-compose\.yml: kit:unknown/m);
+  }, (spec) => { spec.nodes.push(block(":node-bare", "kit:GraphNode", [["kit:kind", "kit:component"], ["rdfs:label", S("Bare")]])); });
+});
+
+test("C5: a test node with no links prints the coverage for its label path", async () => {
+  await designRepo(async (repo, { graph }) => {
+    const label = codeLinks(graph, ":node-test").node.label;
+    const out = run(repo, ["code", ":node-test"]).out;
+    assert.match(out, /^No behaviour or decision is linked to :node-test/m);
+    assert.ok(out.split("\n").includes(`${label}: kit:covered`), out);
+  });
+});
+
+test("C5: a behaviour without a design status prints (no status)", async () => {
+  await designRepo(async (repo) => {
+    assert.match(run(repo, ["behaviour", "payments#B2"]).out, /^behaviour :behaviour-payments-B2 payments#B2 Refund a payment \(no status\)$/m);
+  }, (spec) => {
+    spec.nodes = spec.nodes.map((n) => (n.subject === ":behaviour-payments-B2"
+      ? block(":behaviour-payments-B2", "kit:GraphNode", [["kit:evidence", ":evidence-d2"], ["kit:kind", "kit:behaviour"], ["rdfs:label", S("payments#B2 Refund a payment")]]) : n));
+  });
+});
+
+const otherLink = block(":assertion-x1", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-d4"],
+  ["kit:object", ":decision-0001"], ["kit:relationship", "kit:documented-by"], ["kit:subject", ":behaviour-payments-B2"]]);
+
+test("C6: a behaviour lists what it replaces and every other link, annotated", async () => {
+  await designRepo(async (repo, { graph, tree }) => {
+    const b2 = behaviourLinks(graph, tree, "payments#B2");
+    assert.deepEqual(b2.replaces.map((a) => a.iri), [":assertion-d1"]);
+    assert.deepEqual(b2.other.map((a) => a.iri), [":assertion-x1"]);
+    const b1 = behaviourLinks(graph, tree, "payments#B1");
+    assert.deepEqual([b1.replaces, b1.other], [[], []]);
+    const b3 = behaviourLinks(graph, tree, "payments#B3");
+    assert.deepEqual([b3.replaces, b3.other], [[], []]);
+    const text = run(repo, ["behaviour", "payments#B2"]).out;
+    assert.match(text, /^replaces$/m);
+    assert.match(text, /^:behaviour-payments-B3 kit:replaced-by :behaviour-payments-B2$/m);
+    assert.match(text, /^other$/m);
+    assert.match(text, /^:behaviour-payments-B2 kit:documented-by :decision-0001$/m);
+    assert.doesNotMatch(run(repo, ["behaviour", "payments#B1"]).out, /^(replaces|other)$/m);
+    const json = JSON.parse(run(repo, ["behaviour", "payments#B2", "--json"]).out);
+    assert.equal(json.other[0].evidence[0].status, "current");
+    assert.equal(json.replaces[0].evidence[0].status, "current");
+  }, (spec) => { spec.assertions.push(otherLink); });
+});
+
+test("C6: the gap message prints when components, symbols and tests are all empty", async () => {
+  await designRepo(async (repo) => {
+    assert.match(run(repo, ["behaviour", "payments#B2"]).out, /^No component, symbol or test is linked to payments#B2; that does not mean the behaviour is unimplemented or untested\.$/m);
+    assert.doesNotMatch(run(repo, ["behaviour", "payments#B1"]).out, /No component, symbol or test/);
+  });
+});
+
+test("C3: lookups never reorder the arrays the graph hands out", async () => {
+  await designRepo(async (repo, { graph, tree }) => {
+    const wrapped = { ...graph, resources: graph.resources, byType: (t) => Object.freeze([...graph.byType(t)].reverse()) };
+    assert.doesNotThrow(() => behaviourLinks(wrapped, tree, "payments#B1"));
+    assert.doesNotThrow(() => codeLinks(wrapped, ":node-ledger"));
+    assert.deepEqual(behaviourLinks(wrapped, tree, "payments#B1"), behaviourLinks(graph, tree, "payments#B1"));
   });
 });
