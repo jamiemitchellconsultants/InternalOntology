@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkTree, loadCheckConfig, CheckSetupError } from "./check-source-graph.mjs";
 import { treeFromRevision } from "./source-graph-git.mjs";
-import { withScratchRepo, widgets, writeGraph, find, setPair, dropPair, block, S, ttl, blobId, ROOT } from "./source-graph-test-helpers.mjs";
+import { withScratchRepo, widgets, writeGraph, find, setPair, dropPair, block, S, ttl, blobId, ROOT, addDesignDocs } from "./source-graph-test-helpers.mjs";
 
 async function run(mutate, language = "csharp") {
   let findings;
@@ -465,4 +465,8 @@ test("B22: kit:designStatus and node kit:evidence are rejected on other kinds", 
   const rules = findings.filter((f) => f.subject === ":node-ledger").map((f) => f.rule);
   assert.ok(rules.includes("design-status"), JSON.stringify(findings));
   assert.ok(rules.includes("design-evidence"), JSON.stringify(findings));
+});
+
+test("the design fixture is structurally valid in both modes", async () => {
+  for (const mode of ["lite", "full"]) assert.deepEqual(await run((s, r) => { addDesignDocs(r, s, { mode }); }), [], mode);
 });
