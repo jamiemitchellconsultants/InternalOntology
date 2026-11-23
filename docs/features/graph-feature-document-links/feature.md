@@ -113,3 +113,85 @@ These behaviours add two node kinds to the `SourceKnowledgeGraph`, for a `Featur
 ### Terms
 
 `FeatureBehaviour`, `BehaviourReference`, `BehaviourStatus`, `DesignDecision`, `DecisionStatus`, `RetiredDesignLink`, `FindBehaviourLinks` and `FindCodeDesignLinks`, added to [the ontology](../../ontology.md).
+
+## Architect: structure
+
+Behaviours and decisions join the `SourceKnowledgeGraph` as core kinds in schema version 2. A new kit-owned `DesignDocumentReader` reads feature documents and ADRs, so `GraphChecker` can hold behaviour and decision nodes to their documents and `GraphReader` can answer the two new lookups. Everything stays offline and deterministic; agents write the entries under the `GraphAgentProtocol`, and maintainers judge whether each link is true.
+
+### Components
+
+| Component | Responsibility | Behaviours |
+| --- | --- | --- |
+| `GraphVocabulary` (`CORE` in `source-graph-model.mjs`, rendered as `graph-schema.ttl`) | Schema version 2: kinds `kit:behaviour` and `kit:decision`; node predicate `kit:designStatus` with `BehaviourStatus` and `DecisionStatus` values; relationships `kit:replaced-by` and `kit:superseded-by`. Each core value is tagged with the version that introduced it ([ADR 0041](../../adr/0041-behaviour-and-decision-kinds-in-schema-version-2.md), [ADR 0042](../../adr/0042-accept-older-graph-manifests.md)). | B1, B5, B17, B18, B22 |
+| `DesignDocumentReader` (new kit-owned script) | From a Git tree: finds a feature's behaviours file by mode; finds behaviour declarations in the three bold `B<n>` forms and under a Retired behaviours heading; reads an ADR's title and the first word of its Status line; maps node IRIs to a `BehaviourReference` or ADR number and back ([ADR 0043](../../adr/0043-check-design-nodes-against-their-documents.md)). | B1, B2, B4, B5, B17, B18, B19, B21 |
+| `GraphChecker` | Accepts manifests from version 1 to the core version and fails a value newer than the manifest; validates `kit:designStatus` on the two kinds; through the `DesignDocumentReader`, fails missing, reused or mislabelled ids, a status that differs from its document, and two behaviours files for one feature; lists each `RetiredDesignLink` in a non-failing `reports` list ([ADR 0044](../../adr/0044-report-retired-design-links-without-failing.md)). | B2, B5, B17, B18, B19, B20, B21, B22, B24 |
+| `GraphCheckWorkflow` | Appends the checker's reports to the job's step summary; still read-only, with no model or secret. | B20, B24 |
+| `GraphReader` | New commands `behaviour <slug>#B<n>` (`FindBehaviourLinks`) and `code <node>` (`FindCodeDesignLinks`) beside `concept`, with the existing text, `--json`, tentative and `STALE` conventions and coverage output on empty answers; `code` follows one `kit:contains` up to the containing component. | B3, B4, B6, B7, B24 |
+| `GraphRenderer` | Readable phrases for `kit:replaced-by` and `kit:superseded-by`, and each behaviour or decision node's status beside its label. | B17, B18, B22 |
+| `GraphAgentProtocol` | One added paragraph: write each node and link in the same change as what it describes, with the evidence rules of B9–B12; record only what exists; propose narrow coverage; raise the manifest version with the first version 2 value; list design links and reports in the pull request body. | B8, B9, B10, B11, B12, B13, B14, B15, B16, B20, B21 |
+| `Installer` | Installs the new script and the version 2 schema as kit-owned files; never edits the adopter's manifest or `OntologyConfig`. | B16, B22 |
+| `OntologyConfig` and `GraphCoverage` (adopter data) | Hold the narrow selected-document selectors and covered entries an agent proposes for the files that carry design evidence. | B14 |
+| Downstream consumer (division-ontology) | Unchanged; its generic import reads the new nodes and assertions like any others. | B23 |
+
+### Structure
+
+```mermaid
+flowchart LR
+  Docs[Feature documents and docs/adr] --> DDR[DesignDocumentReader]
+  Agent[Agent under GraphAgentProtocol] --> Graph[SourceKnowledgeGraph v2]
+  Docs --> Agent
+  Code[Code and tests] --> Agent
+  Graph --> Checker[GraphChecker]
+  DDR --> Checker
+  Vocab[GraphVocabulary v2] --> Checker
+  Checker --> CI[GraphCheckWorkflow: findings fail, reports summarised]
+  Graph --> Reader[GraphReader: behaviour, code, concept]
+  DDR --> Reader
+  Graph --> Renderer[GraphRenderer]
+  Graph --> Division[Division import, unchanged]
+```
+
+A behaviour node is `:behaviour-<slug>-B<n>`, of kind `kit:behaviour`, labelled `<slug>#B<n> Title`, with `kit:designStatus` and one `GraphEvidence` on its declaration (or its Retired behaviours entry). A decision node is `:decision-<NNNN>`, of kind `kit:decision`, labelled `ADR NNNN Title`, with `kit:designStatus` and evidence on its title and Status lines. Links reuse the core relationships: component or symbol `kit:implements` behaviour, behaviour `kit:tested-by` test, component or symbol `kit:documented-by` decision, plus the new `kit:replaced-by` and `kit:superseded-by`. A component's `kit:implements` cites the traceability row and the component's code; the checker confirms both exist and does not parse the row.
+
+### Deployment and runtime
+
+- Kit upgrade: the installer replaces the kit-owned scripts, workflow and `graph-schema.ttl` (version 2) and adds `DesignDocumentReader`. No adopter file changes, and an existing version 1 graph keeps passing because older manifests are accepted.
+- First use in a repository: the agent's change that records the first behaviour or decision node also raises the manifest's `kit:schemaVersion` to 2 and proposes the narrow coverage and evidence selectors; the maintainer reviews both in that pull request.
+- Runtime: Node.js and Git only, as today. The checker and reader read local Git objects, the graph, the ontology and the feature documents; no model call, network or secret. The check workflow keeps `contents: read` and adds only a step-summary write, which needs no permission.
+- Trial: reinstall the kit in JEPA-Speech, refresh its persona skills from claude-plugins, then record its `zener-shape-tracing-motor-test` behaviours and its ADRs and follow outcomes 1–5. The division import is checked by importing the trial graph at a pinned commit.
+
+### Traceability
+
+| Behaviour | Components |
+| --- | --- |
+| B1 | `GraphVocabulary`, `DesignDocumentReader`, `GraphChecker` |
+| B2 | `DesignDocumentReader`, `GraphChecker` |
+| B3 | `GraphReader` |
+| B4 | `GraphReader`, `DesignDocumentReader` |
+| B5 | `GraphVocabulary`, `DesignDocumentReader`, `GraphChecker` |
+| B6 | `GraphReader` |
+| B7 | `GraphReader` |
+| B8 | `GraphAgentProtocol` |
+| B9 | `GraphAgentProtocol`, `GraphChecker` (evidence exists) |
+| B10 | `GraphAgentProtocol` |
+| B11 | `GraphAgentProtocol` |
+| B12 | `GraphAgentProtocol` |
+| B13 | `GraphAgentProtocol` |
+| B14 | `GraphAgentProtocol`, `OntologyConfig` and `GraphCoverage` |
+| B15 | `GraphAgentProtocol` |
+| B16 | `GraphAgentProtocol`, `Installer` |
+| B17 | `GraphVocabulary`, `DesignDocumentReader`, `GraphChecker`, `GraphRenderer`, `GraphAgentProtocol` |
+| B18 | `GraphVocabulary`, `DesignDocumentReader`, `GraphChecker`, `GraphRenderer` |
+| B19 | `DesignDocumentReader`, `GraphChecker` |
+| B20 | `GraphChecker`, `GraphCheckWorkflow`, `GraphAgentProtocol` |
+| B21 | `DesignDocumentReader`, `GraphChecker`, `GraphAgentProtocol` |
+| B22 | `GraphVocabulary`, `GraphChecker`, `GraphRenderer`, `Installer` |
+| B23 | Downstream consumer (division-ontology) |
+| B24 | `GraphChecker`, `GraphCheckWorkflow`, `GraphReader` |
+
+### Decisions
+
+- [ADR 0041](../../adr/0041-behaviour-and-decision-kinds-in-schema-version-2.md) — add behaviour and decision kinds in graph schema version 2 (answers U11).
+- [ADR 0042](../../adr/0042-accept-older-graph-manifests.md) — accept graph manifests at an older schema version.
+- [ADR 0043](../../adr/0043-check-design-nodes-against-their-documents.md) — check behaviour and decision nodes against their documents, without parsing traceability rows.
+- [ADR 0044](../../adr/0044-report-retired-design-links-without-failing.md) — report retired design links without failing the check.

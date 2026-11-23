@@ -55,6 +55,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `GraphCheckWorkflow` | kit-owned pull-request and default-branch workflow | Runs `GraphChecker` with read-only access to the checked-out Git history and publishes a stable check result. | Reads graph data and Git trees after checkout; has no model, secret, or post-checkout network requirement. |
 | `GraphRenderer` | kit-owned local Markdown generation script | Renders every current graph claim, evidence reference, basis and coverage declaration into a deterministic human-readable document after validating one Git input snapshot. | Reads `SourceKnowledgeGraph`, `OntologyConfig` and local Git objects through the existing graph model and `GraphChecker`; writes only the generated Markdown view or checks its freshness. |
 | `GraphRenderWorkflow` | kit-owned pull-request and default-branch workflow | Regenerates the expected readable graph view and checks that the same revision contains matching Markdown, so maintainers can review it with the source changes. | Runs `GraphRenderer` with read-only repository permission; publishes a freshness result and makes no commits or changes to canonical Turtle. |
+| `DesignDocumentReader` | kit-owned local script | Finds a feature's behaviours file, its `FeatureBehaviour` declarations and Retired behaviours entries, and a `DesignDecision`'s title and status, in a Git tree. | Reads adopter-owned feature documents and ADRs from local Git objects; used by `GraphChecker` and `GraphReader`; never writes. |
 
 ---
 
@@ -219,6 +220,8 @@ enum lock test catches.
 | `FeatureBehaviour` | replaced by | `FeatureBehaviour` | many → 0 or 1 |
 | `DesignDecision` | superseded by | `DesignDecision` | many → 0 or 1 |
 | `GraphChecker` | reports | `RetiredDesignLink` | 1 → 0 or many |
+| `GraphChecker` | reads documents through | `DesignDocumentReader` | many → 1 |
+| `GraphReader` | reads documents through | `DesignDocumentReader` | many → 1 |
 
 ---
 
