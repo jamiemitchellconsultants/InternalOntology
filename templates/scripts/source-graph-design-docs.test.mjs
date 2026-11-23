@@ -159,6 +159,14 @@ test("A6: a title may contain balanced inner bold", () => {
   assert.equal(readBehaviours("**B3 — Plain.** and **more** text.")[0].title, "Plain");
 });
 
+test("E2: a bold run that never balances closes at the last bold marker on the line", () => {
+  assert.deepEqual(readBehaviours("**B1 — Use **bold here.** Body.").map((d) => [d.id, d.title]), [[1, "Use **bold here"]]);
+});
+
+test("E3: nested bold is matched by depth counting", () => {
+  assert.equal(readBehaviours("**B1 — A **b **c** d** e.** Body.")[0].title, "A **b **c** d** e");
+});
+
 test("A7: in lite mode a level-2 Retired behaviours section after the Analyst section is still analyst and retired", () => {
   const text = ["## Analyst: behaviours", "", "**B1 — Live.**", "", "## Retired behaviours", "", "**B2 — Old.** Replaced by B1.", "", "## Architect: structure", "", "**B3 — Not a behaviour.**"].join("\n");
   assert.deepEqual(readBehaviours(text, { lite: true }).map((d) => [d.id, d.retired, d.replacement]), [[1, false, null], [2, true, 1]]);

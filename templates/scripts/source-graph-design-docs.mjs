@@ -19,16 +19,18 @@ function declaration(line) {
   const m = DECLARATION.exec(line);
   if (!m) return null;
   const rest = line.slice(m[0].length);
-  let depth = 1;
+  let depth = 1, last = -1;
+  const finish = (j) => {
+    const raw = rest.slice(0, j), title = raw.length > 1 && raw.endsWith(".") ? raw.slice(0, -1) : raw;
+    return title ? { id: Number(m[1]), title } : null;
+  };
   for (let j = rest.indexOf("**"); j !== -1; j = rest.indexOf("**", j + 2)) {
     const opens = (j === 0 || /\s/.test(rest[j - 1])) && j + 2 < rest.length && !/\s/.test(rest[j + 2]);
     depth += opens ? 1 : -1;
-    if (depth === 0) {
-      const raw = rest.slice(0, j), title = raw.length > 1 && raw.endsWith(".") ? raw.slice(0, -1) : raw;
-      return title ? { id: Number(m[1]), title } : null;
-    }
+    last = j;
+    if (depth === 0) return finish(j);
   }
-  return null;
+  return last === -1 ? null : finish(last);
 }
 
 export function readBehaviours(text, { lite = false } = {}) {

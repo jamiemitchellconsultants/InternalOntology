@@ -448,9 +448,21 @@ test("C6: the gap message prints when components, symbols and tests are all empt
   });
 });
 
+test("E4: with two replaced-by links the first by assertion IRI is the replacement and the rest are listed under other", async () => {
+  await designRepo(async (repo, { graph, tree }) => {
+    const b3 = behaviourLinks(graph, tree, "payments#B3");
+    assert.equal(b3.replacement?.iri, ":behaviour-payments-B1");
+    assert.deepEqual(b3.other.map((a) => a.iri), [":assertion-d1"]);
+    const b2 = behaviourLinks(graph, tree, "payments#B2");
+    assert.equal(b2.replacement, null);
+  }, (spec) => { spec.assertions.push(block(":assertion-a0", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-d4"],
+    ["kit:object", ":behaviour-payments-B1"], ["kit:relationship", "kit:replaced-by"], ["kit:subject", ":behaviour-payments-B3"]])); });
+});
+
 test("C3: lookups never reorder the arrays the graph hands out", async () => {
   await designRepo(async (repo, { graph, tree }) => {
-    const wrapped = { ...graph, resources: graph.resources, byType: (t) => Object.freeze([...graph.byType(t)].reverse()) };
+    const frozen = new Map();
+    const wrapped = { ...graph, resources: graph.resources, byType: (t) => { if (!frozen.has(t)) frozen.set(t, Object.freeze([...graph.byType(t)].reverse())); return frozen.get(t); } };
     assert.doesNotThrow(() => behaviourLinks(wrapped, tree, "payments#B1"));
     assert.doesNotThrow(() => codeLinks(wrapped, ":node-ledger"));
     assert.deepEqual(behaviourLinks(wrapped, tree, "payments#B1"), behaviourLinks(graph, tree, "payments#B1"));

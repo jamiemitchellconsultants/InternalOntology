@@ -111,7 +111,7 @@ export function checkTree({ tree, config, graph = loadGraph(tree, config) }) {
       if (validPath && resolveCoverage(graph, path).status !== "kit:covered") add(r, "evidence-out-of-coverage", `${path} is outside coverage`);
       if (validPath && !(config.sourceGraph.evidence[ROLE_KEYS[role]] || []).some((s) => matchSelector(s, path))) add(r, "evidence-role-mismatch", `${path} does not match ${role}`);
       const badRange = !Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start;
-      if (badRange || (validPath && tree.has(path) && end > lineCount(tree.read(path)))) add(r, "evidence-range", `${path} has invalid line range ${start}-${end}`);
+      if (badRange || (validPath && tree.has(path) && end > lineCount(tree.read(path)))) add(r, "evidence-range", (Number.isFinite(start) && Number.isFinite(end) ? `${path} has invalid line range ${start}-${end}` : `${path} has no valid line range`));
       if (validPath && tree.has(path)) {
         if (blob !== tree.blobId(path)) add(r, "evidence-blob-mismatch", `${path} expected blob ${tree.blobId(path)}, cited ${blob}`);
       }

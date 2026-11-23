@@ -77,14 +77,15 @@ export function behaviourLinks(graph, tree, reference, parsed = parseBehaviourRe
   const assertions = graph.byType("kit:GraphAssertion");
   const group = (relationship, side, kinds) => sorted(assertions.filter((a) => val(a, "kit:relationship") === relationship && val(a, side) === iri)
     .map((a) => assertionView(graph, a)).filter((a) => kinds.includes((side === "kit:object" ? a.subject : a.object)?.kind)));
-  const replaced = assertions.find((a) => val(a, "kit:relationship") === "kit:replaced-by" && val(a, "kit:subject") === iri);
+  const replacedBy = sortedCopy(assertions.filter((a) => val(a, "kit:relationship") === "kit:replaced-by" && val(a, "kit:subject") === iri), byIri);
+  const replaced = replacedBy[0];
   const testedBy = sorted(assertions.filter((a) => val(a, "kit:relationship") === "kit:tested-by" && val(a, "kit:subject") === iri).map((a) => assertionView(graph, a)));
   const components = group("kit:implements", "kit:object", ["kit:component", "kit:system"]);
   const symbols = group("kit:implements", "kit:object", ["kit:source-symbol", "kit:source-file"]);
   const replaces = sorted(assertions.filter((a) => val(a, "kit:relationship") === "kit:replaced-by" && val(a, "kit:object") === iri).map((a) => assertionView(graph, a)));
   const shown = new Set([...components, ...symbols, ...testedBy, ...replaces].map((a) => a.iri));
   const other = sorted(assertions.filter((a) => (val(a, "kit:subject") === iri || val(a, "kit:object") === iri) && !shown.has(a.iri)
-    && !(val(a, "kit:relationship") === "kit:replaced-by" && val(a, "kit:subject") === iri)).map((a) => assertionView(graph, a)));
+    && a !== replaced).map((a) => assertionView(graph, a)));
   return { reference, behaviour: nodeView(node), replacement: replaced ? nodeView(graph.resources.get(val(replaced, "kit:object"))) ?? null : null, declared: null,
     components, symbols, tests: testedBy, replaces, other };
 }

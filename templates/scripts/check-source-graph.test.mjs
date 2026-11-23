@@ -21,8 +21,17 @@ async function run(mutate, language = "csharp") {
 
 const rulesOf = (findings) => new Set(findings.map((f) => f.rule));
 
+test("E6: a missing line bound gives a range message without NaN", async () => {
+  for (const key of ["kit:startLine", "kit:endLine"]) {
+    const findings = await run((s) => dropPair(find(s.evidence, ":evidence-e1"), key));
+    const f = findings.find((x) => x.rule === "evidence-range" && x.subject === ":evidence-e1");
+    assert.ok(f, key);
+    assert.match(f.message, /^src\/\S+ has no valid line range$/, f.message);
+  }
+});
+
 test("B22: a version 1 manifest that uses no version 2 value passes against the version 2 schema", async () => {
-  assert.deepEqual(await run((s) => { s.version = 1; assert.equal(s.version, 1); }), []);
+  assert.deepEqual(await run((s) => { assert.equal(s.version, 1); }), []);
 });
 
 test("B2: the version 2 design fixture has no schema-version or schema-version-too-old findings", async () => {
@@ -827,7 +836,7 @@ test("B17: a node with several replacement links reports the first by assertion 
   });
 });
 
-test("B12: main reports exactly what checkRevision and retiredDesignLinks return", async () => {
+test("B12: --json findings and reports equal checkRevision and retiredDesignLinks", async () => {
   await withScratchRepo(async (repo) => {
     const spec = widgets(repo);
     addDesignDocs(repo, spec);
