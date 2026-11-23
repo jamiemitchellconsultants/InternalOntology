@@ -81,6 +81,7 @@ by rewriting the original.
 | [65](#entry-design-source-graph-links-to-feature-documents-185) | 2026-11-23 | Design: source graph links to feature documents (#185) | product | Make behaviours and decisions core graph node kinds in schema version 2, identified by `<slug>#B<n>` and by ADR number, with a design status and links to a replacement or successor ([ADR… |
 | [66](#entry-plan-source-graph-links-to-feature-documents-185) | 2026-11-23 | Plan: source graph links to feature documents (#185) | product | Slice the build into five increments, each delivering a set of behaviour ids end to end and leaving the kit releasable, with schema version 2 and older-manifest acceptance first as the walking skeleton. |
 | [67](#entry-amend-the-division-import-design-for-b23-185) | 2026-11-23 | Amend the division import design for B23 (#185) | product | Keep the schema 2 source graph and exercise the division's C4 snapshot loader. Division-ontology delivers compatibility as a separate prerequisite. |
+| [68](#entry-amend-the-b23-implementation-plan-for-division-imports-185) | 2026-11-23 | Amend the B23 implementation plan for division imports (#185) | product | Preserve the five kit increments and their completed tasks. After this plan merges, integrate the reviewed design and plan into the existing build branch with a normal merge. |
 
 ---
 
@@ -1631,3 +1632,23 @@ Keep the schema 2 source graph and exercise the division's C4 snapshot loader. D
 ## Consequences
 
 B23 acceptance waits for a verified compatible importer. Its acceptance record pins the importer revision, catalog commit and trial graph commit. The developer plan needs to replace its assumption that the current importer suffices. The kit producer and its existing checks and lookups stay independent of division delivery.
+
+---
+
+<a id="entry-amend-the-b23-implementation-plan-for-division-imports-185"></a>
+
+## Entry 68 — 2026-11-23 — Amend the B23 implementation plan for division imports (#185)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The original plan assumed the existing division importer could read the trial graph. ADR 0045 records the schema and evidence incompatibilities and the boundary between the kit producer and the division importer. [ADR 0045](https://github.com/jamiemitchellconsultants/InternalOntology/blob/c5e834607475cccd6144042677ab9f18e41c1c5d/docs/adr/0045-require-a-compatible-division-importer.md)
+
+## Decision
+
+Preserve the five kit increments and their completed tasks. After this plan merges, integrate the reviewed design and plan into the existing build branch with a normal merge. USER acceptance uses a separately delivered compatible importer and the real division C4 snapshot loader. It compares preserved design nodes, assertions and evidence with the pinned source graph, and traverses imported links from a behaviour to code.
+
+## Consequences
+
+The build branch can be integrated and verified while importer delivery is pending. B23 stays pending until acceptance verifies the importer, catalog and trial graph revisions together. The installed kit's end-to-end test establishes the producer behaviour.
