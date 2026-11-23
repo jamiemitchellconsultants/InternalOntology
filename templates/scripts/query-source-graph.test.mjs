@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { openGraph, search, neighbors, findPaths, coverageReport, annotate, main, resolveTerm, conceptImplementations } from "./query-source-graph.mjs";
+import { openGraph, search, neighbors, findPaths, coverageReport, annotate, main, resolveTerm, conceptImplementations, behaviourLinks } from "./query-source-graph.mjs";
 import { treeFromRevision } from "./source-graph-git.mjs";
-import { withScratchRepo, widgets, block, S, writeGraph } from "./source-graph-test-helpers.mjs";
+import { withScratchRepo, widgets, block, S, writeGraph, addDesignDocs } from "./source-graph-test-helpers.mjs";
 
 // The graph is parsed into memory before the scratch repository is removed, so tests that only
 // query the graph can use it afterwards. Tests that run git or the command stay inside the callback.
@@ -221,5 +221,84 @@ test("B24: the lookup makes no network call", async () => {
     const original = globalThis.fetch;
     globalThis.fetch = () => { throw new Error("network call"); };
     try { assert.equal(run(repo, ["concept", "Invoice"]).code, 0); } finally { globalThis.fetch = original; }
+  });
+});
+
+async function designRepo(body, extra) {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    extra?.(spec, repo);
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    await body(repo, openGraph(repo.dir, "HEAD"));
+  });
+}
+const symbolLink = block(":assertion-s1", "kit:GraphAssertion", [["kit:basis", "kit:inferred"], ["kit:evidence", ":evidence-d1"], ["kit:evidence", ":evidence-e5"],
+  ["kit:object", ":behaviour-payments-B1"], ["kit:relationship", "kit:implements"], ["kit:subject", ":node-pay"]]);
+
+test("B3: a behaviour lists its components, symbols and tests with evidence and status", async () => {
+  await designRepo(async (repo, { graph, tree }) => {
+    const result = behaviourLinks(graph, tree, "payments#B1");
+    assert.equal(result.behaviour.iri, ":behaviour-payments-B1");
+    assert.equal(result.behaviour.designStatus, "kit:current");
+    assert.equal(result.replacement, null);
+    assert.equal(result.declared, null);
+    assert.deepEqual(result.components.map((a) => [a.iri, a.subject.iri]), [[":assertion-d3", ":node-ledger"]]);
+    assert.equal(result.components[0].evidence.length, 2);
+    assert.deepEqual(result.symbols.map((a) => [a.iri, a.tentative]), [[":assertion-s1", true]]);
+    assert.deepEqual(result.tests.map((a) => [a.iri, a.object.iri]), [[":assertion-d5", ":node-test"]]);
+    const text = run(repo, ["behaviour", "payments#B1"]);
+    assert.equal(text.code, 0, text.err);
+    assert.match(text.out, /^behaviour :behaviour-payments-B1 payments#B1 Pay an invoice \(current\)$/m);
+    for (const heading of ["components", "symbols", "tests"]) assert.match(text.out, new RegExp(`^${heading}$`, "m"));
+    assert.match(text.out, /^:node-ledger kit:implements :behaviour-payments-B1$/m);
+    assert.match(text.out, /\(tentative\)/);
+    const json = JSON.parse(run(repo, ["behaviour", "payments#B1", "--json"]).out);
+    assert.equal(json.stale, false);
+    assert.equal(json.components[0].evidence[0].status, "current");
+  }, (spec) => {
+    spec.nodes.push(block(":node-pay", "kit:GraphNode", [["kit:kind", "kit:source-symbol"], ["rdfs:label", S("PayInvoice")]]));
+    spec.assertions.push(symbolLink);
+  });
+});
+
+test("B3: a retired behaviour shows its status and replacement", async () => {
+  await designRepo(async (repo, { graph, tree }) => {
+    const result = behaviourLinks(graph, tree, "payments#B3");
+    assert.equal(result.behaviour.designStatus, "kit:retired");
+    assert.equal(result.replacement.iri, ":behaviour-payments-B2");
+    assert.deepEqual(result.components.map((a) => a.iri), [":assertion-d4"]);
+    const text = run(repo, ["behaviour", "payments#B3"]).out;
+    assert.match(text, /^behaviour :behaviour-payments-B3 payments#B3 Pay by cheque \(retired\)$/m);
+    assert.match(text, /^replaced by :behaviour-payments-B2 payments#B2 Refund a payment$/m);
+  });
+});
+
+test("B4: a behaviour with no links says so and prints coverage, never that it is unimplemented", async () => {
+  await designRepo(async (repo) => {
+    const text = run(repo, ["behaviour", "payments#B2"]);
+    assert.equal(text.code, 0, text.err);
+    assert.match(text.out, /^No graph assertion links payments#B2; that does not mean the behaviour is unimplemented or untested\.$/m);
+    assert.match(text.out, /^src\/\*\*: kit:covered$/m);
+  });
+});
+
+test("B4: an unknown reference says whether the feature document declares it", async () => {
+  await designRepo(async (repo, { graph, tree }) => {
+    assert.deepEqual(behaviourLinks(graph, tree, "payments#B9").declared, { path: "docs/features/payments/feature.md", declared: false });
+    assert.match(run(repo, ["behaviour", "payments#B9"]).out, /^No graph node for payments#B9; docs\/features\/payments\/feature\.md does not declare B9\.$/m);
+    assert.match(run(repo, ["behaviour", "payments#B2"]).out, /^No graph node for payments#B2; docs\/features\/payments\/feature\.md declares B2\.$/m);
+    assert.match(run(repo, ["behaviour", "other#B1"]).out, /^No graph node for other#B1; no behaviours file declares behaviours for other\.$/m);
+  }, (spec) => { spec.nodes = spec.nodes.filter((n) => n.subject !== ":behaviour-payments-B2"); });
+});
+
+test("B3, B4: a loosely typed reference is rejected with the expected form", async () => {
+  await designRepo(async (repo) => {
+    for (const bad of ["payments#b3", "payments#B03", "payments # B3", "#B3"]) {
+      const result = run(repo, ["behaviour", bad]);
+      assert.equal(result.code, 2, bad);
+      assert.match(result.err, /is not a behaviour reference; use <slug>#B<n>/, bad);
+    }
   });
 });
