@@ -80,7 +80,8 @@ by rewriting the original.
 | [64](#entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency) | 2026-11-21 | docs(feature): implementation plan for semantic index token efficiency | product | Build the estimator and log first so that a baseline exists before anything is tuned. Then add the cap, the passage reader, search, `show`, `usage`, the protocol and the pilot measures. |
 | [65](#entry-design-source-graph-links-to-feature-documents-185) | 2026-11-23 | Design: source graph links to feature documents (#185) | product | Make behaviours and decisions core graph node kinds in schema version 2, identified by `<slug>#B<n>` and by ADR number, with a design status and links to a replacement or successor ([ADR… |
 | [66](#entry-plan-source-graph-links-to-feature-documents-185) | 2026-11-23 | Plan: source graph links to feature documents (#185) | product | Slice the build into five increments, each delivering a set of behaviour ids end to end and leaving the kit releasable, with schema version 2 and older-manifest acceptance first as the walking skeleton. |
-| [67](#entry-amend-the-b23-implementation-plan-for-division-imports-185) | 2026-11-23 | Amend the B23 implementation plan for division imports (#185) | product | Preserve the five kit increments and their completed tasks. After this plan merges, integrate the reviewed design and plan into the existing build branch with a normal merge. |
+| [67](#entry-amend-the-division-import-design-for-b23-185) | 2026-11-23 | Amend the division import design for B23 (#185) | product | Keep the schema 2 source graph and exercise the division's C4 snapshot loader. Division-ontology delivers compatibility as a separate prerequisite. |
+| [68](#entry-amend-the-b23-implementation-plan-for-division-imports-185) | 2026-11-23 | Amend the B23 implementation plan for division imports (#185) | product | Preserve the five kit increments and their completed tasks. After this plan merges, integrate the reviewed design and plan into the existing build branch with a normal merge. |
 
 ---
 
@@ -1614,9 +1615,29 @@ Work can stop safely after any increment, and adopters can take increment 1 alon
 
 ---
 
+<a id="entry-amend-the-division-import-design-for-b23-185"></a>
+
+## Entry 67 — 2026-11-23 — Amend the division import design for B23 (#185)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+During USER diagnostics, the kit validated the schema 2 graph at a pinned commit. The existing division importer rejected that commit with `invalid graph schema version`. A separate control exposed an evidence-role mismatch, and the importer projection omits design status and node evidence. [Acceptance evidence](https://github.com/jamiemitchellconsultants/InternalOntology/issues/185#issuecomment-7113497180)
+
+## Decision
+
+Keep the schema 2 source graph and exercise the division's C4 snapshot loader. Division-ontology delivers compatibility as a separate prerequisite. B23 compares the preserved design node and assertion fields and follows the imported links to code from a catalog-pinned JEPA-Speech commit. [ADR 0045](https://github.com/jamiemitchellconsultants/InternalOntology/blob/5aced415ab75b3496df3d06b7baff27c0c056603/docs/adr/0045-require-a-compatible-division-importer.md)
+
+## Consequences
+
+B23 acceptance waits for a verified compatible importer. Its acceptance record pins the importer revision, catalog commit and trial graph commit. The developer plan needs to replace its assumption that the current importer suffices. The kit producer and its existing checks and lookups stay independent of division delivery.
+
+---
+
 <a id="entry-amend-the-b23-implementation-plan-for-division-imports-185"></a>
 
-## Entry 67 — 2026-11-23 — Amend the B23 implementation plan for division imports (#185)
+## Entry 68 — 2026-11-23 — Amend the B23 implementation plan for division imports (#185)
 
 *Kind: product. Status: accepted.*
 
