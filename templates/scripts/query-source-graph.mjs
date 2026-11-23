@@ -71,7 +71,7 @@ export function behaviourLinks(graph, tree, reference) {
   const sorted = (list) => list.sort(bySubjectThenIri);
   if (!node) {
     const file = behavioursFile(tree, parsed.slug);
-    const declared = file?.path ? { path: file.path, declared: readBehaviours(tree.text(file.path), { lite: file.lite }).some((b) => b.id === parsed.id) } : { path: null, declared: false };
+    const declared = file?.conflict ? { path: null, declared: false, conflict: file.conflict } : file?.path ? { path: file.path, declared: readBehaviours(tree.text(file.path), { lite: file.lite }).some((b) => b.id === parsed.id) } : { path: null, declared: false };
     return { reference, behaviour: null, replacement: null, declared, components: [], symbols: [], tests: [] };
   }
   const assertions = graph.byType("kit:GraphAssertion");
@@ -169,7 +169,7 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
       const ref = result.reference;
       if (!result.behaviour) {
         const id = `B${parseBehaviourReference(ref).id}`, d = result.declared;
-        stdout.write(d.path ? `No graph node for ${ref}; ${d.path} ${d.declared ? "declares" : "does not declare"} ${id}.\n` : `No graph node for ${ref}; no behaviours file declares behaviours for ${parseBehaviourReference(ref).slug}.\n`);
+        stdout.write(d.conflict ? `No graph node for ${ref}; ${d.conflict[0]} and ${d.conflict[1]} both declare behaviours.\n` : d.path ? `No graph node for ${ref}; ${d.path} ${d.declared ? "declares" : "does not declare"} ${id}.\n` : `No graph node for ${ref}; no behaviours file declares behaviours for ${parseBehaviourReference(ref).slug}.\n`);
       } else {
         stdout.write(`behaviour ${result.behaviour.iri} ${result.behaviour.label} (${result.behaviour.designStatus?.replace("kit:", "") ?? "no status"})\n`);
         if (result.replacement) stdout.write(`replaced by ${result.replacement.iri} ${result.replacement.label}\n`);

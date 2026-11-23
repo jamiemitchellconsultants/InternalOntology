@@ -293,6 +293,15 @@ test("B4: an unknown reference says whether the feature document declares it", a
   }, (spec) => { spec.nodes = spec.nodes.filter((n) => n.subject !== ":behaviour-payments-B2"); });
 });
 
+test("B4: two behaviours files for one feature are named in the gap text", async () => {
+  await designRepo(async (repo) => {
+    repo.write("docs/features/payments/02-behaviours.md", "**B1 — Pay.**\n");
+    repo.commit("a second behaviours file");
+    const out = run(repo, ["behaviour", "payments#B2"]).out;
+    assert.match(out, /^No graph node for payments#B2; docs\/features\/payments\/02-behaviours\.md and docs\/features\/payments\/feature\.md both declare behaviours\.$/m);
+  }, (spec) => { spec.nodes = spec.nodes.filter((n) => n.subject !== ":behaviour-payments-B2"); });
+});
+
 test("B3, B4: a loosely typed reference is rejected with the expected form", async () => {
   await designRepo(async (repo) => {
     for (const bad of ["payments#b3", "payments#B03", "payments # B3", "#B3"]) {
