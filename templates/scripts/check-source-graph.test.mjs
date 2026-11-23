@@ -547,3 +547,32 @@ test("B5: a capitalised or annotated Status word still reads as its status", asy
     assert.deepEqual(await design((s, r) => { rewriteDoc(r, s, ADR1, text); }), [], status);
   }
 });
+
+const ADR2 = "docs/adr/0002-keep-cheques.md";
+const linkOf = (id, subject, relationship, object) => block(`:assertion-${id}`, "kit:GraphAssertion", [["kit:basis", "kit:direct"],
+  ["kit:evidence", ":evidence-e5"], ["kit:object", object], ["kit:relationship", relationship], ["kit:subject", subject]]);
+
+const replacementMutations = [
+  ["design-replacement", ":behaviour-payments-B3", (s) => { s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d1"); }],
+  ["design-replacement", ":behaviour-payments-B3", (s) => { setPair(find(s.assertions, ":assertion-d1"), "kit:object", ":behaviour-payments-B1"); }],
+  ["design-replacement", ":behaviour-payments-B3", (s, r) => { rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("; replaced by B2.", ".")); }],
+  ["design-replacement", ":behaviour-payments-B1", (s) => { s.assertions.push(linkOf("x0", ":behaviour-payments-B1", "kit:replaced-by", ":behaviour-payments-B2")); }],
+  ["design-replacement", ":decision-0002", (s) => { s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d2"); }],
+  ["design-replacement", ":decision-0002", (s, r) => { rewriteDoc(r, s, ADR2, DESIGN_ADRS[ADR2].replace("superseded by ADR 0001", "superseded")); }],
+  ["design-link-kinds", ":assertion-x1", (s) => { s.assertions.push(linkOf("x1", ":node-ledger", "kit:replaced-by", ":behaviour-payments-B2")); }],
+  ["design-link-kinds", ":assertion-x2", (s) => { s.assertions.push(linkOf("x2", ":behaviour-payments-B1", "kit:superseded-by", ":behaviour-payments-B2")); }],
+];
+
+for (const [rule, subject, mutate] of replacementMutations) {
+  test(`B17, B18: a missing, extra or misdirected replacement link reports ${rule} on ${subject}`, async () => {
+    const findings = await design(mutate);
+    assert.ok(has(findings, rule, subject), `expected ${rule} on ${subject}, got ${JSON.stringify(findings)}`);
+  });
+}
+
+test("B17: a retired entry that names no replacement needs no link", async () => {
+  assert.deepEqual(await design((s, r) => {
+    rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("; replaced by B2.", "."));
+    s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d1");
+  }), []);
+});

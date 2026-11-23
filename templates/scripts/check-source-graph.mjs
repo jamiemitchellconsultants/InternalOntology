@@ -2,7 +2,7 @@ import { validateConfig, normaliseRepoRelativePath } from "./ontology-config.mjs
 import { parseTurtle } from "./owl-ontology.mjs";
 import { lineCount, changedPaths, treeFromIndex, treeFromRevision } from "./source-graph-git.mjs";
 import { parseGraphTurtle } from "./source-graph-turtle.mjs";
-import { BEHAVIOUR_IRI, DECISION_IRI, behavioursFile, readBehaviours, readDecision } from "./source-graph-design-docs.mjs";
+import { BEHAVIOUR_IRI, DECISION_IRI, behaviourIri, behavioursFile, decisionIri, readBehaviours, readDecision } from "./source-graph-design-docs.mjs";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CORE, DESIGN_STATUSES, NODE_PREDICATE_VERSIONS, ROLE_KEYS, introducedIn, loadGraph, matchSelector, resolveCoverage, refreshIdFor } from "./source-graph-model.mjs";
@@ -151,9 +151,24 @@ export function designFindings(graph, tree) {
     const label = `${slug}#B${id} ${here.title}`;
     if (node.first("rdfs:label")?.object !== label) { add(node, "design-label", `label must be ${JSON.stringify(label)}`); continue; }
     const status = here.retired ? "kit:retired" : "kit:current";
-    if (node.first("kit:designStatus")?.object !== status) add(node, "design-status", `${node.iri} must be ${status}`);
+    if (node.first("kit:designStatus")?.object !== status) { add(node, "design-status", `${node.iri} must be ${status}`); continue; }
+    linkFinding(node, "kit:replaced-by", here.retired && here.replacement ? behaviourIri(slug, here.replacement) : null);
+  }
+  const nodeKind = (iri) => graph.resources.get(iri)?.first("kit:kind")?.object;
+  for (const link of graph.byType("kit:GraphAssertion")) {
+    const relationship = link.first("kit:relationship")?.object, subject = link.first("kit:subject")?.object, object = link.first("kit:object")?.object;
+    const kind = { "kit:replaced-by": "kit:behaviour", "kit:superseded-by": "kit:decision" }[relationship];
+    if (kind && (nodeKind(subject) !== kind || nodeKind(object) !== kind)) add(link, "design-link-kinds", `${relationship} must join two ${kind} nodes`);
   }
   return findings;
+
+  function linkFinding(node, relationship, expected) {
+    const objects = graph.byType("kit:GraphAssertion")
+      .filter((a) => a.first("kit:subject")?.object === node.iri && a.first("kit:relationship")?.object === relationship)
+      .map((a) => a.first("kit:object")?.object);
+    if (expected && !(objects.length === 1 && objects[0] === expected)) add(node, "design-replacement", `${node.iri} expects ${relationship} ${expected}`);
+    else if (!expected && objects.length) add(node, "design-replacement", `${node.iri} has ${relationship} ${objects[0]} that its document does not name`);
+  }
 
   function decisionFinding(node) {
     const match = DECISION_IRI.exec(node.iri);
@@ -172,7 +187,8 @@ export function designFindings(graph, tree) {
     const label = `ADR ${number} ${decision.title}`;
     if (node.first("rdfs:label")?.object !== label) { add(node, "design-label", `label must be ${JSON.stringify(label)}`); return; }
     const status = `kit:${decision.status}`;
-    if (node.first("kit:designStatus")?.object !== status) add(node, "design-status", `${node.iri} must be ${status}`);
+    if (node.first("kit:designStatus")?.object !== status) { add(node, "design-status", `${node.iri} must be ${status}`); return; }
+    linkFinding(node, "kit:superseded-by", decision.status === "superseded" && decision.successor ? decisionIri(decision.successor) : null);
   }
 }
 
