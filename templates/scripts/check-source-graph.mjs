@@ -56,7 +56,7 @@ export function checkTree({ tree, config }) {
     const pairs = parseGraphTurtle(tree.text(r.file), r.file).blocks.find((b) => b.subject === r.iri).pairs;
     for (const p of pairs) if (!Object.hasOwn(shape, p.predicate)) add(r, shapeRule || "bad-value", `unknown predicate ${p.predicate}`);
     if (validVersion(manifestVersion)) {
-      const needs = new Set(), need = (value, n) => { if (n > manifestVersion && !needs.has(value)) { needs.add(value); add(r, "schema-version-too-old", `${value} needs kit:schemaVersion ${n}`); } };
+      const needs = new Set(), need = (iri, n) => { if (n > manifestVersion && !needs.has(iri)) { needs.add(iri); add(r, "schema-version-too-old", `${iri} needs kit:schemaVersion ${n}`); } };
       if (r.type === "kit:GraphNode") {
         for (const p of r.values("kit:kind")) need(p.object, introducedIn(p.object));
         for (const p of r.values("kit:designStatus")) need(p.object, introducedIn(p.object));

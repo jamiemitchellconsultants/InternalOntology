@@ -39,6 +39,14 @@ test("B22: a version 2 value in a version 1 graph fails and names the version it
     .some((f) => f.rule === "schema-version-too-old"), "allowed at version 2");
 });
 
+test("B22: version 2 node kinds, statuses and predicates in a version 1 graph each fail once with the version they need", async () => {
+  const findings = await run((s) => {
+    s.nodes.push(block(":behaviour-widgets-B1", "kit:GraphNode", [["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"], ["kit:kind", "kit:behaviour"], ["rdfs:label", S("widgets#B1 Post an invoice")]]));
+  });
+  const messages = findings.filter((f) => f.rule === "schema-version-too-old" && f.subject === ":behaviour-widgets-B1").map((f) => f.message).sort();
+  assert.deepEqual(messages, ["kit:behaviour needs kit:schemaVersion 2", "kit:current needs kit:schemaVersion 2", "kit:designStatus needs kit:schemaVersion 2", "kit:evidence needs kit:schemaVersion 2"]);
+});
+
 test("a complete widgets graph is clean in every language", async () => {
   for (const language of ["csharp", "typescript", "java", "python"]) {
     assert.deepEqual(await run(null, language), [], language);
