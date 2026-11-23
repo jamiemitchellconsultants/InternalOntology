@@ -129,76 +129,138 @@ export function checkTree({ tree, config }) {
 export function designFindings(graph, tree) {
   const findings = [], conflicts = new Set();
   const add = (r, rule, message) => findings.push({ file: r.file || graph.root, subject: r.iri || "", rule, message, line: 0 });
+  const first = (resource, predicate) => resource?.first(predicate)?.object;
+  const nodeKind = (iri) => first(graph.resources.get(iri), "kit:kind");
+
+  // Index the assertions once: by subject for replacement links, and in full for the kind check.
+  const assertions = graph.byType("kit:GraphAssertion");
+  const linksBySubject = new Map();
+  for (const a of assertions) {
+    const subject = first(a, "kit:subject");
+    if (!linksBySubject.has(subject)) linksBySubject.set(subject, []);
+    linksBySubject.get(subject).push({ relationship: first(a, "kit:relationship"), object: first(a, "kit:object") });
+  }
+
+  // Cache the document reads: one behaviours lookup per feature slug, one ADR read per number.
+  const behaviourFiles = new Map(), behaviourLists = new Map(), decisions = new Map();
+  const locate = (slug) => {
+    if (!behaviourFiles.has(slug)) behaviourFiles.set(slug, behavioursFile(tree, slug));
+    return behaviourFiles.get(slug);
+  };
+  const declarations = (located) => {
+    if (!behaviourLists.has(located.path)) behaviourLists.set(located.path, readBehaviours(tree.text(located.path), { lite: located.lite }));
+    return behaviourLists.get(located.path);
+  };
+  const decisionOf = (number) => {
+    if (!decisions.has(number)) decisions.set(number, readDecision(tree, number));
+    return decisions.get(number);
+  };
+
   const singleEvidence = (node) => {
     const items = node.values("kit:evidence");
     return items.length === 1 ? graph.resources.get(items[0].object) : undefined;
   };
-  for (const node of graph.byType("kit:GraphNode")) {
-    const kind = node.first("kit:kind")?.object;
-    if (kind === "kit:decision") { decisionFinding(node); continue; }
-    if (kind !== "kit:behaviour") continue;
-    const match = BEHAVIOUR_IRI.exec(node.iri);
-    if (!match) { add(node, "design-iri", `${node.iri} is not :behaviour-<slug>-B<n>`); continue; }
-    const [, slug, id] = match, located = behavioursFile(tree, slug);
-    if (!located) { add(node, "design-undeclared", `no behaviours file declares behaviours for ${slug}`); continue; }
-    if (located.conflict) {
-      if (!conflicts.has(slug)) { conflicts.add(slug); add({ file: located.conflict[0] }, "design-file-conflict", `${located.conflict[0]} and ${located.conflict[1]} both declare behaviours`); }
-      continue;
-    }
-    const evidence = singleEvidence(node);
-    if (!evidence) continue;
-    if (evidence.first("kit:role")?.object !== "kit:role-selected-document" || evidence.first("kit:path")?.object !== located.path) {
-      add(node, "design-evidence", `evidence must be a selected-document item for ${located.path}`); continue;
-    }
-    const declared = readBehaviours(tree.text(located.path), { lite: located.lite }).filter((d) => String(d.id) === id);
-    if (declared.length > 1) { add(node, "design-id-reused", `${located.path} declares B${id} more than once`); continue; }
-    const line = Number(evidence.first("kit:startLine")?.object), here = declared.find((d) => d.line === line);
-    if (!here) { add(node, "design-undeclared", `${located.path}:${line} does not declare B${id}`); continue; }
-    const label = `${slug}#B${id} ${here.title}`;
-    if (node.first("rdfs:label")?.object !== label) { add(node, "design-label", `label must be ${JSON.stringify(label)}`); continue; }
-    const status = here.retired ? "kit:retired" : "kit:current";
-    if (node.first("kit:designStatus")?.object !== status) { add(node, "design-status", `${node.iri} must be ${status}`); continue; }
-    linkFinding(node, "kit:replaced-by", here.retired && here.replacement ? behaviourIri(here.replacementSlug ?? slug, here.replacement) : null);
-  }
-  const nodeKind = (iri) => graph.resources.get(iri)?.first("kit:kind")?.object;
-  for (const link of graph.byType("kit:GraphAssertion")) {
-    const relationship = link.first("kit:relationship")?.object, subject = link.first("kit:subject")?.object, object = link.first("kit:object")?.object;
-    const kind = { "kit:replaced-by": "kit:behaviour", "kit:superseded-by": "kit:decision" }[relationship];
-    if (kind && (nodeKind(subject) !== kind || nodeKind(object) !== kind)) add(link, "design-link-kinds", `${relationship} must join two ${kind} nodes`);
-  }
-  return findings;
+  const isSelectedDocument = (evidence, path) =>
+    first(evidence, "kit:role") === "kit:role-selected-document" && first(evidence, "kit:path") === path;
 
   function linkFinding(node, relationship, expected) {
-    const objects = graph.byType("kit:GraphAssertion")
-      .filter((a) => a.first("kit:subject")?.object === node.iri && a.first("kit:relationship")?.object === relationship)
-      .map((a) => a.first("kit:object")?.object);
-    if (expected && !(objects.length === 1 && objects[0] === expected)) add(node, "design-replacement", `${node.iri} expects ${relationship} ${expected}`);
-    else if (!expected && objects.length) add(node, "design-replacement", `${node.iri} has ${relationship} ${objects[0]} that its document does not name`);
+    const objects = (linksBySubject.get(node.iri) || [])
+      .filter((link) => link.relationship === relationship)
+      .map((link) => link.object);
+    if (objects.length > 1) {
+      const wanted = expected ? `exactly one to ${expected}` : "none";
+      add(node, "design-replacement", `${node.iri} has ${objects.length} ${relationship} links; expects ${wanted}`);
+    } else if (expected && objects[0] !== expected) {
+      add(node, "design-replacement", `${node.iri} expects ${relationship} ${expected}`);
+    } else if (!expected && objects.length) {
+      add(node, "design-replacement", `${node.iri} has ${relationship} ${objects[0]} that its document does not name`);
+    }
+  }
+
+  function behaviourFinding(node) {
+    const match = BEHAVIOUR_IRI.exec(node.iri);
+    if (!match) { add(node, "design-iri", `${node.iri} is not :behaviour-<slug>-B<n>`); return; }
+    const [, slug, id] = match, located = locate(slug);
+    if (!located) { add(node, "design-undeclared", `no behaviours file declares behaviours for ${slug}`); return; }
+    if (located.conflict) {
+      if (!conflicts.has(slug)) {
+        conflicts.add(slug);
+        add({ file: located.conflict[0] }, "design-file-conflict", `${located.conflict[0]} and ${located.conflict[1]} both declare behaviours`);
+      }
+      return;
+    }
+    const evidence = singleEvidence(node);
+    if (!evidence) return;
+    if (!isSelectedDocument(evidence, located.path)) {
+      add(node, "design-evidence", `evidence must be a selected-document item for ${located.path}`);
+      return;
+    }
+    const declared = declarations(located).filter((d) => String(d.id) === id);
+    if (declared.length > 1) { add(node, "design-id-reused", `${located.path} declares B${id} more than once`); return; }
+    const line = Number(first(evidence, "kit:startLine")), here = declared.find((d) => d.line === line);
+    if (!here) {
+      const where = Number.isInteger(line) ? `${located.path}:${line}` : located.path;
+      add(node, "design-undeclared", `${where} does not declare B${id}`);
+      return;
+    }
+    const label = `${slug}#B${id} ${here.title}`;
+    if (first(node, "rdfs:label") !== label) { add(node, "design-label", `label must be ${JSON.stringify(label)}`); return; }
+    const status = here.retired ? "kit:retired" : "kit:current";
+    if (first(node, "kit:designStatus") !== status) { add(node, "design-status", `${node.iri} must be ${status}`); return; }
+    const replaced = here.retired && here.replacement ? behaviourIri(here.replacementSlug ?? slug, here.replacement) : null;
+    linkFinding(node, "kit:replaced-by", replaced);
   }
 
   function decisionFinding(node) {
     const match = DECISION_IRI.exec(node.iri);
     if (!match) { add(node, "design-iri", `${node.iri} is not :decision-<NNNN>`); return; }
-    const number = match[1], decision = readDecision(tree, number);
+    const number = match[1], decision = decisionOf(number);
     if (!decision) { add(node, "design-undeclared", `no ADR ${number} in docs/adr`); return; }
+    if (decision.duplicates.length) {
+      add(node, "design-undeclared", `ADR ${number} has more than one file: ${[decision.path, ...decision.duplicates].join(", ")}`);
+      return;
+    }
     const evidence = singleEvidence(node);
     if (!evidence) return;
-    if (evidence.first("kit:role")?.object !== "kit:role-selected-document" || evidence.first("kit:path")?.object !== decision.path) {
-      add(node, "design-evidence", `evidence must be a selected-document item for ${decision.path}`); return;
+    if (!isSelectedDocument(evidence, decision.path)) {
+      add(node, "design-evidence", `evidence must be a selected-document item for ${decision.path}`);
+      return;
     }
-    const start = Number(evidence.first("kit:startLine")?.object), end = Number(evidence.first("kit:endLine")?.object);
+    const start = Number(first(evidence, "kit:startLine")), end = Number(first(evidence, "kit:endLine"));
+    if (!Number.isInteger(start) || !Number.isInteger(end)) {
+      add(node, "design-undeclared", `${decision.path} does not declare ADR ${number} on its title and Status lines`);
+      return;
+    }
     if (decision.titleLine === null || decision.statusLine === null || start !== decision.titleLine || end !== decision.statusLine) {
-      add(node, "design-undeclared", `${decision.path} does not declare ADR ${number} on lines ${start}-${end}`); return;
+      add(node, "design-undeclared", `${decision.path} does not declare ADR ${number} on lines ${start}-${end}`);
+      return;
     }
     const label = `ADR ${number} ${decision.title}`;
-    if (node.first("rdfs:label")?.object !== label) { add(node, "design-label", `label must be ${JSON.stringify(label)}`); return; }
+    if (first(node, "rdfs:label") !== label) { add(node, "design-label", `label must be ${JSON.stringify(label)}`); return; }
     if (!["proposed", "accepted", "superseded", "deprecated"].includes(decision.status)) {
-      add(node, "design-status", `ADR ${number} has status "${decision.status ?? ""}", which is not proposed, accepted, superseded or deprecated; do not record it as a decision node`); return;
+      add(node, "design-status", `ADR ${number} has status "${decision.status ?? ""}", which is not proposed, accepted, superseded or deprecated; do not record it as a decision node`);
+      return;
     }
     const status = `kit:${decision.status}`;
-    if (node.first("kit:designStatus")?.object !== status) { add(node, "design-status", `${node.iri} must be ${status}`); return; }
-    linkFinding(node, "kit:superseded-by", decision.status === "superseded" && decision.successor ? decisionIri(decision.successor) : null);
+    if (first(node, "kit:designStatus") !== status) { add(node, "design-status", `${node.iri} must be ${status}`); return; }
+    const successor = decision.status === "superseded" && decision.successor ? decisionIri(decision.successor) : null;
+    linkFinding(node, "kit:superseded-by", successor);
   }
+
+  for (const node of graph.byType("kit:GraphNode")) {
+    const kind = first(node, "kit:kind");
+    if (kind === "kit:decision") decisionFinding(node);
+    else if (kind === "kit:behaviour") behaviourFinding(node);
+  }
+  const linkNodeKinds = { "kit:replaced-by": "kit:behaviour", "kit:superseded-by": "kit:decision" };
+  for (const link of assertions) {
+    const relationship = first(link, "kit:relationship"), subject = first(link, "kit:subject"), object = first(link, "kit:object");
+    const kind = linkNodeKinds[relationship];
+    if (kind && (nodeKind(subject) !== kind || nodeKind(object) !== kind)) {
+      add(link, "design-link-kinds", `${relationship} must join two ${kind} nodes`);
+    }
+  }
+  return findings;
 }
 
 function configForTree(tree) {

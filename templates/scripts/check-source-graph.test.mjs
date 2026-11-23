@@ -536,6 +536,8 @@ test("B2: a feature with both behaviours files fails once, naming both", async (
   const hits = findings.filter((f) => f.rule === "design-file-conflict");
   assert.equal(hits.length, 1, JSON.stringify(findings));
   assert.match(hits[0].message, /docs\/features\/payments\/02-behaviours\.md and docs\/features\/payments\/feature\.md both declare behaviours/);
+  assert.equal(hits[0].subject, "");
+  assert.equal(hits[0].file, "docs/features/payments/02-behaviours.md");
 });
 
 test("B19: a behaviour whose feature has no behaviours file is undeclared", async () => {
@@ -571,6 +573,23 @@ for (const [rule, subject, mutate] of decisionMutations) {
     assert.ok(has(findings, rule, subject), `expected ${rule} on ${subject}, got ${JSON.stringify(findings)}`);
   });
 }
+
+test("B6: an evidence item without a start line gives a message with no NaN", async () => {
+  const behaviour = (await design((s) => { dropPair(find(s.evidence, ":evidence-d1"), "kit:startLine"); })).find((f) => f.rule === "design-undeclared" && f.subject === ":behaviour-payments-B1");
+  assert.equal(behaviour?.message, `${LITE} does not declare B1`);
+  for (const pair of ["kit:startLine", "kit:endLine"]) {
+    const findings = await design((s) => { dropPair(find(s.evidence, ":evidence-d4"), pair); });
+    const decision = findings.find((f) => f.rule === "design-undeclared" && f.subject === ":decision-0001");
+    assert.equal(decision?.message, `${ADR1} does not declare ADR 0001 on its title and Status lines`, pair);
+    assert.ok(!findings.some((f) => f.message.includes("NaN")), pair);
+  }
+});
+
+test("B19: a decision number with more than one ADR file is undeclared and names every file", async () => {
+  const findings = await design((s, r) => { r.write("docs/adr/0001-zzz-duplicate.md", "# 0001 — Duplicate\n\n- **Status:** accepted\n"); });
+  const hit = findings.find((f) => f.rule === "design-undeclared" && f.subject === ":decision-0001");
+  assert.equal(hit?.message, `ADR 0001 has more than one file: ${ADR1}, docs/adr/0001-zzz-duplicate.md`);
+});
 
 test("B5: a capitalised or annotated Status word still reads as its status", async () => {
   for (const status of ["Accepted", "accepted; amended by ADR 0002 (planning)"]) {
@@ -622,6 +641,37 @@ test("B17: a retired entry that names no replacement needs no link", async () =>
     rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("; replaced by B2.", "."));
     s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d1");
   }), []);
+});
+
+test("B10: replacement link messages state the expectation and the count", async () => {
+  const message = async (subject, mutate) => (await design(mutate)).find((f) => f.rule === "design-replacement" && f.subject === subject)?.message;
+  assert.equal(await message(":behaviour-payments-B3", (s) => { s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d1"); }),
+    ":behaviour-payments-B3 expects kit:replaced-by :behaviour-payments-B2");
+  assert.equal(await message(":behaviour-payments-B1", (s) => { s.assertions.push(linkOf("x0", ":behaviour-payments-B1", "kit:replaced-by", ":behaviour-payments-B2")); }),
+    ":behaviour-payments-B1 has kit:replaced-by :behaviour-payments-B2 that its document does not name");
+  assert.equal(await message(":behaviour-payments-B3", (s) => { s.assertions.push(linkOf("x3", ":behaviour-payments-B3", "kit:replaced-by", ":behaviour-payments-B2")); }),
+    ":behaviour-payments-B3 has 2 kit:replaced-by links; expects exactly one to :behaviour-payments-B2");
+  assert.equal(await message(":behaviour-payments-B1", (s) => {
+    s.assertions.push(linkOf("x4", ":behaviour-payments-B1", "kit:replaced-by", ":behaviour-payments-B2"), linkOf("x5", ":behaviour-payments-B1", "kit:replaced-by", ":behaviour-payments-B3")); }),
+    ":behaviour-payments-B1 has 2 kit:replaced-by links; expects none");
+});
+
+test("B10: a superseded decision that names no successor needs no link and a stray link on an earlier failure is silent", async () => {
+  assert.deepEqual(await design((s, r) => {
+    rewriteDoc(r, s, ADR2, DESIGN_ADRS[ADR2].replace("superseded by ADR 0001", "superseded"));
+    s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d2");
+  }), []);
+  const findings = await design((s) => {
+    setPair(find(s.nodes, ":behaviour-payments-B1"), "rdfs:label", S("payments#B1 Pay invoice"));
+    s.assertions.push(linkOf("x6", ":behaviour-payments-B1", "kit:replaced-by", ":behaviour-payments-B2"));
+  });
+  assert.ok(has(findings, "design-label", ":behaviour-payments-B1"));
+  assert.ok(!has(findings, "design-replacement", ":behaviour-payments-B1"), JSON.stringify(findings));
+});
+
+test("B10: kit:superseded-by to a non-decision object gives design-link-kinds", async () => {
+  const findings = await design((s) => { s.assertions.push(linkOf("x7", ":decision-0001", "kit:superseded-by", ":node-ledger")); });
+  assert.ok(has(findings, "design-link-kinds", ":assertion-x7"), JSON.stringify(findings));
 });
 
 test("B20: a link to a retired behaviour or superseded decision is reported and the check passes", async () => {
