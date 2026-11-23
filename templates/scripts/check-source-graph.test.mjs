@@ -441,3 +441,28 @@ test("a changed file leaving coverage rejects the wrong review record IRI", asyn
   const findings = await excludedChangedSource((record) => { record.subject = ":not-a-refresh-id"; });
   assert.ok(findings.some((f) => f.rule === "refresh-malformed" && f.message.includes("src/Invoice.cs")));
 });
+
+const designNode = (pairs) => block(":behaviour-widgets-B1", "kit:GraphNode",
+  [["kit:kind", "kit:behaviour"], ["rdfs:label", S("widgets#B1 Post an invoice")], ...pairs]);
+
+test("B22: a design node needs one status from its kind's list and one evidence item, in a version 2 graph", async () => {
+  const shaped = async (pairs, version = 2) => rulesOf(await run((s) => { s.version = version; s.nodes.push(designNode(pairs)); }));
+  const ok = await shaped([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"]]);
+  for (const rule of ["design-status", "design-evidence", "schema-version-too-old", "dangling-reference", "bad-value"]) assert.ok(!ok.has(rule), rule);
+  assert.ok((await shaped([["kit:evidence", ":evidence-e4"]])).has("design-status"), "missing status");
+  assert.ok((await shaped([["kit:designStatus", "kit:accepted"], ["kit:evidence", ":evidence-e4"]])).has("design-status"), "decision status on a behaviour");
+  assert.ok((await shaped([["kit:designStatus", "kit:current"]])).has("design-evidence"), "missing evidence");
+  assert.ok((await shaped([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"], ["kit:evidence", ":evidence-e1"]])).has("design-evidence"), "two evidence items");
+  assert.ok((await shaped([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-missing"]])).has("dangling-reference"), "dangling evidence");
+  assert.ok((await shaped([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"]], 1)).has("schema-version-too-old"), "version 1");
+});
+
+test("B22: kit:designStatus and node kit:evidence are rejected on other kinds", async () => {
+  const findings = await run((s) => {
+    s.version = 2;
+    find(s.nodes, ":node-ledger").pairs.push(...block("", "", [["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"]]).pairs);
+  });
+  const rules = findings.filter((f) => f.subject === ":node-ledger").map((f) => f.rule);
+  assert.ok(rules.includes("design-status"), JSON.stringify(findings));
+  assert.ok(rules.includes("design-evidence"), JSON.stringify(findings));
+});

@@ -4,7 +4,7 @@ import { lineCount, changedPaths, treeFromIndex, treeFromRevision } from "./sour
 import { parseGraphTurtle } from "./source-graph-turtle.mjs";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { CORE, NODE_PREDICATE_VERSIONS, ROLE_KEYS, introducedIn, loadGraph, matchSelector, resolveCoverage, refreshIdFor } from "./source-graph-model.mjs";
+import { CORE, DESIGN_STATUSES, NODE_PREDICATE_VERSIONS, ROLE_KEYS, introducedIn, loadGraph, matchSelector, resolveCoverage, refreshIdFor } from "./source-graph-model.mjs";
 
 export class CheckSetupError extends Error {}
 export function loadCheckConfig(tree) {
@@ -20,7 +20,7 @@ export function loadCheckConfig(tree) {
 }
 const shapes = {
   "kit:SourceKnowledgeGraph": { "kit:schemaVersion": "integer", "kit:coverage": "iri*", "kit:refreshRecord": "iri*", "kit:declaresKind": "iri*", "kit:declaresRelationship": "iri*" },
-  "kit:GraphNode": { "kit:kind": "iri", "rdfs:label": "string", "kit:denotes": "iri?" },
+  "kit:GraphNode": { "kit:kind": "iri", "rdfs:label": "string", "kit:denotes": "iri?", "kit:designStatus": "iri?", "kit:evidence": "iri*" },
   "kit:GraphAssertion": { "kit:subject": "iri", "kit:relationship": "iri", "kit:object": "iri", "kit:basis": "iri", "kit:evidence": "iri+" },
   "kit:GraphEvidence": { "kit:path": "string", "kit:startLine": "integer", "kit:endLine": "integer", "kit:blobId": "string", "kit:role": "iri" },
   "kit:GraphCoverage": { "kit:pathSelector": "string", "kit:status": "iri", "kit:priority": "integer", "kit:reason": "string?" },
@@ -64,13 +64,21 @@ export function checkTree({ tree, config }) {
       }
       if (r.type === "kit:GraphAssertion") for (const p of r.values("kit:relationship")) need(p.object, introducedIn(p.object));
     }
-    const refs = r.type === "kit:GraphAssertion" ? { "kit:subject": "kit:GraphNode", "kit:object": "kit:GraphNode", "kit:evidence": "kit:GraphEvidence" } : r.type === "kit:SourceKnowledgeGraph" ? { "kit:coverage": "kit:GraphCoverage", "kit:refreshRecord": "kit:GraphRefreshRecord", "kit:declaresKind": "kit:GraphKindDefinition", "kit:declaresRelationship": "kit:GraphRelationshipDefinition" } : {};
+    const refs = r.type === "kit:GraphAssertion" ? { "kit:subject": "kit:GraphNode", "kit:object": "kit:GraphNode", "kit:evidence": "kit:GraphEvidence" } : r.type === "kit:SourceKnowledgeGraph" ? { "kit:coverage": "kit:GraphCoverage", "kit:refreshRecord": "kit:GraphRefreshRecord", "kit:declaresKind": "kit:GraphKindDefinition", "kit:declaresRelationship": "kit:GraphRelationshipDefinition" } : r.type === "kit:GraphNode" ? { "kit:evidence": "kit:GraphEvidence" } : {};
     for (const [predicate, type] of Object.entries(refs)) for (const p of r.values(predicate)) if (graph.resources.get(p.object)?.type !== type) add(r, "dangling-reference", `${predicate} references missing ${p.object}`);
     if (r.type === "kit:GraphNode") {
       const kind = value(r, "kit:kind"), declared = manifests.some((m) => m.values("kit:declaresKind").some((p) => p.object === kind));
       if (kind && !CORE.kinds.includes(kind) && !(declared && graph.resources.get(kind)?.type === "kit:GraphKindDefinition")) add(r, "unknown-kind", `unknown kind ${kind}`);
       if (kind === "kit:concept" && !value(r, "kit:denotes")) add(r, "missing-predicate", "concept node requires kit:denotes");
       else if (kind === "kit:concept" && !ontology.has(value(r, "kit:denotes"))) add(r, "denotes-missing", `ontology lacks ${value(r, "kit:denotes")}`);
+      const statuses = r.values("kit:designStatus").map((p) => p.object), evidence = r.values("kit:evidence");
+      if (Object.hasOwn(DESIGN_STATUSES, kind)) {
+        if (statuses.length !== 1 || !DESIGN_STATUSES[kind].includes(statuses[0])) add(r, "design-status", `${kind} needs one of ${DESIGN_STATUSES[kind].join(", ")}`);
+        if (evidence.length !== 1) add(r, "design-evidence", `${kind} needs exactly one kit:evidence`);
+      } else {
+        if (statuses.length) add(r, "design-status", `${kind} cannot carry kit:designStatus`);
+        if (evidence.length) add(r, "design-evidence", `${kind} cannot carry kit:evidence`);
+      }
     }
     if (r.type === "kit:GraphAssertion") {
       const rel = value(r, "kit:relationship"), declared = manifests.some((m) => m.values("kit:declaresRelationship").some((p) => p.object === rel));
