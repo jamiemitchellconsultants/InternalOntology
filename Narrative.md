@@ -80,6 +80,7 @@ by rewriting the original.
 | [64](#entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency) | 2026-11-21 | docs(feature): implementation plan for semantic index token efficiency | product | Build the estimator and log first so that a baseline exists before anything is tuned. Then add the cap, the passage reader, search, `show`, `usage`, the protocol and the pilot measures. |
 | [65](#entry-design-source-graph-links-to-feature-documents-185) | 2026-11-23 | Design: source graph links to feature documents (#185) | product | Make behaviours and decisions core graph node kinds in schema version 2, identified by `<slug>#B<n>` and by ADR number, with a design status and links to a replacement or successor ([ADR… |
 | [66](#entry-plan-source-graph-links-to-feature-documents-185) | 2026-11-23 | Plan: source graph links to feature documents (#185) | product | Slice the build into five increments, each delivering a set of behaviour ids end to end and leaving the kit releasable, with schema version 2 and older-manifest acceptance first as the walking skeleton. |
+| [67](#entry-amend-the-b23-implementation-plan-for-division-imports-185) | 2026-11-23 | Amend the B23 implementation plan for division imports (#185) | product | Preserve the five kit increments and their completed tasks. After this plan merges, integrate the reviewed design and plan into the existing build branch with a normal merge. |
 
 ---
 
@@ -1610,3 +1611,23 @@ Work can stop safely after any increment, and adopters can take increment 1 alon
 ---
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-amend-the-b23-implementation-plan-for-division-imports-185"></a>
+
+## Entry 67 — 2026-11-23 — Amend the B23 implementation plan for division imports (#185)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The original plan assumed the existing division importer could read the trial graph. ADR 0045 records the schema and evidence incompatibilities and the boundary between the kit producer and the division importer. [ADR 0045](https://github.com/jamiemitchellconsultants/InternalOntology/blob/c5e834607475cccd6144042677ab9f18e41c1c5d/docs/adr/0045-require-a-compatible-division-importer.md)
+
+## Decision
+
+Preserve the five kit increments and their completed tasks. After this plan merges, integrate the reviewed design and plan into the existing build branch with a normal merge. USER acceptance uses a separately delivered compatible importer and the real division C4 snapshot loader. It compares preserved design nodes, assertions and evidence with the pinned source graph, and traverses imported links from a behaviour to code.
+
+## Consequences
+
+The build branch can be integrated and verified while importer delivery is pending. B23 stays pending until acceptance verifies the importer, catalog and trial graph revisions together. The installed kit's end-to-end test establishes the producer behaviour.
