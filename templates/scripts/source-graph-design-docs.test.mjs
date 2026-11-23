@@ -94,4 +94,7 @@ test("B5: a decision's title, status and successor come from its ADR", () => {
   assert.equal(readDecision(t, "0031").status, "accepted");
   assert.deepEqual([readDecision(t, "0032").status, readDecision(t, "0032").statusLine], [null, null]);
   assert.equal(readDecision(t, "0099"), null);
+  const odd = tree({ "docs/adr/0050-dash.md": "# 0050 — Dash\n\n- **Status:** —\n", "docs/adr/0051-rejected.md": "# 0051 — Rejected\n\n- **Status:** Rejected\n" });
+  assert.deepEqual([readDecision(odd, "0050").status, readDecision(odd, "0050").statusLine], [null, 3]);
+  assert.equal(readDecision(odd, "0051").status, "rejected");
 });

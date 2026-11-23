@@ -186,6 +186,9 @@ export function designFindings(graph, tree) {
     }
     const label = `ADR ${number} ${decision.title}`;
     if (node.first("rdfs:label")?.object !== label) { add(node, "design-label", `label must be ${JSON.stringify(label)}`); return; }
+    if (!["proposed", "accepted", "superseded", "deprecated"].includes(decision.status)) {
+      add(node, "design-status", `ADR ${number} has status "${decision.status ?? ""}", which is not proposed, accepted, superseded or deprecated; do not record it as a decision node`); return;
+    }
     const status = `kit:${decision.status}`;
     if (node.first("kit:designStatus")?.object !== status) { add(node, "design-status", `${node.iri} must be ${status}`); return; }
     linkFinding(node, "kit:superseded-by", decision.status === "superseded" && decision.successor ? decisionIri(decision.successor) : null);

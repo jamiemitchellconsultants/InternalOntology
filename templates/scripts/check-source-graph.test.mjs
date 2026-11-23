@@ -550,6 +550,15 @@ test("B5: a capitalised or annotated Status word still reads as its status", asy
   }
 });
 
+test("B5: a Status word outside the four values gives exactly one design-status finding", async () => {
+  for (const [status, word] of [["rejected", "rejected"], ["—", ""]]) {
+    const text = DESIGN_ADRS[ADR1].replace("- **Status:** accepted", `- **Status:** ${status}`);
+    const findings = (await design((s, r) => { rewriteDoc(r, s, ADR1, text); })).filter((f) => f.subject === ":decision-0001");
+    assert.deepEqual(findings.map((f) => [f.rule, f.message]), [["design-status",
+      `ADR 0001 has status "${word}", which is not proposed, accepted, superseded or deprecated; do not record it as a decision node`]], status);
+  }
+});
+
 const ADR2 = "docs/adr/0002-keep-cheques.md";
 const linkOf = (id, subject, relationship, object) => block(`:assertion-${id}`, "kit:GraphAssertion", [["kit:basis", "kit:direct"],
   ["kit:evidence", ":evidence-e5"], ["kit:object", object], ["kit:relationship", relationship], ["kit:subject", subject]]);

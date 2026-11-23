@@ -68,7 +68,7 @@ export function readDecision(tree, number) {
     if (statusLine === null) {
       const m = /^- \*\*Status:\*\*\s*(.+?)\s*$/.exec(line);
       if (m) {
-        status = m[1].split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, "");
+        status = m[1].split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, "") || null;
         statusLine = i + 1;
         successor = /superseded by ADR ([0-9]{4})/i.exec(m[1])?.[1] ?? null;
       }
