@@ -54,20 +54,21 @@ export function resolveTerm(tree, config, input) {
   const subjects = new Set(parseTurtle(tree.text(ontologyTurtlePath(config))).map((t) => t.subject));
   return subjects.has(`:${name}`) ? { iri: `:${name}`, name } : null;
 }
+const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const byIri = (a, b) => compare(a.iri, b.iri);
+const bySubjectThenIri = (a, b) => compare(a.subject?.iri ?? "", b.subject?.iri ?? "") || byIri(a, b);
 export function conceptImplementations(graph, iri) {
-  const byIri = (a, b) => (a.iri < b.iri ? -1 : a.iri > b.iri ? 1 : 0);
   const denoting = graph.byType("kit:GraphNode").filter((n) => val(n, "kit:denotes") === iri).sort(byIri);
   const targets = new Set(denoting.map((n) => n.iri));
   const implementing = graph.byType("kit:GraphAssertion").filter((a) => val(a, "kit:relationship") === "kit:implements" && targets.has(val(a, "kit:object")))
     .map((a) => assertionView(graph, a))
-    .sort((a, b) => byIri({ iri: a.subject?.iri ?? "" }, { iri: b.subject?.iri ?? "" }) || byIri(a, b));
+    .sort(bySubjectThenIri);
   return { term: { iri, name: iri.slice(1) }, denotes: denoting.map(nodeView), implements: implementing };
 }
 export function behaviourLinks(graph, tree, reference) {
   const parsed = parseBehaviourReference(reference), iri = behaviourIri(parsed.slug, parsed.id);
   const node = graph.resources.get(iri);
-  const byIri = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-  const sorted = (list) => list.sort((a, b) => byIri(a.subject?.iri ?? "", b.subject?.iri ?? "") || byIri(a.iri, b.iri));
+  const sorted = (list) => list.sort(bySubjectThenIri);
   if (!node) {
     const file = behavioursFile(tree, parsed.slug);
     const declared = file?.path ? { path: file.path, declared: readBehaviours(tree.text(file.path), { lite: file.lite }).some((b) => b.id === parsed.id) } : { path: null, declared: false };
@@ -82,6 +83,20 @@ export function behaviourLinks(graph, tree, reference) {
     components: group("kit:implements", "kit:object", ["kit:component", "kit:system"]),
     symbols: group("kit:implements", "kit:object", ["kit:source-symbol", "kit:source-file"]), tests: testedBy };
 }
+export function codeLinks(graph, id) {
+  const iri = idFor(id), resource = graph.resources.get(iri);
+  if (!resource || !graph.byType("kit:GraphNode").includes(resource)) return { node: null, behaviours: [], decisions: [], via: [] };
+  const assertions = graph.byType("kit:GraphAssertion");
+  const linksOf = (nodeIri) => {
+    const from = (relationship, kind) => assertions.filter((a) => val(a, "kit:relationship") === relationship && val(a, "kit:subject") === nodeIri)
+      .map((a) => assertionView(graph, a)).filter((a) => a.object?.kind === kind).sort(byIri);
+    return { behaviours: from("kit:implements", "kit:behaviour"), decisions: from("kit:documented-by", "kit:decision") };
+  };
+  const via = assertions.filter((a) => val(a, "kit:relationship") === "kit:contains" && val(a, "kit:object") === iri)
+    .map((a) => graph.resources.get(val(a, "kit:subject"))).filter((c) => c && ["kit:component", "kit:system"].includes(val(c, "kit:kind")))
+    .sort(byIri).map((c) => ({ component: nodeView(c), ...linksOf(c.iri) }));
+  return { node: nodeView(resource), ...linksOf(iri), via };
+}
 export function coverageReport(graph, paths = []) {
   const inventory = graph.byType("kit:GraphCoverage").map((r) => ({ iri: r.iri, selector: val(r, "kit:pathSelector"), status: val(r, "kit:status"), priority: val(r, "kit:priority"), reason: val(r, "kit:reason") }));
   const files = paths.map((path) => { const result = resolveCoverage(graph, path); return { path, status: result.status, reason: result.reason }; });
@@ -95,6 +110,8 @@ export function annotate(result, { graphTree, workingTree }) {
   for (const e of copy.implements || []) mark(e);
   for (const m of copy.matches || []) for (const e of m.assertions) mark(e);
   for (const list of [copy.components, copy.symbols, copy.tests]) for (const e of list || []) mark(e);
+  for (const list of [copy.behaviours, copy.decisions]) for (const e of list || []) mark(e);
+  for (const v of copy.via || []) for (const e of [...v.behaviours, ...v.decisions]) mark(e);
   for (const path of copy.paths || []) for (const e of path) mark(e);
   return { ...copy, graphRevision: graphTree.id, workingRevision: workingTree.id, stale };
 }
@@ -119,12 +136,17 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
       if (!parseBehaviourReference(values[0])) throw new Error(`${values[0]} is not a behaviour reference; use <slug>#B<n>`);
       result = behaviourLinks(graph, tree, values[0]);
     }
+    else if (command === "code" && values.length === 1) {
+      result = codeLinks(graph, values[0]);
+      if (!result.node) throw new Error(`${idFor(values[0])} is not a graph node; try: node scripts/query-source-graph.mjs search <words>`);
+    }
     else if (command === "search" && values.length) result = search(graph, values);
     else if ((command === "neighbors" || command === "node") && values.length === 1) result = neighbors(graph, values[0]);
     else if (command === "path" && values.length === 2 && Number.isInteger(opts.maxDepth) && opts.maxDepth >= 0) result = findPaths(graph, values[0], values[1], { maxDepth: opts.maxDepth });
     else if (command === "coverage") result = {};
     else throw new Error("invalid graph query");
-    const paths = command === "coverage" ? values : [];
+    const fileKind = command === "code" && ["kit:source-file", "kit:test"].includes(result.node.kind);
+    const paths = command === "coverage" ? values : fileKind ? [result.node.label] : [];
     result = { ...annotate(result, { graphTree: tree, workingTree }), coverage: coverageReport(graph, paths) };
     if (opts.json) { stdout.write(JSON.stringify(result) + "\n"); return 0; }
     stdout.write(`graph revision ${result.graphRevision}\nworking revision ${result.workingRevision}\n${result.stale ? "STALE\n" : ""}`);
@@ -149,13 +171,23 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
         const id = `B${parseBehaviourReference(ref).id}`, d = result.declared;
         stdout.write(d.path ? `No graph node for ${ref}; ${d.path} ${d.declared ? "declares" : "does not declare"} ${id}.\n` : `No graph node for ${ref}; no behaviours file declares behaviours for ${parseBehaviourReference(ref).slug}.\n`);
       } else {
-        stdout.write(`behaviour ${result.behaviour.iri} ${result.behaviour.label} (${result.behaviour.designStatus?.replace("kit:", "")})\n`);
+        stdout.write(`behaviour ${result.behaviour.iri} ${result.behaviour.label} (${result.behaviour.designStatus?.replace("kit:", "") ?? "no status"})\n`);
         if (result.replacement) stdout.write(`replaced by ${result.replacement.iri} ${result.replacement.label}\n`);
         for (const heading of ["components", "symbols", "tests"]) { stdout.write(`${heading}\n`); result[heading].forEach(print); }
         if (!result.components.length && !result.symbols.length && !result.tests.length) {
           stdout.write(`No graph assertion links ${ref}; that does not mean the behaviour is unimplemented or untested.\n`);
           for (const c of result.coverage.inventory) stdout.write(`${c.selector}: ${c.status}${c.reason ? ` — ${c.reason}` : ""}\n`);
         }
+      }
+    }
+    if (command === "code") {
+      const section = (v) => { stdout.write("behaviours\n"); v.behaviours.forEach(print); stdout.write("decisions\n"); v.decisions.forEach(print); };
+      stdout.write(`code ${result.node.iri} ${result.node.label}\n`);
+      section(result);
+      for (const v of result.via) { stdout.write(`via component ${v.component.iri} ${v.component.label}\n`); section(v); }
+      if (![result, ...result.via].some((v) => v.behaviours.length || v.decisions.length)) {
+        stdout.write(`No behaviour or decision is linked to ${result.node.iri}, directly or via its component; that does not mean the code has no reason to exist.\n`);
+        for (const c of fileKind ? result.coverage.files : result.coverage.inventory) stdout.write(`${c.path || c.selector}: ${c.status}${c.reason ? ` — ${c.reason}` : ""}\n`);
       }
     }
     for (const m of result.matches || []) { stdout.write(`${m.node.iri} ${m.node.label}\n`); m.assertions.forEach(print); }

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { openGraph, search, neighbors, findPaths, coverageReport, annotate, main, resolveTerm, conceptImplementations, behaviourLinks } from "./query-source-graph.mjs";
+import { openGraph, search, neighbors, findPaths, coverageReport, annotate, main, resolveTerm, conceptImplementations, behaviourLinks, codeLinks } from "./query-source-graph.mjs";
 import { treeFromRevision } from "./source-graph-git.mjs";
 import { withScratchRepo, widgets, block, S, writeGraph, addDesignDocs } from "./source-graph-test-helpers.mjs";
 
@@ -300,5 +300,57 @@ test("B3, B4: a loosely typed reference is rejected with the expected form", asy
       assert.equal(result.code, 2, bad);
       assert.match(result.err, /is not a behaviour reference; use <slug>#B<n>/, bad);
     }
+  });
+});
+
+const contains = block(":assertion-v1", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-e5"],
+  ["kit:object", ":node-impl"], ["kit:relationship", "kit:contains"], ["kit:subject", ":node-ledger"]]);
+
+test("B6: code lists the behaviours it implements and the decisions it is documented by", async () => {
+  await designRepo(async (repo, { graph }) => {
+    const result = codeLinks(graph, ":node-ledger");
+    assert.deepEqual(result.behaviours.map((a) => a.iri), [":assertion-d3", ":assertion-d4"]);
+    assert.deepEqual(result.decisions.map((a) => a.iri), [":assertion-d6"]);
+    assert.deepEqual(result.via, []);
+    const text = run(repo, ["code", ":node-ledger"]);
+    assert.equal(text.code, 0, text.err);
+    assert.match(text.out, /^code :node-ledger Ledger$/m);
+    assert.match(text.out, /^:node-ledger kit:documented-by :decision-0001$/m);
+  });
+});
+
+test("B6: code follows one kit:contains up to its component, labelled via component", async () => {
+  await designRepo(async (repo, { graph }) => {
+    const result = codeLinks(graph, "node-impl");
+    assert.equal(result.node.iri, ":node-impl");
+    assert.deepEqual(result.behaviours, []);
+    assert.equal(result.via.length, 1);
+    assert.equal(result.via[0].component.iri, ":node-ledger");
+    assert.deepEqual(result.via[0].behaviours.map((a) => a.iri), [":assertion-d3", ":assertion-d4"]);
+    assert.deepEqual(result.via[0].decisions.map((a) => a.iri), [":assertion-d6"]);
+    assert.match(run(repo, ["code", "node-impl"]).out, /^via component :node-ledger Ledger$/m);
+  }, (spec) => { spec.assertions.push(contains); });
+});
+
+test("B7: code with no design links says so and prints the coverage for its path", async () => {
+  await designRepo(async (repo) => {
+    const text = run(repo, ["code", ":node-impl"]);
+    assert.equal(text.code, 0, text.err);
+    assert.match(text.out, /^No behaviour or decision is linked to :node-impl, directly or via its component; that does not mean the code has no reason to exist\.$/m);
+    assert.match(text.out, /^src\/[^:]+: kit:covered$/m);
+    const missing = run(repo, ["code", ":node-nope"]);
+    assert.equal(missing.code, 2);
+    assert.match(missing.err, /:node-nope is not a graph node/);
+  });
+});
+
+test("B24: the behaviour and code lookups make no network call", async () => {
+  await designRepo(async (repo) => {
+    const original = globalThis.fetch;
+    globalThis.fetch = () => { throw new Error("network call"); };
+    try {
+      assert.equal(run(repo, ["behaviour", "payments#B1"]).code, 0);
+      assert.equal(run(repo, ["code", ":node-ledger"]).code, 0);
+    } finally { globalThis.fetch = original; }
   });
 });
