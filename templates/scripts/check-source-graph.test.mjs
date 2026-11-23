@@ -22,7 +22,32 @@ async function run(mutate, language = "csharp") {
 const rulesOf = (findings) => new Set(findings.map((f) => f.rule));
 
 test("B22: a version 1 manifest that uses no version 2 value passes against the version 2 schema", async () => {
-  assert.deepEqual(await run((s) => { s.version = 1; }), []);
+  assert.deepEqual(await run((s) => { s.version = 1; assert.equal(s.version, 1); }), []);
+});
+
+test("B2: the version 2 design fixture has no schema-version or schema-version-too-old findings", async () => {
+  const findings = await design((s) => { assert.equal(s.version, 2); });
+  for (const rule of ["schema-version", "schema-version-too-old"]) assert.ok(!has(findings, rule), rule);
+});
+
+test("B1: the too-old scan uses the lowest valid manifest version, whichever manifest comes first", async () => {
+  for (const iri of [":aaa-graph", ":zzz-graph"]) {
+    const findings = await run((s) => {
+      s.version = 2;
+      s.coverage.push(block(iri, "kit:SourceKnowledgeGraph", [["kit:schemaVersion", 1]]));
+      setPair(find(s.assertions, ":assertion-a5"), "kit:relationship", "kit:replaced-by");
+    });
+    assert.ok(has(findings, "schema-version-too-old", ":assertion-a5"), `${iri}: ${JSON.stringify(findings)}`);
+  }
+});
+
+test("B3: a version 1 node carrying the same version 2 value twice gets one message per value", async () => {
+  const findings = await run((s) => {
+    s.nodes.push(block(":behaviour-widgets-B1", "kit:GraphNode", [["kit:designStatus", "kit:current"], ["kit:designStatus", "kit:current"],
+      ["kit:kind", "kit:behaviour"], ["kit:kind", "kit:behaviour"], ["rdfs:label", S("widgets#B1 Post an invoice")]]));
+  });
+  const messages = findings.filter((f) => f.rule === "schema-version-too-old" && f.subject === ":behaviour-widgets-B1").map((f) => f.message).sort();
+  assert.deepEqual(messages, ["kit:behaviour needs kit:schemaVersion 2", "kit:current needs kit:schemaVersion 2", "kit:designStatus needs kit:schemaVersion 2"]);
 });
 
 test("B22: a manifest below 1 or above the core version fails", async () => {
@@ -450,7 +475,11 @@ const designNode = (pairs) => block(":behaviour-widgets-B1", "kit:GraphNode",
 test("B22: a design node needs one status from its kind's list and one evidence item, in a version 2 graph", async () => {
   const shaped = async (pairs, version = 2) => rulesOf(await run((s) => { s.version = version; s.nodes.push(designNode(pairs)); }));
   const ok = await shaped([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"]]);
-  for (const rule of ["design-status", "design-evidence", "schema-version-too-old", "dangling-reference", "bad-value"]) assert.ok(!ok.has(rule), rule);
+  for (const rule of ["design-status", "design-evidence", "schema-version-too-old", "dangling-reference", "bad-value", "unknown-kind"]) assert.ok(!ok.has(rule), rule);
+  const decision = (pairs) => run((s) => { s.version = 2; s.nodes.push(block(":decision-widgets", "kit:GraphNode", [["kit:kind", "kit:decision"], ["rdfs:label", S("ADR 0001 X")], ...pairs])); });
+  assert.ok(!rulesOf(await decision([["kit:designStatus", "kit:accepted"], ["kit:evidence", ":evidence-e4"]])).has("design-status"), "decision accepts kit:accepted");
+  assert.ok(rulesOf(await decision([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"]])).has("design-status"), "decision rejects kit:current");
+  assert.ok((await shaped([["kit:designStatus", "kit:current"], ["kit:designStatus", "kit:retired"], ["kit:evidence", ":evidence-e4"]])).has("design-status"), "two statuses");
   assert.ok((await shaped([["kit:evidence", ":evidence-e4"]])).has("design-status"), "missing status");
   assert.ok((await shaped([["kit:designStatus", "kit:accepted"], ["kit:evidence", ":evidence-e4"]])).has("design-status"), "decision status on a behaviour");
   assert.ok((await shaped([["kit:designStatus", "kit:current"]])).has("design-evidence"), "missing evidence");

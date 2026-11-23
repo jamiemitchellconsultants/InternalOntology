@@ -28,6 +28,11 @@ const shapes = {
   "kit:GraphRefreshRecord": { "kit:path": "string", "kit:blobId": "string?", "kit:deleted": "integer?", "kit:reviewOutcome": "iri" },
   "kit:GraphKindDefinition": { "rdfs:comment": "string" }, "kit:GraphRelationshipDefinition": { "rdfs:comment": "string" },
 };
+const REFS = {
+  "kit:GraphAssertion": { "kit:subject": "kit:GraphNode", "kit:object": "kit:GraphNode", "kit:evidence": "kit:GraphEvidence" },
+  "kit:SourceKnowledgeGraph": { "kit:coverage": "kit:GraphCoverage", "kit:refreshRecord": "kit:GraphRefreshRecord", "kit:declaresKind": "kit:GraphKindDefinition", "kit:declaresRelationship": "kit:GraphRelationshipDefinition" },
+  "kit:GraphNode": { "kit:evidence": "kit:GraphEvidence" },
+};
 export function checkTree({ tree, config }) {
   const graph = loadGraph(tree, config), findings = [];
   const add = (r, rule, message) => findings.push({ file: r.file || graph.root, subject: r.iri || "", line: r.line || 0, rule, message });
@@ -43,7 +48,8 @@ export function checkTree({ tree, config }) {
   if (manifests.length !== 1) add({ file: graph.root }, "graph-resource-count", `expected one graph resource, got ${manifests.length}`);
   const validVersion = (n) => Number.isInteger(n) && n >= 1 && n <= CORE.schemaVersion;
   for (const m of manifests) if (!validVersion(Number(value(m, "kit:schemaVersion"))) || version !== CORE.schemaVersion) add(m, "schema-version", "schema version does not match core version");
-  const manifestVersion = manifests.length ? Number(value(manifests[0], "kit:schemaVersion")) : NaN;
+  const validVersions = manifests.map((m) => Number(value(m, "kit:schemaVersion"))).filter(validVersion);
+  const manifestVersion = validVersions.length ? Math.min(...validVersions) : NaN;
   const ontology = new Set(parseTurtle(tree.text(config.ontologyPath.replace(/\.md$/, ".ttl"))).map((t) => t.subject));
   for (const r of graph.resources.values()) {
     const shape = shapes[r.type];
@@ -65,7 +71,7 @@ export function checkTree({ tree, config }) {
       }
       if (r.type === "kit:GraphAssertion") for (const p of r.values("kit:relationship")) need(p.object, introducedIn(p.object));
     }
-    const refs = r.type === "kit:GraphAssertion" ? { "kit:subject": "kit:GraphNode", "kit:object": "kit:GraphNode", "kit:evidence": "kit:GraphEvidence" } : r.type === "kit:SourceKnowledgeGraph" ? { "kit:coverage": "kit:GraphCoverage", "kit:refreshRecord": "kit:GraphRefreshRecord", "kit:declaresKind": "kit:GraphKindDefinition", "kit:declaresRelationship": "kit:GraphRelationshipDefinition" } : r.type === "kit:GraphNode" ? { "kit:evidence": "kit:GraphEvidence" } : {};
+    const refs = REFS[r.type] || {};
     for (const [predicate, type] of Object.entries(refs)) for (const p of r.values(predicate)) if (graph.resources.get(p.object)?.type !== type) add(r, "dangling-reference", `${predicate} references missing ${p.object}`);
     if (r.type === "kit:GraphNode") {
       const kind = value(r, "kit:kind"), declared = manifests.some((m) => m.values("kit:declaresKind").some((p) => p.object === kind));
