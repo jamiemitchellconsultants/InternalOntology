@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkTree, loadCheckConfig, CheckSetupError } from "./check-source-graph.mjs";
 import { treeFromRevision } from "./source-graph-git.mjs";
-import { withScratchRepo, widgets, writeGraph, find, setPair, dropPair, block, S, ttl, blobId, ROOT, addDesignDocs } from "./source-graph-test-helpers.mjs";
+import { withScratchRepo, widgets, writeGraph, find, setPair, dropPair, block, S, ttl, blobId, ROOT, addDesignDocs, rewriteDoc, DESIGN_FEATURE } from "./source-graph-test-helpers.mjs";
 
 async function run(mutate, language = "csharp") {
   let findings;
@@ -469,4 +469,54 @@ test("B22: kit:designStatus and node kit:evidence are rejected on other kinds", 
 
 test("the design fixture is structurally valid in both modes", async () => {
   for (const mode of ["lite", "full"]) assert.deepEqual(await run((s, r) => { addDesignDocs(r, s, { mode }); }), [], mode);
+});
+
+const LITE = "docs/features/payments/feature.md";
+const design = (mutate, mode = "lite") => run(async (s, r) => { addDesignDocs(r, s, { mode }); await mutate?.(s, r); });
+const has = (findings, rule, subject) => findings.some((f) => f.rule === rule && (subject === undefined || f.subject === subject));
+
+const behaviourMutations = [
+  ["design-iri", ":behaviour-payments-1", (s) => { find(s.nodes, ":behaviour-payments-B1").subject = ":behaviour-payments-1"; }],
+  ["design-undeclared", ":behaviour-payments-B1", (s) => { setPair(find(s.evidence, ":evidence-d1"), "kit:startLine", 12); setPair(find(s.evidence, ":evidence-d1"), "kit:endLine", 12); }],
+  ["design-undeclared", ":behaviour-payments-B9", (s) => { s.nodes.push(block(":behaviour-payments-B9", "kit:GraphNode", [["kit:designStatus", "kit:current"],
+    ["kit:evidence", ":evidence-d2"], ["kit:kind", "kit:behaviour"], ["rdfs:label", S("payments#B9 Pay twice")]])); }],
+  ["design-label", ":behaviour-payments-B1", (s) => { setPair(find(s.nodes, ":behaviour-payments-B1"), "rdfs:label", S("payments#B1 Pay invoice")); }],
+  ["design-label", ":behaviour-payments-B2", (s) => { setPair(find(s.nodes, ":behaviour-payments-B2"), "rdfs:label", S("payments#B2")); }],
+  ["design-status", ":behaviour-payments-B3", (s) => { setPair(find(s.nodes, ":behaviour-payments-B3"), "kit:designStatus", "kit:current"); }],
+  ["design-status", ":behaviour-payments-B1", (s) => { setPair(find(s.nodes, ":behaviour-payments-B1"), "kit:designStatus", "kit:retired"); }],
+  ["design-evidence", ":behaviour-payments-B1", (s) => { setPair(find(s.nodes, ":behaviour-payments-B1"), "kit:evidence", ":evidence-e4"); }],
+  ["design-evidence", ":behaviour-payments-B1", (s) => { setPair(find(s.evidence, ":evidence-d1"), "kit:role", "kit:role-implementation"); }],
+  ["design-id-reused", ":behaviour-payments-B2", (s, r) => { rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("- **B3 Pay by cheque.**", "- **B2 Pay by cheque.**")); }],
+];
+
+for (const [rule, subject, mutate] of behaviourMutations) {
+  test(`B1, B19: a behaviour node that drifts from its document reports ${rule} on ${subject}`, async () => {
+    const findings = await design(mutate);
+    assert.ok(has(findings, rule, subject), `expected ${rule} on ${subject}, got ${JSON.stringify(findings)}`);
+  });
+}
+
+test("B1: behaviour nodes that match their declarations pass in lite and full mode with the same IRIs", async () => {
+  for (const mode of ["lite", "full"]) assert.deepEqual(await design(null, mode), [], mode);
+});
+
+test("B2: a feature with both behaviours files fails once, naming both", async () => {
+  const findings = await design((s, r) => { r.write("docs/features/payments/02-behaviours.md", DESIGN_FEATURE); });
+  const hits = findings.filter((f) => f.rule === "design-file-conflict");
+  assert.equal(hits.length, 1, JSON.stringify(findings));
+  assert.match(hits[0].message, /docs\/features\/payments\/02-behaviours\.md and docs\/features\/payments\/feature\.md both declare behaviours/);
+});
+
+test("B19: a behaviour whose feature has no behaviours file is undeclared", async () => {
+  const findings = await design((s, r) => { r.remove(LITE); });
+  assert.ok(has(findings, "design-undeclared", ":behaviour-payments-B1"), JSON.stringify(findings));
+});
+
+test("B21: rewording a title keeps the IRI; the check passes once the label follows the new title", async () => {
+  const reworded = DESIGN_FEATURE.replace("**B1 Pay an invoice.**", "**B1 Pay an open invoice.**");
+  assert.ok(has(await design((s, r) => { rewriteDoc(r, s, LITE, reworded); }), "design-label", ":behaviour-payments-B1"));
+  assert.deepEqual(await design((s, r) => {
+    rewriteDoc(r, s, LITE, reworded);
+    setPair(find(s.nodes, ":behaviour-payments-B1"), "rdfs:label", S("payments#B1 Pay an open invoice"));
+  }), []);
 });

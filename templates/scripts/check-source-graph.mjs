@@ -2,6 +2,7 @@ import { validateConfig, normaliseRepoRelativePath } from "./ontology-config.mjs
 import { parseTurtle } from "./owl-ontology.mjs";
 import { lineCount, changedPaths, treeFromIndex, treeFromRevision } from "./source-graph-git.mjs";
 import { parseGraphTurtle } from "./source-graph-turtle.mjs";
+import { BEHAVIOUR_IRI, behavioursFile, readBehaviours } from "./source-graph-design-docs.mjs";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CORE, DESIGN_STATUSES, NODE_PREDICATE_VERSIONS, ROLE_KEYS, introducedIn, loadGraph, matchSelector, resolveCoverage, refreshIdFor } from "./source-graph-model.mjs";
@@ -115,7 +116,40 @@ export function checkTree({ tree, config }) {
     if (path.startsWith(graph.root + "/") && resolveCoverage(graph, path).status !== "kit:excluded") add({ file: path }, "root-not-excluded", `${path} is not excluded`);
   }
   if (resolveCoverage(graph, `${graph.root}/probe`).status !== "kit:excluded") add({ file: graph.root }, "root-not-excluded", "graph root is not excluded");
+  findings.push(...designFindings(graph, tree));
   return findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule) || a.message.localeCompare(b.message)).map(({ line, ...f }) => f);
+}
+
+export function designFindings(graph, tree) {
+  const findings = [], conflicts = new Set();
+  const add = (r, rule, message) => findings.push({ file: r.file || graph.root, subject: r.iri || "", rule, message });
+  for (const node of graph.byType("kit:GraphNode")) {
+    if (node.first("kit:kind")?.object !== "kit:behaviour") continue;
+    const match = BEHAVIOUR_IRI.exec(node.iri);
+    if (!match) { add(node, "design-iri", `${node.iri} is not :behaviour-<slug>-B<n>`); continue; }
+    const [, slug, id] = match, located = behavioursFile(tree, slug);
+    if (!located) { add(node, "design-undeclared", `no behaviours file declares behaviours for ${slug}`); continue; }
+    if (located.conflict) {
+      if (!conflicts.has(slug)) { conflicts.add(slug); add({ file: located.conflict[0] }, "design-file-conflict", `${located.conflict[0]} and ${located.conflict[1]} both declare behaviours`); }
+      continue;
+    }
+    const items = node.values("kit:evidence");
+    if (items.length !== 1) continue;
+    const evidence = graph.resources.get(items[0].object);
+    if (!evidence) continue;
+    if (evidence.first("kit:role")?.object !== "kit:role-selected-document" || evidence.first("kit:path")?.object !== located.path) {
+      add(node, "design-evidence", `evidence must be a selected-document item for ${located.path}`); continue;
+    }
+    const declared = readBehaviours(tree.text(located.path), { lite: located.lite }).filter((d) => String(d.id) === id);
+    if (declared.length > 1) { add(node, "design-id-reused", `${located.path} declares B${id} more than once`); continue; }
+    const line = Number(evidence.first("kit:startLine")?.object), here = declared.find((d) => d.line === line);
+    if (!here) { add(node, "design-undeclared", `${located.path}:${line} does not declare B${id}`); continue; }
+    const label = `${slug}#B${id} ${here.title}`;
+    if (node.first("rdfs:label")?.object !== label) { add(node, "design-label", `label must be ${JSON.stringify(label)}`); continue; }
+    const status = here.retired ? "kit:retired" : "kit:current";
+    if (node.first("kit:designStatus")?.object !== status) add(node, "design-status", `${node.iri} must be ${status}`);
+  }
+  return findings;
 }
 
 function configForTree(tree) {
