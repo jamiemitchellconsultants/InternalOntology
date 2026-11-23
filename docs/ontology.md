@@ -55,6 +55,7 @@ Internal components that are ours to build. Named so that specs can describe the
 | `GraphCheckWorkflow` | kit-owned pull-request and default-branch workflow | Runs `GraphChecker` with read-only access to the checked-out Git history and publishes a stable check result. | Reads graph data and Git trees after checkout; has no model, secret, or post-checkout network requirement. |
 | `GraphRenderer` | kit-owned local Markdown generation script | Renders every current graph claim, evidence reference, basis and coverage declaration into a deterministic human-readable document after validating one Git input snapshot. | Reads `SourceKnowledgeGraph`, `OntologyConfig` and local Git objects through the existing graph model and `GraphChecker`; writes only the generated Markdown view or checks its freshness. |
 | `GraphRenderWorkflow` | kit-owned pull-request and default-branch workflow | Regenerates the expected readable graph view and checks that the same revision contains matching Markdown, so maintainers can review it with the source changes. | Runs `GraphRenderer` with read-only repository permission; publishes a freshness result and makes no commits or changes to canonical Turtle. |
+| `DesignDocumentReader` | kit-owned local script | Finds a feature's behaviours file, its `FeatureBehaviour` declarations and Retired behaviours entries, and a `DesignDecision`'s title and status, in a Git tree. | Reads adopter-owned feature documents and ADRs from local Git objects; used by `GraphChecker` and `GraphReader`; never writes. |
 
 ---
 
@@ -73,6 +74,8 @@ Internal components that are ours to build. Named so that specs can describe the
 | `AgentInstructionFile` | one of `AGENTS.md`, `CLAUDE.md` | Whichever file a `TargetRepository` already treats as authoritative for agent instructions (`AGENTS.md` preferred, `CLAUDE.md` otherwise, `AGENTS.md` created if neither exists). Carries the spliced `OntologyProtocol` and optionally `GraphAgentProtocol`. |
 | `SemanticReviewRun` | pull request, revision, eligible files, reviewed files, `OntologyProjection` summary per reviewed file, outcome | One attempt to assess changed Markdown against the ontology. Its outcome controls the current semantic check; a later run supersedes it even when that later run cannot review. |
 | `GraphNamingRun` | pull request, revision, eligible graph nodes, reviewed nodes, outcome | One model-assisted comparison of the names of a pull request revision's added or changed `GraphNode`s, and of nodes whose denoted ontology item the revision renames or removes, with its proposed `Ontology`. Separate from `GraphChecker`, which it never changes; a run that cannot review permits merge. |
+| `FeatureBehaviour` | feature slug, behaviour id, title, `BehaviourStatus`, replacement | One behaviour an analyst declares in a feature document, as a `GraphNode` of the core behaviour kind whose identity derives only from its `BehaviourReference`. Its id is permanent: never renumbered or reused, and retired rather than deleted. |
+| `DesignDecision` | ADR number, title, `DecisionStatus`, successor | One architecture decision record under `docs/adr/` named `NNNN-<title>.md`, as a `GraphNode` of the core decision kind whose identity derives only from its number. |
 
 ---
 
@@ -104,6 +107,8 @@ Internal components that are ours to build. Named so that specs can describe the
 | `FindingDismissal` | `SemanticFinding`, revision, maintainer, reason | A maintainer's recorded decision to disregard one `SemanticFinding` for one PR revision. It survives reruns of that revision and expires when the PR changes. |
 | `GraphNamingResult` | graph node, compared values, ontology item, reason, suggested correction | A likely mismatch a `GraphNamingRun` reports between a `GraphNode`'s label, `kit:denotes` target or implemented concept and the `Ontology`. Its identity derives from the node, the compared values and the ontology item, not the revision or the model's wording, so the same mismatch on a later revision is the same result. It takes effect only when a permitted reviewer accepts it. |
 | `NamingSettlement` | `GraphNamingResult`, pull request, `SettlementDecision`, reviewer, reason, deferral issue | A permitted reviewer's decision on one `GraphNamingResult` for one pull request. It survives later revisions that produce the same result; the latest settlement on the pull request applies. A rejection carries a reason; a deferral links the new issue that records the result. |
+| `BehaviourReference` | feature slug, behaviour id | The permanent name `<slug>#B<n>` of a `FeatureBehaviour`, used outside its own feature documents because every feature has its own B1. |
+| `RetiredDesignLink` | assertion, retired `FeatureBehaviour` or inactive `DesignDecision`, replacement or successor | A `GraphAssertion` that still links a retired `FeatureBehaviour` or a superseded or deprecated `DesignDecision`. `GraphChecker` reports it without failing, so an amendment can list the code and tests it affects. |
 
 ---
 
@@ -119,6 +124,8 @@ enum lock test catches.
 | `SettlementDecision` | `accepted`, `rejected`, `deferred` | The decision a `NamingSettlement` records. `accepted` makes the `GraphNamingResult` a required correction that holds the merge until a revision no longer reports it; `rejected` and `deferred` let the pull request proceed. |
 | `AuthMode` | `Oidc`, `Static`, `None` | Which credential a `ModelAuthProvider` resolved: a complete `OidcClientConfig`, the static key variable, or nothing. `Oidc` wins over `Static`; a partial `OidcClientConfig` is an error, not `Static`. |
 | `ProjectionMode` | `matched`, `full` | How the `SemanticReviewWorker` builds each `OntologyProjection`. `matched`, the default, sends full rows only for the entries selected for the Markdown in the request; `full` sends every row, as before this mode existed. Set by `semanticReview.projection` in `OntologyConfig`. |
+| `BehaviourStatus` | `current`, `retired` | Whether a `FeatureBehaviour` is still declared in its feature's behaviours or has moved to the Retired behaviours section. |
+| `DecisionStatus` | `proposed`, `accepted`, `superseded`, `deprecated` | The first word of a `DesignDecision`'s Status line. `superseded` and `deprecated` make links to it a `RetiredDesignLink`; "amended by" leaves it `accepted`. |
 
 ---
 
@@ -143,6 +150,8 @@ enum lock test catches.
 | `RenderSourceKnowledgeGraph` | Maintainer, through a Git workflow | Generate a human-readable Markdown document of the current `SourceKnowledgeGraph`, preserving its recorded claims, evidence access, direct or inferred basis, coverage limits, and references for finding the underlying Turtle. The Turtle remains canonical; rendering does not judge semantic accuracy. |
 | `ShowIndexedPassage` | AI coding agent or developer | Retrieve the `PassageExtract` for one `SemanticSearchResult` so that only the cited lines are read, from the indexed commit and within the `IndexSourceScope`, instead of the whole file. |
 | `ReportIndexTokenUse` | Developer or repository owner | Summarise the `SearchTokenLog` as command count, total and mean `TokenEstimate`, and largest response, so token cost has a baseline. Reads only the local log. |
+| `FindBehaviourLinks` | AI agent or developer | Start from a `BehaviourReference` and list, through the `GraphReader`, the components, symbols and tests linked to its `FeatureBehaviour`, with evidence, basis, status and staleness. |
+| `FindCodeDesignLinks` | AI agent or developer | Start from a source symbol, source file or component and list, through the `GraphReader`, the `FeatureBehaviour`s it implements and the `DesignDecision`s it is documented by, directly or through the component that contains it. |
 
 ---
 
@@ -208,6 +217,11 @@ enum lock test catches.
 | `ModelAuthProvider` | reads | `OidcClientConfig` | many → 1 |
 | `DriftReviewer` | runs within | `RequestBudget` | many → 1 |
 | `SemanticReviewWorker` | runs within | `RequestBudget` | many → 1 |
+| `FeatureBehaviour` | replaced by | `FeatureBehaviour` | many → 0 or 1 |
+| `DesignDecision` | superseded by | `DesignDecision` | many → 0 or 1 |
+| `GraphChecker` | reports | `RetiredDesignLink` | 1 → 0 or many |
+| `GraphChecker` | reads documents through | `DesignDocumentReader` | many → 1 |
+| `GraphReader` | reads documents through | `DesignDocumentReader` | many → 1 |
 
 ---
 
@@ -279,3 +293,7 @@ enum lock test catches.
   is never refused for size. Only trusted committed configuration sets it.
 - **`PassageExtract`** — is read from the indexed Git commit, never the working tree, and only for
   paths inside the effective `IndexSourceScope`.
+- **`FeatureBehaviour`** — its `BehaviourReference` is never renumbered or reused; a declaration that
+  reuses a retired id, or a node whose cited lines no longer declare its id, fails `GraphChecker`.
+- **`RetiredDesignLink`** — is reported, never failed, so a behaviour can be retired before the code
+  that links it is changed.
