@@ -17,6 +17,28 @@ async function run(mutate, language = "csharp") {
   return findings;
 }
 
+const rulesOf = (findings) => new Set(findings.map((f) => f.rule));
+
+test("B22: a version 1 manifest that uses no version 2 value passes against the version 2 schema", async () => {
+  assert.deepEqual(await run((s) => { s.version = 1; }), []);
+});
+
+test("B22: a manifest below 1 or above the core version fails", async () => {
+  for (const version of [0, 3]) {
+    assert.ok(rulesOf(await run((s) => { s.version = version; })).has("schema-version"), String(version));
+  }
+});
+
+test("B22: a version 2 value in a version 1 graph fails and names the version it needs", async () => {
+  const findings = await run((s) => { setPair(find(s.assertions, ":assertion-a5"), "kit:relationship", "kit:replaced-by"); });
+  const hit = findings.find((f) => f.rule === "schema-version-too-old");
+  assert.ok(hit, JSON.stringify(findings));
+  assert.equal(hit.subject, ":assertion-a5");
+  assert.match(hit.message, /kit:replaced-by needs kit:schemaVersion 2/);
+  assert.ok(!(await run((s) => { s.version = 2; setPair(find(s.assertions, ":assertion-a5"), "kit:relationship", "kit:replaced-by"); }))
+    .some((f) => f.rule === "schema-version-too-old"), "allowed at version 2");
+});
+
 test("a complete widgets graph is clean in every language", async () => {
   for (const language of ["csharp", "typescript", "java", "python"]) {
     assert.deepEqual(await run(null, language), [], language);
@@ -56,7 +78,7 @@ const mutations = [
   ["coverage-conflict", (s) => s.coverage.push(block(":coverage-dup", "kit:GraphCoverage", [
     ["kit:pathSelector", S("src/**")], ["kit:priority", 10], ["kit:reason", S("later")], ["kit:status", "kit:unknown"]]))],
   ["root-not-excluded", (s) => { s.coverage = s.coverage.filter((c) => c.subject !== ":coverage-graph-root"); }],
-  ["schema-version", (s) => { s.version = 2; }],
+  ["schema-version", (s) => { s.version = 3; }],
   ["coverage-unreferenced", (s) => { s.omitFromManifest = [":coverage-c0"]; }],
 ];
 

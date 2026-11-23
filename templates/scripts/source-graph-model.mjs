@@ -2,22 +2,30 @@ import { createHash } from "node:crypto";
 import { parseGraphTurtle, canonicalProblems, GRAPH_PREFIXES } from "./source-graph-turtle.mjs";
 
 export const CORE = {
-  schemaVersion: 1,
-  kinds: ["kit:concept", "kit:source-file", "kit:source-symbol", "kit:test", "kit:dependency", "kit:document", "kit:deployment-resource", "kit:system", "kit:component"],
-  relationships: ["kit:contains", "kit:implements", "kit:tested-by", "kit:depends-on", "kit:documented-by", "kit:calls", "kit:communicates-with", "kit:deployed-by"],
+  schemaVersion: 2,
+  kinds: ["kit:concept", "kit:source-file", "kit:source-symbol", "kit:test", "kit:dependency", "kit:document", "kit:deployment-resource", "kit:system", "kit:component", "kit:behaviour", "kit:decision"],
+  relationships: ["kit:contains", "kit:implements", "kit:tested-by", "kit:depends-on", "kit:documented-by", "kit:calls", "kit:communicates-with", "kit:deployed-by", "kit:replaced-by", "kit:superseded-by"],
+  designStatuses: ["kit:current", "kit:retired", "kit:proposed", "kit:accepted", "kit:superseded", "kit:deprecated"],
   roles: ["kit:role-implementation", "kit:role-test", "kit:role-selected-document", "kit:role-ontology", "kit:role-deployment"],
   bases: ["kit:direct", "kit:inferred"], statuses: ["kit:covered", "kit:unknown", "kit:excluded"],
   outcomes: ["kit:graph-updated", "kit:no-fact-change"],
 };
+export const DESIGN_STATUSES = { "kit:behaviour": ["kit:current", "kit:retired"], "kit:decision": ["kit:proposed", "kit:accepted", "kit:superseded", "kit:deprecated"] };
+export const NODE_PREDICATE_VERSIONS = { "kit:designStatus": 2, "kit:evidence": 2 };
+const VERSION_2 = new Set(["kit:behaviour", "kit:decision", "kit:replaced-by", "kit:superseded-by", ...CORE.designStatuses]);
+export const introducedIn = (iri) => (VERSION_2.has(iri) ? 2 : 1);
 export const ROLE_KEYS = { "kit:role-implementation": "implementation", "kit:role-test": "test", "kit:role-selected-document": "selected-document", "kit:role-ontology": "ontology", "kit:role-deployment": "deployment" };
 export const CORE_DEFINITIONS = Object.fromEntries(Object.values(CORE).flat().filter((v) => typeof v === "string").map((v) => [v, v.slice(4).replaceAll("-", " ")]));
 Object.assign(CORE_DEFINITIONS, {
   "kit:concept": "A canonical Ontology concept.", "kit:source-file": "A tracked implementation file.", "kit:source-symbol": "A named code element in a source file.", "kit:test": "A test file or named test case.", "kit:dependency": "A declared package or external dependency.", "kit:document": "A selected design, architecture, or other authored document.", "kit:deployment-resource": "A resource declared by eligible deployment evidence.", "kit:system": "A software system named by reviewed source or selected documents.", "kit:component": "A logical part of a system named by reviewed source or selected documents.",
   "kit:contains": "The subject contains the object.", "kit:implements": "A source element realizes the named concept or behaviour.", "kit:tested-by": "The subject has the named test as evidence of expected behaviour.", "kit:depends-on": "The subject declares or uses the named dependency.", "kit:documented-by": "The subject is described by the named document.", "kit:calls": "A source element invokes another source element.", "kit:communicates-with": "A system or component exchanges information with another.", "kit:deployed-by": "A system or component is deployed through the named resource.",
+  "kit:behaviour": "A behaviour an analyst declares in a feature document, identified by its feature slug and id.", "kit:decision": "An architecture decision record under docs/adr, identified by its number.",
+  "kit:replaced-by": "A retired behaviour is replaced by the named behaviour.", "kit:superseded-by": "A superseded decision is superseded by the named decision.",
+  "kit:current": "The behaviour is declared in its feature's behaviours.", "kit:retired": "The behaviour is listed under Retired behaviours.", "kit:proposed": "The decision is proposed.", "kit:accepted": "The decision is accepted.", "kit:superseded": "A later decision supersedes this one.", "kit:deprecated": "The decision no longer applies.",
 });
 export function renderSchema() {
-  let s = `@prefix kit: <${GRAPH_PREFIXES.kit}> .\n@prefix rdfs: <${GRAPH_PREFIXES.rdfs}> .\n\nkit:GraphVocabulary a rdfs:Class ;\n    kit:schemaVersion 1 ;\n    rdfs:comment "Core source graph vocabulary." .\n`;
-  for (const [key, type] of [["kinds", "GraphKind"], ["relationships", "GraphRelationship"], ["roles", "GraphRole"], ["bases", "GraphBasis"], ["statuses", "GraphStatus"], ["outcomes", "GraphOutcome"]]) {
+  let s = `@prefix kit: <${GRAPH_PREFIXES.kit}> .\n@prefix rdfs: <${GRAPH_PREFIXES.rdfs}> .\n\nkit:GraphVocabulary a rdfs:Class ;\n    kit:schemaVersion ${CORE.schemaVersion} ;\n    rdfs:comment "Core source graph vocabulary." .\n`;
+  for (const [key, type] of [["kinds", "GraphKind"], ["relationships", "GraphRelationship"], ["designStatuses", "GraphDesignStatus"], ["roles", "GraphRole"], ["bases", "GraphBasis"], ["statuses", "GraphStatus"], ["outcomes", "GraphOutcome"]]) {
     for (const iri of CORE[key]) s += `\n${iri} a kit:${type} ;\n    rdfs:comment "${CORE_DEFINITIONS[iri]}" .\n`;
   }
   return s;

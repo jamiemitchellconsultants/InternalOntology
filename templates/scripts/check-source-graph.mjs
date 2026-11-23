@@ -4,7 +4,7 @@ import { lineCount, changedPaths, treeFromIndex, treeFromRevision } from "./sour
 import { parseGraphTurtle } from "./source-graph-turtle.mjs";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { CORE, ROLE_KEYS, loadGraph, matchSelector, resolveCoverage, refreshIdFor } from "./source-graph-model.mjs";
+import { CORE, NODE_PREDICATE_VERSIONS, ROLE_KEYS, introducedIn, loadGraph, matchSelector, resolveCoverage, refreshIdFor } from "./source-graph-model.mjs";
 
 export class CheckSetupError extends Error {}
 export function loadCheckConfig(tree) {
@@ -40,7 +40,9 @@ export function checkTree({ tree, config }) {
   else version = Number(/^\s*kit:schemaVersion (\d+) [;.]$/m.exec(tree.text(schemaPath))?.[1]);
   const manifests = graph.byType("kit:SourceKnowledgeGraph");
   if (manifests.length !== 1) add({ file: graph.root }, "graph-resource-count", `expected one graph resource, got ${manifests.length}`);
-  for (const m of manifests) if (Number(value(m, "kit:schemaVersion")) !== CORE.schemaVersion || version !== CORE.schemaVersion) add(m, "schema-version", "schema version does not match core version");
+  const validVersion = (n) => Number.isInteger(n) && n >= 1 && n <= CORE.schemaVersion;
+  for (const m of manifests) if (!validVersion(Number(value(m, "kit:schemaVersion"))) || version !== CORE.schemaVersion) add(m, "schema-version", "schema version does not match core version");
+  const manifestVersion = manifests.length ? Number(value(manifests[0], "kit:schemaVersion")) : NaN;
   const ontology = new Set(parseTurtle(tree.text(config.ontologyPath.replace(/\.md$/, ".ttl"))).map((t) => t.subject));
   for (const r of graph.resources.values()) {
     const shape = shapes[r.type];
@@ -53,6 +55,15 @@ export function checkTree({ tree, config }) {
     }
     const pairs = parseGraphTurtle(tree.text(r.file), r.file).blocks.find((b) => b.subject === r.iri).pairs;
     for (const p of pairs) if (!Object.hasOwn(shape, p.predicate)) add(r, shapeRule || "bad-value", `unknown predicate ${p.predicate}`);
+    if (validVersion(manifestVersion)) {
+      const needs = new Set(), need = (value, n) => { if (n > manifestVersion && !needs.has(value)) { needs.add(value); add(r, "schema-version-too-old", `${value} needs kit:schemaVersion ${n}`); } };
+      if (r.type === "kit:GraphNode") {
+        for (const p of r.values("kit:kind")) need(p.object, introducedIn(p.object));
+        for (const p of r.values("kit:designStatus")) need(p.object, introducedIn(p.object));
+        for (const [predicate, n] of Object.entries(NODE_PREDICATE_VERSIONS)) if (r.values(predicate).length) need(predicate, n);
+      }
+      if (r.type === "kit:GraphAssertion") for (const p of r.values("kit:relationship")) need(p.object, introducedIn(p.object));
+    }
     const refs = r.type === "kit:GraphAssertion" ? { "kit:subject": "kit:GraphNode", "kit:object": "kit:GraphNode", "kit:evidence": "kit:GraphEvidence" } : r.type === "kit:SourceKnowledgeGraph" ? { "kit:coverage": "kit:GraphCoverage", "kit:refreshRecord": "kit:GraphRefreshRecord", "kit:declaresKind": "kit:GraphKindDefinition", "kit:declaresRelationship": "kit:GraphRelationshipDefinition" } : {};
     for (const [predicate, type] of Object.entries(refs)) for (const p of r.values(predicate)) if (graph.resources.get(p.object)?.type !== type) add(r, "dangling-reference", `${predicate} references missing ${p.object}`);
     if (r.type === "kit:GraphNode") {
