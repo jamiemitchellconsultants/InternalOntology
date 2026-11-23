@@ -119,3 +119,9 @@ test("B45: the authoring order is Turtle, check, then render, and both examples 
   assert.ok(order.includes("render-source-graph.mjs --check --staged"));
   for (const example of authoring.split("### Example:").slice(1)) assert.match(example, /write, check and render order/);
 });
+
+test("B20: the check workflow writes reports to the step summary in both steps and stays read-only", () => {
+  const workflow = template("github/workflows/source-graph-check.yml");
+  assert.equal(workflow.match(/--summary "\$GITHUB_STEP_SUMMARY"/g)?.length, 2);
+  assert.match(workflow, /^permissions:\n  contents: read\n/m);
+});

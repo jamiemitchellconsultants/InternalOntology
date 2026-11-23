@@ -3,7 +3,7 @@ import { parseTurtle } from "./owl-ontology.mjs";
 import { lineCount, changedPaths, treeFromIndex, treeFromRevision } from "./source-graph-git.mjs";
 import { parseGraphTurtle } from "./source-graph-turtle.mjs";
 import { BEHAVIOUR_IRI, DECISION_IRI, behaviourIri, behavioursFile, decisionIri, readBehaviours, readDecision } from "./source-graph-design-docs.mjs";
-import { realpathSync } from "node:fs";
+import { appendFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CORE, DESIGN_STATUSES, NODE_PREDICATE_VERSIONS, ROLE_KEYS, introducedIn, loadGraph, matchSelector, resolveCoverage, refreshIdFor } from "./source-graph-model.mjs";
 
@@ -269,27 +269,53 @@ export function checkPullRequest({ baseTree, headTree }) {
   }
   return findings.sort((a, b) => a.file.localeCompare(b.file) || a.subject.localeCompare(b.subject) || a.rule.localeCompare(b.rule) || a.message.localeCompare(b.message));
 }
+const INACTIVE = new Set(["kit:retired", "kit:superseded", "kit:deprecated"]);
+export function retiredDesignLinks(graph) {
+  const inactive = new Map(), replacement = new Map(), assertions = graph.byType("kit:GraphAssertion");
+  for (const node of graph.byType("kit:GraphNode")) {
+    const status = node.first("kit:designStatus")?.object;
+    if (INACTIVE.has(status)) inactive.set(node.iri, status);
+  }
+  for (const a of assertions) {
+    const rel = a.first("kit:relationship")?.object;
+    if (rel === "kit:replaced-by" || rel === "kit:superseded-by") replacement.set(a.first("kit:subject")?.object, a.first("kit:object")?.object);
+  }
+  const reports = [];
+  for (const a of assertions) {
+    const relationship = a.first("kit:relationship")?.object, subject = a.first("kit:subject")?.object, object = a.first("kit:object")?.object;
+    if (relationship === "kit:replaced-by" || relationship === "kit:superseded-by") continue;
+    const end = inactive.has(object) ? object : inactive.has(subject) ? subject : null;
+    if (end === null) continue;
+    reports.push({ assertion: a.iri, subject: end === object ? subject : object, relationship, object: end, status: inactive.get(end), replacement: replacement.get(end) ?? null });
+  }
+  return reports.sort((a, b) => (a.assertion < b.assertion ? -1 : a.assertion > b.assertion ? 1 : 0));
+}
+const reportLine = (r) => `${r.subject} ${r.relationship} ${r.object} (${r.status.replace(/^kit:/, "")}${r.replacement ? `, replaced by ${r.replacement}` : ""})`;
 export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stderr = process.stderr } = {}) {
   try {
-    let rev, base, head, staged = false, json = false;
+    let rev, base, head, summary, staged = false, json = false;
     for (let i = 0; i < argv.length; i++) {
       const arg = argv[i];
-      if (arg === "--help") { stdout.write("Usage: check-source-graph [--rev REV | --base REV --head REV | --staged] [--json]\n"); return 0; }
+      if (arg === "--help") { stdout.write("Usage: check-source-graph [--rev REV | --base REV --head REV | --staged] [--json] [--summary FILE]\n"); return 0; }
       if (arg === "--json") json = true;
       else if (arg === "--staged") staged = true;
+      else if (arg === "--summary" && argv[i + 1] && !argv[i + 1].startsWith("--")) summary = argv[++i];
       else if (["--rev", "--base", "--head"].includes(arg) && argv[i + 1] && !argv[i + 1].startsWith("--")) { const v = argv[++i]; if (arg === "--rev") rev = v; else if (arg === "--base") base = v; else head = v; }
       else throw new CheckSetupError(`invalid option ${arg}`);
     }
     if ((staged && (rev || head)) || (head && !base) || (rev && base)) throw new CheckSetupError("incompatible revision options");
     const tree = staged ? treeFromIndex(cwd) : treeFromRevision(cwd, head || rev || "HEAD");
     const findings = base || staged ? checkPullRequest({ baseTree: treeFromRevision(cwd, base || "HEAD"), headTree: tree }) : checkRevision(tree);
+    const reports = retiredDesignLinks(loadGraph(tree, loadCheckConfig(tree)));
     const label = `${staged ? "candidate tree" : "revision"} ${tree.id}`;
-    if (json) stdout.write(JSON.stringify({ revision: tree.id, ok: !findings.length, findings }) + "\n");
+    if (json) stdout.write(JSON.stringify({ revision: tree.id, ok: !findings.length, findings, reports }) + "\n");
     else {
       stdout.write(`${findings.length ? "source graph checked" : "source graph ok"}: ${label}\n`);
       if (!findings.length) stdout.write("structurally valid; whether each claim is true is for maintainers to review\n");
       for (const f of findings) stderr.write(`${f.file}: ${f.subject ? f.subject + ": " : ""}${f.rule}: ${f.message}\n`);
+      if (reports.length) stdout.write(`retired design links: ${reports.length}\n${reports.map((r) => `${r.assertion}: ${reportLine(r)}\n`).join("")}`);
     }
+    if (summary) appendFileSync(summary, `### Retired design links\n\n${reports.length ? reports.map((r) => `- \`${r.assertion}\`: \`${r.subject}\` ${r.relationship} \`${r.object}\` (${r.status.replace(/^kit:/, "")}${r.replacement ? `, replaced by \`${r.replacement}\`` : ""})\n`).join("") : "None.\n"}`);
     return findings.length ? 1 : 0;
   } catch (error) { stderr.write(`${error.message}\n`); return 2; }
 }

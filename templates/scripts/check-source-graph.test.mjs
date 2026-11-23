@@ -1,4 +1,6 @@
 import { test } from "node:test";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { checkTree, loadCheckConfig, CheckSetupError } from "./check-source-graph.mjs";
 import { treeFromRevision } from "./source-graph-git.mjs";
@@ -172,8 +174,8 @@ test("a missing schema is reported", async () => {
   });
 });
 
-import { checkPullRequest, checkRevision, main } from "./check-source-graph.mjs";
-import { refreshIdFor } from "./source-graph-model.mjs";
+import { checkPullRequest, checkRevision, main, retiredDesignLinks } from "./check-source-graph.mjs";
+import { loadGraph, refreshIdFor } from "./source-graph-model.mjs";
 import { refreshRecord } from "./source-graph-test-helpers.mjs";
 
 function refresh(repo, spec, outcome = "kit:no-fact-change") {
@@ -575,4 +577,56 @@ test("B17: a retired entry that names no replacement needs no link", async () =>
     rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("; replaced by B2.", "."));
     s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d1");
   }), []);
+});
+
+test("B20: a link to a retired behaviour or superseded decision is reported and the check passes", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    spec.assertions.push(block(":assertion-d7", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-d5"],
+      ["kit:evidence", ":evidence-e5"], ["kit:object", ":decision-0002"], ["kit:relationship", "kit:documented-by"], ["kit:subject", ":node-ledger"]]));
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const tree = treeFromRevision(repo.dir, "HEAD"), config = loadCheckConfig(tree);
+    assert.deepEqual(checkTree({ tree, config }), []);
+    assert.deepEqual(retiredDesignLinks(loadGraph(tree, config)), [
+      { assertion: ":assertion-d4", subject: ":node-ledger", relationship: "kit:implements", object: ":behaviour-payments-B3", status: "kit:retired", replacement: ":behaviour-payments-B2" },
+      { assertion: ":assertion-d7", subject: ":node-ledger", relationship: "kit:documented-by", object: ":decision-0002", status: "kit:superseded", replacement: ":decision-0001" },
+    ]);
+  });
+});
+
+test("B20: text, JSON and summary output carry the report without changing the result", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const text = cli(repo, ["--rev", "HEAD"]);
+    assert.equal(text.code, 0, text.err);
+    assert.match(text.out, /^source graph ok: /m);
+    assert.match(text.out, /^retired design links: 1$/m);
+    assert.match(text.out, /^:assertion-d4: :node-ledger kit:implements :behaviour-payments-B3 \(retired, replaced by :behaviour-payments-B2\)$/m);
+    const json = JSON.parse(cli(repo, ["--rev", "HEAD", "--json"]).out);
+    assert.equal(json.ok, true);
+    assert.deepEqual(json.findings, []);
+    assert.equal(json.reports.length, 1);
+    const summary = join(repo.dir, "summary.md");
+    writeFileSync(summary, "existing\n");
+    assert.equal(cli(repo, ["--rev", "HEAD", "--summary", summary]).code, 0);
+    assert.equal(readFileSync(summary, "utf8"), "existing\n### Retired design links\n\n" +
+      "- `:assertion-d4`: `:node-ledger` kit:implements `:behaviour-payments-B3` (retired, replaced by `:behaviour-payments-B2`)\n");
+  });
+});
+
+test("B20: a graph with no retired links prints nothing extra and writes None to the summary", async () => {
+  await withScratchRepo(async (repo) => {
+    writeGraph(repo, widgets(repo));
+    repo.commit("graph");
+    const summary = join(repo.dir, "summary.md");
+    const text = cli(repo, ["--rev", "HEAD", "--summary", summary]);
+    assert.equal(text.code, 0, text.err);
+    assert.doesNotMatch(text.out, /retired design links/);
+    assert.equal(readFileSync(summary, "utf8"), "### Retired design links\n\nNone.\n");
+  });
 });
