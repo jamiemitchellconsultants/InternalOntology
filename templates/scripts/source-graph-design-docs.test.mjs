@@ -30,9 +30,9 @@ const FORMS = [
 
 test("B1: all three declaration forms are read with their title and line", () => {
   assert.deepEqual(readBehaviours(["# Behaviours", "", ...FORMS, ""].join("\n")), [
-    { id: 1, title: "Present every claim", line: 3, retired: false, replacement: null },
-    { id: 2, title: "Look up before naming", line: 4, retired: false, replacement: null },
-    { id: 3, title: "Turning the motor test on", line: 5, retired: false, replacement: null },
+    { id: 1, title: "Present every claim", line: 3, retired: false, replacement: null, replacementSlug: null },
+    { id: 2, title: "Look up before naming", line: 4, retired: false, replacement: null, replacementSlug: null },
+    { id: 3, title: "Turning the motor test on", line: 5, retired: false, replacement: null, replacementSlug: null },
   ]);
 });
 
@@ -69,6 +69,18 @@ test("B17 and B19: retired entries are marked, with the replacement they name", 
   assert.deepEqual([byId[3].retired, byId[3].replacement], [true, null]);
   assert.deepEqual([byId[4].retired, byId[4].replacement], [true, 1]);
   assert.equal(byId[5].retired, false);
+  assert.deepEqual([byId[2].replacementSlug, byId[4].replacementSlug], [null, "payments"]);
+});
+
+test("B17: a replacement in another feature keeps that feature's slug", () => {
+  const text = ["### Retired behaviours", "", "**B2 — Pay by cheque.** Retired; replaced by refunds#B3."].join("\n");
+  const [d] = readBehaviours(text);
+  assert.deepEqual([d.replacement, d.replacementSlug], [3, "refunds"]);
+});
+
+test("B5: a successor may be written as a Markdown link", () => {
+  const t = tree({ "docs/adr/0030-old.md": "# 0030 — Old way\n\n- **Status:** Superseded by [ADR 0041](0041-add-kinds.md)\n" });
+  assert.equal(readDecision(t, "0030").successor, "0041");
 });
 
 test("B2: the behaviours file follows the feature's mode, and two declaring files conflict", () => {

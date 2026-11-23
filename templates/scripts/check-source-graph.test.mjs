@@ -581,6 +581,13 @@ for (const [rule, subject, mutate] of replacementMutations) {
   });
 }
 
+test("B17: a replacement in another feature expects that feature's behaviour", async () => {
+  const findings = await design((s, r) => { rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("; replaced by B2.", "; replaced by refunds#B2.")); });
+  const f = findings.find((x) => x.rule === "design-replacement" && x.subject === ":behaviour-payments-B3");
+  assert.ok(f, JSON.stringify(findings));
+  assert.match(f.message, /kit:replaced-by :behaviour-refunds-B2$/);
+});
+
 test("B17: a retired entry that names no replacement needs no link", async () => {
   assert.deepEqual(await design((s, r) => {
     rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("; replaced by B2.", "."));

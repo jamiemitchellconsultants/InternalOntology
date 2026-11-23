@@ -22,7 +22,7 @@ These are JavaScript shapes, not ontology terms.
 
 ```js
 // Declaration (source-graph-design-docs.mjs)
-{ id: number, title: string, line: number /* 1-based */, retired: boolean, replacement: number | null }
+{ id: number, title: string, line: number /* 1-based */, retired: boolean, replacement: number | null, replacementSlug: string | null /* from replaced by <slug>#B<n> */ }
 // BehavioursFile
 { path: string, lite: boolean, conflict: null } | { path: null, lite: null, conflict: [fullPath, litePath] } | null
 // Decision

@@ -152,7 +152,7 @@ export function designFindings(graph, tree) {
     if (node.first("rdfs:label")?.object !== label) { add(node, "design-label", `label must be ${JSON.stringify(label)}`); continue; }
     const status = here.retired ? "kit:retired" : "kit:current";
     if (node.first("kit:designStatus")?.object !== status) { add(node, "design-status", `${node.iri} must be ${status}`); continue; }
-    linkFinding(node, "kit:replaced-by", here.retired && here.replacement ? behaviourIri(slug, here.replacement) : null);
+    linkFinding(node, "kit:replaced-by", here.retired && here.replacement ? behaviourIri(here.replacementSlug ?? slug, here.replacement) : null);
   }
   const nodeKind = (iri) => graph.resources.get(iri)?.first("kit:kind")?.object;
   for (const link of graph.byType("kit:GraphAssertion")) {

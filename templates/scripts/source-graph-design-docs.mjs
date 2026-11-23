@@ -3,7 +3,7 @@ export const DECISION_IRI = /^:decision-([0-9]{4})$/;
 const REFERENCE = /^([a-z0-9]+(?:-[a-z0-9]+)*)#B([1-9][0-9]*)$/;
 const DECLARATION = /^\s*(?:[-*]\s+)?\*\*B([1-9][0-9]*)(?: — |\. | )(.+?)\.?\*\*/;
 const RETIRED_HEADING = /^(#{2,6})\s+Retired behaviours\s*$/i;
-const REPLACED_BY = /replaced by (?:[a-z0-9-]+#)?B([1-9][0-9]*)/i;
+const REPLACED_BY = /replaced by (?:([a-z0-9-]+)#)?B([1-9][0-9]*)/i;
 
 export const behaviourIri = (slug, id) => `:behaviour-${slug}-B${id}`;
 export const decisionIri = (number) => `:decision-${number}`;
@@ -40,7 +40,7 @@ export function readBehaviours(text, { lite = false } = {}) {
     if (mark.heading) return;
     const end = k + 1 < marks.length ? marks[k + 1].i : lines.length;
     const replacement = mark.retired ? REPLACED_BY.exec(lines.slice(mark.i, end).join("\n")) : null;
-    found.push({ id: mark.id, title: mark.title, line: mark.i + 1, retired: mark.retired, replacement: replacement ? Number(replacement[1]) : null });
+    found.push({ id: mark.id, title: mark.title, line: mark.i + 1, retired: mark.retired, replacement: replacement ? Number(replacement[2]) : null, replacementSlug: replacement?.[1] ?? null });
   });
   return found;
 }
@@ -70,7 +70,7 @@ export function readDecision(tree, number) {
       if (m) {
         status = m[1].split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, "") || null;
         statusLine = i + 1;
-        successor = /superseded by ADR ([0-9]{4})/i.exec(m[1])?.[1] ?? null;
+        successor = /superseded by (?:\[)?ADR ([0-9]{4})/i.exec(m[1])?.[1] ?? null;
       }
     }
   });
