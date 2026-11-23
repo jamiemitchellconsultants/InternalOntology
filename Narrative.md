@@ -78,6 +78,7 @@ by rewriting the original.
 | [62](#entry-docs-add-perceived-quality-and-token-cost-outcome-to-semantic-index-visi) | 2026-11-20 | docs: add perceived quality and token cost outcome to semantic index vision | product | Record perceived benefit as the primary evidence for the new outcome, and token cost as a paired measure that shows whether the benefit is cheap or expensive. Outcome 5 starts as an observation with no target until a baseline exists. |
 | [63](#entry-docs-feature-design-for-semantic-index-token-efficiency) | 2026-11-20 | docs(feature): design for semantic index token efficiency | product | Estimate tokens from characters and log counts only in a local file. Add a passage command that returns only the cited lines from the indexed commit, and a compact JSON form. |
 | [64](#entry-docs-feature-implementation-plan-for-semantic-index-token-efficiency) | 2026-11-21 | docs(feature): implementation plan for semantic index token efficiency | product | Build the estimator and log first so that a baseline exists before anything is tuned. Then add the cap, the passage reader, search, `show`, `usage`, the protocol and the pilot measures. |
+| [65](#entry-design-source-graph-links-to-feature-documents-185) | 2026-11-23 | Design: source graph links to feature documents (#185) | product | Make behaviours and decisions core graph node kinds in schema version 2, identified by `<slug>#B<n>` and by ADR number, with a design status and links to a replacement or successor ([ADR… |
 
 ---
 
@@ -1558,5 +1559,29 @@ Build the estimator and log first so that a baseline exists before anything is t
 ## Consequences
 
 Callers that compare default search output byte for byte will see trailing items, but no existing field changes. The pilot's transcript reader depends on the Claude Code transcript format. The build can be run by another agent from the detailed plan without further decisions. The build criteria stay open until that work is committed.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+<a id="entry-design-source-graph-links-to-feature-documents-185"></a>
+
+## Entry 65 — 2026-11-23 — Design: source graph links to feature documents (#185)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The `SourceKnowledgeGraph` links code to ontology concepts, but nothing links it to the feature documents that explain why the code exists: the analyst's behaviours, the architect's components and the ADRs. When pushback changes a behaviour, nobody can ask what code and tests it affects; a reader of a class cannot find the behaviour it serves or the decision that shaped it; and a division ontology cannot follow a feature to its code. The graph vocabulary already defined `kit:implements` as realising "a concept or behaviour", but had no behaviour or decision kind, and [ADR 0008](docs/adr/0008-source-graph-vocabulary.md) makes adopter-local kinds opaque to cross-repository consumers. Behaviour ids had also been free to change on amendment until claude-plugins made them permanent.
+
+## Decision
+
+Make behaviours and decisions core graph node kinds in schema version 2, identified by `<slug>#B<n>` and by ADR number, with a design status and links to a replacement or successor ([ADR 0041](docs/adr/0041-behaviour-and-decision-kinds-in-schema-version-2.md)). Keep existing graphs valid by accepting manifests at an older schema version ([ADR 0042](docs/adr/0042-accept-older-graph-manifests.md)). Hold behaviour and decision nodes to their documents with a deterministic `DesignDocumentReader`, without parsing traceability rows ([ADR 0043](docs/adr/0043-check-design-nodes-against-their-documents.md)). Report links to retired behaviours and superseded decisions without failing the check, so an analyst's amendment is never blocked by code it may not yet change ([ADR 0044](docs/adr/0044-report-retired-design-links-without-failing.md)). Record only direct links, in the same change as what they describe, under the `GraphAgentProtocol`. Rejected: links in code comments, inferred symbol-to-behaviour links, deleting retired nodes, requiring every adopter to bump their manifest, and covering all of `docs/features/**` by default.
+
+## Consequences
+
+Developers and agents gain behaviour-first and code-first lookups, and amendments get a list of affected code and tests. Adopters upgrade without a failing check and move to schema version 2 only when they record their first behaviour or decision. The checker now reads feature documents and ADRs, so the three behaviour declaration forms become a contract. Whether a link is true remains a maintainer's judgement, retired links are visible but not enforced, persona-skill hooks and a dedicated division view are left for later, and the division import is verified in acceptance rather than changed.
+
+---
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
