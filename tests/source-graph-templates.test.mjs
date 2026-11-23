@@ -125,3 +125,17 @@ test("B20: the check workflow writes reports to the step summary in both steps a
   assert.equal(workflow.match(/--summary "\$GITHUB_STEP_SUMMARY"/g)?.length, 2);
   assert.match(workflow, /^permissions:\n  contents: read\n/m);
 });
+
+test("B8–B15, B20, B21: the graph protocol links design documents in the same change", () => {
+  const protocol = template("protocol/source-graph-protocol.md");
+  const start = protocol.indexOf("### Linking design documents");
+  assert.ok(start > 0, "section missing");
+  const section = protocol.slice(start, protocol.indexOf("\n### ", start + 1) === -1 ? undefined : protocol.indexOf("\n### ", start + 1));
+  for (const needle of ["same change", ":behaviour-<slug>-B<n>", ":decision-<NNNN>", "`kit:designStatus`", "Keep the IRI", "`kit:replaced-by`",
+    "`kit:superseded-by`", "traceability table", "citing the table row and the code", "`kit:documented-by`",
+    "only when that one symbol carries out the behaviour", "`kit:tested-by`", "Record nothing for code that does not exist yet",
+    "never all of `docs/features/**`", "`kit:schemaVersion` to 2", "pull request body", "retired design links",
+    "query-source-graph.mjs behaviour <slug>#B<n>", "code <node>"]) {
+    assert.ok(section.includes(needle), needle);
+  }
+});
