@@ -93,7 +93,7 @@ These behaviours add two node kinds to the `SourceKnowledgeGraph`, for a `Featur
 ### Outcome 5: a division can follow the links
 
 - **B22 Core vocabulary.** Given the kit's `GraphVocabulary`, then the behaviour and decision kinds, their statuses and the replacement and successor links are core values in a new schema version, so a downstream consumer can rely on them across repositories; they are not adopter-local extensions.
-- **B23 The import keeps them.** Given a division ontology imports the trial graph at a pinned commit, when the import runs, then the behaviour and decision nodes and their links arrive unchanged, and a traversal from a feature's behaviours to its code is possible without a change to the division repository.
+- **B23 The import keeps them.** Given a division importer that supports graph schema version 2 and a pinned JEPA-Speech commit containing the trial graph, when the division imports that commit, then the imported behaviour and decision nodes retain their IRIs, kinds, labels, statuses and evidence, and their assertions retain their IRIs, endpoints, relationships, basis and evidence. Starting from a feature's behaviour with linked code, a maintainer can follow the imported assertions to a source file or symbol.
 - **B24 Offline.** Given any lookup or check in this feature runs, then it reads only local Git objects, the graph, the ontology and the feature documents; it makes no model call and needs no network or secret.
 
 ### Uncertainties
@@ -109,6 +109,7 @@ These behaviours add two node kinds to the `SourceKnowledgeGraph`, for a `Featur
 - **U9 Evidence eligibility.** Decided: opt in per repository through the existing widening rule, with the narrowest selectors (B14). A default covering all of `docs/features/**` was rejected as noisy.
 - **U10 Behaviours file.** Decided: `02-behaviours.md` in full mode, `feature.md` in lite mode, both at once an error, and nodes kept through promotion (B2).
 - **U11 Kind and relationship names.** Deferred to the architect: the IRIs of the new kinds, statuses and links, and the schema version number.
+- **U12 Division import compatibility.** B23 acceptance requires a compatible division-ontology revision. The [existing import rejects schema version 2](https://github.com/jamiemitchellconsultants/InternalOntology/issues/185#issuecomment-7113634323). Delivering importer compatibility belongs to division-ontology as a separate prerequisite. Record the importer revision and the pinned trial graph commit when running acceptance. Keep B23 pending until the compatible importer is available.
 
 ### Terms
 
@@ -131,7 +132,7 @@ Behaviours and decisions join the `SourceKnowledgeGraph` as core kinds in schema
 | `GraphAgentProtocol` | One added paragraph: write each node and link in the same change as what it describes, with the evidence rules of B9–B12; record only what exists; propose narrow coverage; raise the manifest version with the first version 2 value; list design links and reports in the pull request body. | B8, B9, B10, B11, B12, B13, B14, B15, B16, B20, B21 |
 | `Installer` | Installs the new script and the version 2 schema as kit-owned files; never edits the adopter's manifest or `OntologyConfig`. | B16, B22 |
 | `OntologyConfig` and `GraphCoverage` (adopter data) | Hold the narrow selected-document selectors and covered entries an agent proposes for the files that carry design evidence. | B14 |
-| Downstream consumer (division-ontology) | Unchanged; its generic import reads the new nodes and assertions like any others. | B23 |
+| Division C4 snapshot importer (division-ontology) | Reads the trial graph and evidence at the source commit named in the catalog. The compatible importer preserves the design nodes and their assertions for traversal to code ([ADR 0045](../../adr/0045-require-a-compatible-division-importer.md)). | B23 |
 
 ### Structure
 
@@ -148,17 +149,20 @@ flowchart LR
   Graph --> Reader[GraphReader: behaviour, code, concept]
   DDR --> Reader
   Graph --> Renderer[GraphRenderer]
-  Graph --> Division[Division import, unchanged]
+  Graph --> Trial[JEPA-Speech commit pinned by division catalog]
+  Trial --> Division[Division C4 snapshot importer with schema v2 support]
 ```
 
 A behaviour node is `:behaviour-<slug>-B<n>`, of kind `kit:behaviour`, labelled `<slug>#B<n> Title`, with `kit:designStatus` and one `GraphEvidence` on its declaration (or its Retired behaviours entry). A decision node is `:decision-<NNNN>`, of kind `kit:decision`, labelled `ADR NNNN Title`, with `kit:designStatus` and evidence on its title and Status lines. Links reuse the core relationships: component or symbol `kit:implements` behaviour, behaviour `kit:tested-by` test, component or symbol `kit:documented-by` decision, plus the new `kit:replaced-by` and `kit:superseded-by`. A component's `kit:implements` cites the traceability row and the component's code; the checker confirms both exist and does not parse the row.
+
+Division acceptance calls the C4 snapshot loader, `loadSnapshot` in `src/c4/snapshot.mjs`, at a verified compatible division-ontology revision. Its input is a catalog commit and clean source checkouts. Inspect the imported graph for JEPA-Speech against the canonical Turtle and evidence at the catalog's pinned source commit. Follow an incoming `kit:implements` assertion from a behaviour to a source symbol or to a component, then follow that component's `kit:contains` assertion to a source file or symbol.
 
 ### Deployment and runtime
 
 - Kit upgrade: the installer replaces the kit-owned scripts, workflow and `graph-schema.ttl` (version 2) and adds `DesignDocumentReader`. No adopter file changes, and an existing version 1 graph keeps passing because older manifests are accepted.
 - First use in a repository: the agent's change that records the first behaviour or decision node also raises the manifest's `kit:schemaVersion` to 2 and proposes the narrow coverage and evidence selectors; the maintainer reviews both in that pull request.
 - Runtime: Node.js and Git only, as today. The checker and reader read local Git objects, the graph, the ontology and the feature documents; no model call, network or secret. The check workflow keeps `contents: read` and adds only a step-summary write, which needs no permission.
-- Trial: reinstall the kit in JEPA-Speech, refresh its persona skills from claude-plugins, then record its `zener-shape-tracing-motor-test` behaviours and its ADRs and follow outcomes 1–5. The division import is checked by importing the trial graph at a pinned commit.
+- Trial: reinstall the kit in JEPA-Speech, refresh its persona skills from claude-plugins, then record its `zener-shape-tracing-motor-test` behaviours and its ADRs and follow outcomes 1–5. For B23, use a division catalog that pins the trial graph commit. Record the JEPA-Speech commit, the division catalog commit and the compatible importer revision in acceptance. B23 remains pending until division-ontology delivers the compatible importer. The kit checks and lookups can run independently.
 
 ### Traceability
 
@@ -186,7 +190,7 @@ A behaviour node is `:behaviour-<slug>-B<n>`, of kind `kit:behaviour`, labelled 
 | B20 | `GraphChecker`, `GraphCheckWorkflow`, `GraphAgentProtocol` |
 | B21 | `DesignDocumentReader`, `GraphChecker`, `GraphAgentProtocol` |
 | B22 | `GraphVocabulary`, `GraphChecker`, `GraphRenderer`, `Installer` |
-| B23 | Downstream consumer (division-ontology) |
+| B23 | `GraphVocabulary` (schema 2 contract), division C4 snapshot importer (preservation and traversal) |
 | B24 | `GraphChecker`, `GraphCheckWorkflow`, `GraphReader` |
 
 ### Decisions
@@ -195,3 +199,4 @@ A behaviour node is `:behaviour-<slug>-B<n>`, of kind `kit:behaviour`, labelled 
 - [ADR 0042](../../adr/0042-accept-older-graph-manifests.md) — accept graph manifests at an older schema version.
 - [ADR 0043](../../adr/0043-check-design-nodes-against-their-documents.md) — check behaviour and decision nodes against their documents, without parsing traceability rows.
 - [ADR 0044](../../adr/0044-report-retired-design-links-without-failing.md) — report retired design links without failing the check.
+- [ADR 0045](../../adr/0045-require-a-compatible-division-importer.md) — require a compatible division importer for pinned design-link acceptance (answers U12).
