@@ -18,7 +18,7 @@ async function installed(body) {
   await withTempRepo(async (repo) => {
     install({ target: repo.dir, projectName: "Widgets", withSourceGraph: true });
     const helpers = await import(pathToFileURL(join(repo.dir, "scripts/source-graph-test-helpers.mjs")).href);
-    const scratch = { ...repo, commit: (message) => { repo.git("add", "-A"); repo.git("commit", "-q", "-m", message); return repo.git("rev-parse", "HEAD").trim(); } };
+    const scratch = { dir: repo.dir, write: repo.write, git: repo.git, commit: (message) => { repo.git("add", "-A"); repo.git("commit", "-q", "-m", message); return repo.git("rev-parse", "HEAD").trim(); } };
     await body(scratch, helpers);
   });
 }

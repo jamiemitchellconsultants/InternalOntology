@@ -2,7 +2,8 @@
 import { catalogOntology } from "./semantic-review-model.mjs";
 import { parseTurtle } from "./owl-ontology.mjs";
 
-export const SKIPPED_KINDS = ["kit:source-file", "kit:test", "kit:document"];
+const DESIGN_KINDS = ["kit:behaviour", "kit:decision"];
+export const SKIPPED_KINDS = ["kit:source-file", "kit:test", "kit:document", ...DESIGN_KINDS];
 export const SYNONYM_KINDS = ["kit:concept", "kit:component", "kit:system", "kit:source-symbol"];
 
 const value = (resource, predicate) => resource?.first(predicate)?.object;
@@ -60,10 +61,12 @@ export function selectComparedNodes({ baseGraph, headGraph, baseOntology, headOn
   const baseLinks = implementsOf(baseGraph), headLinks = implementsOf(headGraph);
   const assertions = headGraph.byType("kit:GraphAssertion");
   const selected = [];
+  const toDesign = (assertion) => value(headNodes.get(value(assertion, "kit:object")), "kit:kind") === "kit:behaviour";
   for (const node of [...headNodes.values()].sort((a, b) => (a.iri < b.iri ? -1 : 1))) {
+    if (DESIGN_KINDS.includes(value(node, "kit:kind"))) continue;
     const before = baseNodes.get(node.iri);
     const denotes = value(node, "kit:denotes") ?? null;
-    const links = [...headLinks.values()].filter((assertion) => value(assertion, "kit:subject") === node.iri);
+    const links = [...headLinks.values()].filter((assertion) => value(assertion, "kit:subject") === node.iri && !toDesign(assertion));
     const implemented = links.map((assertion) => {
       const concept = value(assertion, "kit:object");
       return { assertion: assertion.iri, concept, item: value(headNodes.get(concept), "kit:denotes") ?? null };

@@ -109,3 +109,17 @@ test("B28: pairs whose label contains the canonical name are dropped and counted
   assert.equal(prefiltered, 3);
   assert.deepEqual(pairs.map((p) => [p.node, p.type]), [[":n4", "implements"], [":n5", "implements"]]);
 });
+
+test("design nodes are never compared and links to a behaviour are not link changes", () => {
+  const behaviour = node("behaviour", "kit:behaviour", "payments#B1", [["kit:designStatus", "kit:current"]]);
+  const decision = node("decision", "kit:decision", "ADR 0001", [["kit:designStatus", "kit:accepted"]]);
+  const ledger = node("ledger", "kit:component", "Ledger");
+  const link = [implementsA("l", ":node-ledger", ":node-behaviour"), evidence("l", "src/Ledger.cs")];
+  assert.deepEqual(select([concept, behaviour, ledger], [concept, behaviour, ledger, ...link]), []);
+  const relabelled = node("behaviour", "kit:behaviour", "payments#B1 Pay an invoice", [["kit:designStatus", "kit:current"]]);
+  assert.deepEqual(select([concept, behaviour, decision, ledger], [concept, relabelled, decision, ledger]), []);
+  assert.deepEqual(select([concept], [concept, behaviour, decision]), []);
+  const [selected] = selectComparedNodes({ baseGraph: graphOf([concept, behaviour, ledger]), headGraph: graphOf([concept, behaviour, ledger, ...link,
+    implementsA("m", ":node-ledger", ":node-session-removal"), evidence("m", "src/Ledger.cs")]), baseOntology: onto(ROWS), headOntology: onto(ROWS) });
+  assert.deepEqual(selected.implements.map((l) => l.concept), [":node-session-removal"]);
+});
