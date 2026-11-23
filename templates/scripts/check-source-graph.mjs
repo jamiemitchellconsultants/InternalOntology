@@ -33,8 +33,8 @@ const REFS = {
   "kit:SourceKnowledgeGraph": { "kit:coverage": "kit:GraphCoverage", "kit:refreshRecord": "kit:GraphRefreshRecord", "kit:declaresKind": "kit:GraphKindDefinition", "kit:declaresRelationship": "kit:GraphRelationshipDefinition" },
   "kit:GraphNode": { "kit:evidence": "kit:GraphEvidence" },
 };
-export function checkTree({ tree, config }) {
-  const graph = loadGraph(tree, config), findings = [];
+export function checkTree({ tree, config, graph = loadGraph(tree, config) }) {
+  const findings = [];
   const add = (r, rule, message) => findings.push({ file: r.file || graph.root, subject: r.iri || "", line: r.line || 0, rule, message });
   const value = (r, p) => r.first(p)?.object;
   for (const p of graph.problems) add(p, p.rule, p.message);
@@ -297,21 +297,28 @@ function freshness(tree, config, graph, requiredPaths = new Set()) {
   }
   return findings;
 }
+function revisionFindings(tree, config, graph) {
+  return [...checkTree({ tree, config, graph }), ...freshness(tree, config, graph)];
+}
 export function checkRevision(tree) {
-  const config = loadCheckConfig(tree), graph = loadGraph(tree, config);
-  return [...checkTree({ tree, config }), ...freshness(tree, config, graph)];
+  const config = loadCheckConfig(tree);
+  return revisionFindings(tree, config, loadGraph(tree, config));
 }
 export function checkPullRequest({ baseTree, headTree }) {
+  return pullRequestFindings({ baseTree, headTree });
+}
+// The head config and graph may be passed in by a caller that has already loaded them.
+function pullRequestFindings({ baseTree, headTree, config: loadedConfig, graph: loadedGraph }) {
   const baseConfig = configForTree(baseTree), headConfig = configForTree(headTree);
   if (baseConfig.sourceGraph.enabled && (!headConfig.sourceGraph.enabled || headConfig.sourceGraph.root !== baseConfig.sourceGraph.root)) return [{ file: "ontology.config.json", subject: "", rule: "graph-disabled", message: "a pull request cannot disable or relocate the enabled graph" }];
-  const config = loadCheckConfig(headTree), headGraph = loadGraph(headTree, config);
+  const config = loadedConfig || loadCheckConfig(headTree), headGraph = loadedGraph || loadGraph(headTree, config);
   const baseGraph = baseConfig.sourceGraph.enabled ? loadGraph(baseTree, baseConfig) : null;
   const covered = (g, p) => g && resolveCoverage(g, p).status === "kit:covered";
   const changed = changedPaths(baseTree, headTree);
   const requiredPaths = new Set(changed.filter(({ path }) =>
     !path.startsWith(headGraph.root + "/") && (covered(baseGraph, path) || covered(headGraph, path)))
     .map(({ path }) => path));
-  const findings = [...checkTree({ tree: headTree, config }), ...freshness(headTree, config, headGraph, requiredPaths)];
+  const findings = [...checkTree({ tree: headTree, config, graph: headGraph }), ...freshness(headTree, config, headGraph, requiredPaths)];
   if (baseGraph) {
     const proposedSelectors = new Set(headGraph.byType("kit:GraphCoverage")
       .map((r) => r.first("kit:pathSelector")?.object));
@@ -347,9 +354,10 @@ export function retiredDesignLinks(graph) {
     const status = node.first("kit:designStatus")?.object;
     if (INACTIVE.has(status)) inactive.set(node.iri, status);
   }
-  for (const a of assertions) {
-    const rel = a.first("kit:relationship")?.object;
-    if (rel === "kit:replaced-by" || rel === "kit:superseded-by") replacement.set(a.first("kit:subject")?.object, a.first("kit:object")?.object);
+  const byIri = [...assertions].sort((a, b) => (a.iri < b.iri ? -1 : a.iri > b.iri ? 1 : 0));
+  for (const a of byIri) {
+    const rel = a.first("kit:relationship")?.object, subject = a.first("kit:subject")?.object;
+    if ((rel === "kit:replaced-by" || rel === "kit:superseded-by") && !replacement.has(subject)) replacement.set(subject, a.first("kit:object")?.object);
   }
   const reports = [];
   for (const a of assertions) {
@@ -370,14 +378,16 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
       if (arg === "--help") { stdout.write("Usage: check-source-graph [--rev REV | --base REV --head REV | --staged] [--json] [--summary FILE]\n"); return 0; }
       if (arg === "--json") json = true;
       else if (arg === "--staged") staged = true;
-      else if (arg === "--summary" && argv[i + 1] && !argv[i + 1].startsWith("--")) summary = argv[++i];
+      else if (arg === "--summary" && i + 1 < argv.length && !argv[i + 1].startsWith("--")) summary = argv[++i];
       else if (["--rev", "--base", "--head"].includes(arg) && argv[i + 1] && !argv[i + 1].startsWith("--")) { const v = argv[++i]; if (arg === "--rev") rev = v; else if (arg === "--base") base = v; else head = v; }
       else throw new CheckSetupError(`invalid option ${arg}`);
     }
     if ((staged && (rev || head)) || (head && !base) || (rev && base)) throw new CheckSetupError("incompatible revision options");
     const tree = staged ? treeFromIndex(cwd) : treeFromRevision(cwd, head || rev || "HEAD");
-    const findings = base || staged ? checkPullRequest({ baseTree: treeFromRevision(cwd, base || "HEAD"), headTree: tree }) : checkRevision(tree);
-    const reports = retiredDesignLinks(loadGraph(tree, loadCheckConfig(tree)));
+    const config = loadCheckConfig(tree), graph = loadGraph(tree, config);
+    const findings = base || staged ? pullRequestFindings({ baseTree: treeFromRevision(cwd, base || "HEAD"), headTree: tree, config, graph }) : revisionFindings(tree, config, graph);
+    const reports = retiredDesignLinks(graph);
+    const hasDesign = graph.byType("kit:GraphNode").some((n) => ["kit:behaviour", "kit:decision"].includes(n.first("kit:kind")?.object));
     const label = `${staged ? "candidate tree" : "revision"} ${tree.id}`;
     if (json) stdout.write(JSON.stringify({ revision: tree.id, ok: !findings.length, findings, reports }) + "\n");
     else {
@@ -386,7 +396,11 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
       for (const f of findings) stderr.write(`${f.file}: ${f.subject ? f.subject + ": " : ""}${f.rule}: ${f.message}\n`);
       if (reports.length) stdout.write(`retired design links: ${reports.length}\n${reports.map((r) => `${r.assertion}: ${reportLine(r)}\n`).join("")}`);
     }
-    if (summary) appendFileSync(summary, `### Retired design links\n\n${reports.length ? reports.map((r) => `- \`${r.assertion}\`: ${reportLine(r, "`")}\n`).join("") : "None.\n"}`);
+    if (summary && (hasDesign || reports.length)) {
+      const body = reports.length ? reports.map((r) => `- \`${r.assertion}\`: ${reportLine(r, "`")}\n`).join("") : "None.\n";
+      try { appendFileSync(summary, `### Retired design links\n\n${body}`); }
+      catch (error) { stderr.write(`could not write summary: ${error.message}\n`); }
+    }
     return findings.length ? 1 : 0;
   } catch (error) { stderr.write(`${error.message}\n`); return 2; }
 }

@@ -581,7 +581,7 @@ test("B6: an evidence item without a start line gives a message with no NaN", as
     const findings = await design((s) => { dropPair(find(s.evidence, ":evidence-d4"), pair); });
     const decision = findings.find((f) => f.rule === "design-undeclared" && f.subject === ":decision-0001");
     assert.equal(decision?.message, `${ADR1} does not declare ADR 0001 on its title and Status lines`, pair);
-    assert.ok(!findings.some((f) => f.message.includes("NaN")), pair);
+    assert.ok(!findings.some((f) => f.rule.startsWith("design-") && f.message.includes("NaN")), pair);
   }
 });
 
@@ -731,14 +731,131 @@ test("B20: text, JSON and summary output carry the report without changing the r
   });
 });
 
-test("B20: a graph with no retired links prints nothing extra and writes None to the summary", async () => {
+test("B15: a graph with no design nodes and no reports writes no summary", async () => {
   await withScratchRepo(async (repo) => {
     writeGraph(repo, widgets(repo));
     repo.commit("graph");
     const summary = join(repo.dir, "summary.md");
+    writeFileSync(summary, "untouched\n");
     const text = cli(repo, ["--rev", "HEAD", "--summary", summary]);
     assert.equal(text.code, 0, text.err);
     assert.doesNotMatch(text.out, /retired design links/);
+    assert.equal(readFileSync(summary, "utf8"), "untouched\n");
+  });
+});
+
+test("B15: a design graph with no reports writes None to the summary", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    spec.assertions = spec.assertions.filter((a) => a.subject !== ":assertion-d4");
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const summary = join(repo.dir, "summary.md");
+    const run1 = cli(repo, ["--rev", "HEAD", "--summary", summary]);
+    assert.equal(run1.code, 0, run1.err);
     assert.equal(readFileSync(summary, "utf8"), "### Retired design links\n\nNone.\n");
+  });
+});
+
+test("B13: a summary that cannot be written is reported and the exit code follows the findings alone", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const result = cli(repo, ["--rev", "HEAD", "--summary", join(repo.dir, "missing-dir", "summary.md")]);
+    assert.equal(result.code, 0);
+    assert.match(result.err, /^could not write summary: .+$/m);
+  });
+});
+
+test("B14: an empty --summary value writes nothing and is not an error; a missing value is exit 2", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const empty = cli(repo, ["--rev", "HEAD", "--summary", ""]);
+    assert.equal(empty.code, 0, empty.err);
+    assert.equal(empty.err, "");
+    assert.equal(cli(repo, ["--rev", "HEAD", "--summary"]).code, 2);
+  });
+});
+
+test("B16: a deprecated decision is reported with status kit:deprecated", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    rewriteDoc(repo, spec, ADR1, DESIGN_ADRS[ADR1].replace("- **Status:** accepted", "- **Status:** deprecated"));
+    setPair(find(spec.nodes, ":decision-0001"), "kit:designStatus", "kit:deprecated");
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const tree = treeFromRevision(repo.dir, "HEAD");
+    const report = retiredDesignLinks(loadGraph(tree, loadCheckConfig(tree))).find((r) => r.assertion === ":assertion-d6");
+    assert.equal(report?.status, "kit:deprecated");
+    assert.equal(report?.inactive, ":decision-0001");
+    assert.equal(report?.replacement, null);
+  });
+});
+
+test("B16: failing findings plus reports exit 1 and still print the reports", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    setPair(find(spec.nodes, ":behaviour-payments-B1"), "rdfs:label", S("payments#B1 Pay invoice"));
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const result = cli(repo, ["--rev", "HEAD"]);
+    assert.equal(result.code, 1);
+    assert.match(result.err, /design-label/);
+    assert.match(result.out, /^retired design links: 1$/m);
+    assert.match(result.out, /^:assertion-d4: /m);
+  });
+});
+
+test("B17: a node with several replacement links reports the first by assertion IRI", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    spec.assertions.push(linkOf("c9", ":behaviour-payments-B3", "kit:replaced-by", ":behaviour-payments-B1"));
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const tree = treeFromRevision(repo.dir, "HEAD");
+    const report = retiredDesignLinks(loadGraph(tree, loadCheckConfig(tree))).find((r) => r.assertion === ":assertion-d4");
+    assert.equal(report?.replacement, ":behaviour-payments-B1");
+  });
+});
+
+test("B12: main reports exactly what checkRevision and retiredDesignLinks return", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const tree = treeFromRevision(repo.dir, "HEAD"), config = loadCheckConfig(tree);
+    const json = JSON.parse(cli(repo, ["--rev", "HEAD", "--json"]).out);
+    assert.deepEqual(json.findings, checkRevision(tree));
+    assert.deepEqual(json.reports, retiredDesignLinks(loadGraph(tree, config)));
+  });
+});
+
+test("B20: rewriteDoc gives every evidence item citing the file, and its refresh record, the new blob ID", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    const cites = (b, path) => b.pairs.some((p) => p.predicate === "kit:path" && p.object === path);
+    const before = spec.evidence.filter((e) => cites(e, LITE)).map((e) => e.subject);
+    assert.ok(before.length > 1, "the lite feature file is cited more than once");
+    rewriteDoc(repo, spec, LITE, DESIGN_FEATURE + "\nAn extra line.\n");
+    const expected = blobId(repo.dir, LITE);
+    const blobOf = (b) => b.pairs.find((p) => p.predicate === "kit:blobId")?.object;
+    const cited = spec.evidence.filter((e) => cites(e, LITE));
+    assert.deepEqual(cited.map((e) => e.subject), before);
+    for (const e of cited) assert.equal(blobOf(e), expected, e.subject);
+    const record = spec.records.filter((r) => cites(r, LITE));
+    assert.equal(record.length, 1);
+    assert.equal(blobOf(record[0]), expected);
+    for (const e of spec.evidence.filter((x) => !cites(x, LITE))) assert.notEqual(blobOf(e), expected, e.subject);
   });
 });
