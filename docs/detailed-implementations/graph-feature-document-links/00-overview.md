@@ -1,6 +1,6 @@
 # Source graph links to feature documents — detailed implementation plan
 
-Execute only after the [task plan](../../superpowers/plans/graph-feature-document-links/plan.md) has been reviewed and merged. Read [feature.md](../../features/graph-feature-document-links/feature.md) (vision, behaviours, architecture) and ADRs 0041–0044 first. Work on `feature/graph-feature-document-links/build`. The task plan's global constraints, interfaces and planning decisions apply to every task here.
+Execute only after the [task plan](../../superpowers/plans/graph-feature-document-links/plan.md) has been reviewed and merged. Read [feature.md](../../features/graph-feature-document-links/feature.md) (vision, behaviours, architecture) and ADRs 0041–0045 first. Work on `feature/graph-feature-document-links/build`. The task plan's global constraints, interfaces and planning decisions apply to every task here.
 
 Each task is a red/green cycle, then the shared commit gate. The code blocks are complete test files or test additions, exact copy, or algorithm contracts; they are not permission to build during dev-plan. Keep prose paragraphs and list items on one source line.
 
@@ -12,9 +12,11 @@ Each task is a red/green cycle, then the shared commit gate. The code blocks are
 | 2 — Behaviour and decision nodes held to their documents | [02-design-nodes.md](02-design-nodes.md) | B1, B2, B5, B19, B21 | 3–6 |
 | 3 — Retirement, supersession and reports | [03-retirement-and-reports.md](03-retirement-and-reports.md) | B17, B18, B20 | 7–9 |
 | 4 — Behaviour and code lookups | [04-lookups.md](04-lookups.md) | B3, B4, B6, B7, B24 | 10–11 |
-| 5 — Agents record the links | [05-agents-record-links.md](05-agents-record-links.md) | B8–B16, B23 | 12–13 |
+| 5 — Agents record the links | [05-agents-record-links.md](05-agents-record-links.md) | B8–B16, B23 (USER acceptance) | 12–13 |
 
 Build one increment per session. When an increment's last task is committed and CI is green, post a handoff on #185 naming the increment done, its behaviour ids and the next increment, then stop.
+
+For the amendment after the original build, use the [integration steps in increment 5](05-agents-record-links.md#integrate-the-amended-design-and-plan). B23 remains part of USER acceptance and requires the separately delivered importer in [ADR 0045](../../adr/0045-require-a-compatible-division-importer.md).
 
 ## Shared contracts
 

@@ -2,7 +2,7 @@
 
 [← Overview](00-overview.md) · [Ontology](../../ontology.md)
 
-Delivers B8–B16 and B23. Depends on increment 4. When done, the installed `GraphAgentProtocol` tells every agent what to record and when, the installer ships `DesignDocumentReader` with its test, the installed runbook explains design documents, and an installed end-to-end run passes. B23 needs no code: the user phase proves it by importing the trial graph at a pinned commit into a division ontology.
+Delivers B8–B16. Depends on increment 4. When done, the installed `GraphAgentProtocol` tells every agent what to record and when, the installer ships `DesignDocumentReader` with its test, the installed runbook explains design documents, and an installed end-to-end run passes. The kit produces the graph for B23. Division-ontology owns the compatible C4 snapshot importer B23 requires in USER acceptance ([ADR 0045](../../adr/0045-require-a-compatible-division-importer.md)).
 
 ### Task 12: Protocol paragraph and installer
 
@@ -216,4 +216,18 @@ git commit -m "test(graph): installed end-to-end run for design links (#185)"
 git push -u origin feature/graph-feature-document-links/build
 ```
 
-**End of increment 5.** Check that CI is green, tick the build criteria on #185, post the handoff to the user phase (B23 is proved in acceptance), and stop.
+**End of increment 5.** Check that CI is green, tick the build criteria on #185, post the handoff to the user phase, and stop.
+
+## Integrate the amended design and plan
+
+1. Once the plan amendment has merged, fetch `origin/main` and confirm it contains the reviewed design and plan. Confirm the feature checkout is clean. Switch to `feature/graph-feature-document-links/build` and confirm its pushed tip is an ancestor of the local branch before integrating.
+2. If the build branch does not already contain the reviewed main commit, merge it with `git merge --no-ff --no-commit origin/main`. Review the staged paths and diff, confirming the merged B23, ADR 0045 and plan are present and the shipped kit changes are intact. Run `node scripts/check-ontology-terms.mjs` and `npm test` before committing the merge. Push normally so the existing build commits and their reviews remain in history.
+3. Verify the build branch and tests, then hand off to USER. Tasks 1–13 retain their existing commits. Carry the three B23 inputs and the importer dependency into the handoff.
+
+## B23 acceptance inputs and checks
+
+- Use the real `loadSnapshot({divisionRoot, catalogCommit, checkouts})` in division-ontology's `src/c4/snapshot.mjs`. Record the exact importer revision, catalog commit and source graph commit. The source checkout must be clean, match its catalog source identity and contain the pinned Git objects. The catalog must pin the exact graph commit used for the comparison.
+- Verify the importer revision supports schema 2 and resolves standard kit evidence roles against the pinned configuration while retaining schema 1 support. Run the snapshot loader first on a local schema 1 fixture with standard kit evidence and on a local schema 2 fixture with design nodes and links. Then use the pinned JEPA-Speech trial graph for deployed acceptance. Read the expected values from the canonical Turtle at each source commit.
+- Compare the imported design nodes by IRI against the full expected set of IRIs, kinds, labels, statuses and evidence. For assertions incident on those nodes, compare the full expected set of assertion IRIs, ordered endpoints, relationships, basis and evidence. Evidence must resolve to the same role, path, blob and line range at the pinned commit.
+- From a behaviour with linked code, follow the incoming `kit:implements` assertion to its source symbol or component. For a component, follow an outgoing `kit:contains` assertion to a source file or symbol. Compare the resulting node with the pinned graph. The USER walkthrough and executable test both use the imported snapshot for this traversal.
+- If no compatible importer revision is available, record B23 as pending and keep that dependency visible in the USER handoff. The kit's installed end-to-end test covers the producer checks and lookups. B23's pass requires the imported field comparison and traversal.

@@ -4,11 +4,11 @@
 
 **Goal:** Make a feature's behaviours and ADRs graph nodes that `GraphChecker` holds to their documents, link them to the code and tests that realise them, report links to retired behaviours and superseded decisions, and answer "what does this behaviour touch?" and "why does this code exist?" from the `GraphReader`.
 
-**Architecture:** Graph schema version 2 adds `kit:behaviour` and `kit:decision`, a `kit:designStatus` node predicate, node-level `kit:evidence` for those two kinds, and `kit:replaced-by` and `kit:superseded-by`; each core value carries the version that introduced it, and manifests from version 1 stay valid (ADRs 0041, 0042). A new kit-owned `DesignDocumentReader` (`source-graph-design-docs.mjs`) reads behaviours files and ADRs from a Git tree; `GraphChecker` uses it to fail nodes that drift from their documents and lists each `RetiredDesignLink` in a non-failing report (ADRs 0043, 0044); `GraphReader` uses it for `behaviour` and `code` lookups. The renderer, check workflow, protocol and installer change to match. division-ontology does not change.
+**Architecture:** Graph schema version 2 adds `kit:behaviour` and `kit:decision`, a `kit:designStatus` node predicate, node-level `kit:evidence` for those two kinds, and `kit:replaced-by` and `kit:superseded-by`; each core value carries the version that introduced it, and manifests from version 1 stay valid (ADRs 0041, 0042). A new kit-owned `DesignDocumentReader` (`source-graph-design-docs.mjs`) reads behaviours files and ADRs from a Git tree; `GraphChecker` uses it to fail nodes that drift from their documents and lists each `RetiredDesignLink` in a non-failing report (ADRs 0043, 0044); `GraphReader` uses it for `behaviour` and `code` lookups. The renderer, check workflow, protocol and installer change to match. Division-ontology owns the compatible C4 snapshot importer that B23 acceptance depends on (ADR 0045).
 
 **Tech Stack:** Node.js >=18 standard library only, `node:test`, the kit's Turtle reader (`source-graph-turtle.mjs`, `source-graph-model.mjs`) and Git tree reader (`source-graph-git.mjs`), GitHub Actions on the existing Node 20 pattern. No npm dependency.
 
-**Spec:** [feature.md](../../../features/graph-feature-document-links/feature.md) (vision, behaviours B1–B24, architecture), [ADR 0041](../../../adr/0041-behaviour-and-decision-kinds-in-schema-version-2.md), [ADR 0042](../../../adr/0042-accept-older-graph-manifests.md), [ADR 0043](../../../adr/0043-check-design-nodes-against-their-documents.md), [ADR 0044](../../../adr/0044-report-retired-design-links-without-failing.md). Read the [detailed plan](../../../detailed-implementations/graph-feature-document-links/00-overview.md) alongside this one; it holds the test files, the exact copy and the algorithms.
+**Spec:** [feature.md](../../../features/graph-feature-document-links/feature.md) (vision, behaviours B1–B24, architecture), [ADR 0041](../../../adr/0041-behaviour-and-decision-kinds-in-schema-version-2.md), [ADR 0042](../../../adr/0042-accept-older-graph-manifests.md), [ADR 0043](../../../adr/0043-check-design-nodes-against-their-documents.md), [ADR 0044](../../../adr/0044-report-retired-design-links-without-failing.md), [ADR 0045](../../../adr/0045-require-a-compatible-division-importer.md). Read the [detailed plan](../../../detailed-implementations/graph-feature-document-links/00-overview.md) alongside this one; it holds the test files, the exact copy and the algorithms.
 
 ## Increments
 
@@ -18,7 +18,7 @@
 | 2 — Behaviour and decision nodes held to their documents | B1, B2, B5, B19, B21 | 3–6 | Repositories can record behaviour and decision nodes; ids, labels, statuses and evidence that drift from the documents fail the check. |
 | 3 — Retirement, supersession and reports | B17, B18, B20 | 7–9 | Retired and superseded nodes link to their replacements; retired design links are reported in CI without failing; the rendered graph shows them. |
 | 4 — Behaviour and code lookups | B3, B4, B6, B7, B24 | 10–11 | `behaviour <slug>#B<n>` and `code <node>` answer the two questions offline. |
-| 5 — Agents record the links | B8, B9, B10, B11, B12, B13, B14, B15, B16, B23 | 12–13 | The protocol tells every agent what to record, the installer ships it, and an installed end-to-end run passes. B23 is proved in acceptance by importing the trial graph into a division ontology. |
+| 5 — Agents record the links | B8, B9, B10, B11, B12, B13, B14, B15, B16, B23 (USER acceptance) | 12–13 | The protocol tells every agent what to record, the installer ships it, and an installed end-to-end run passes. B23 depends on the separately delivered division importer. |
 
 Increment 1 is the walking skeleton: every later increment needs schema version 2, and it must land without turning any adopter's required check red. Stop at the end of each increment: CI green, a handoff naming the next increment, then a break.
 
@@ -246,7 +246,7 @@ Planning decisions that follow from the architecture without re-deciding it:
 - [ ] Run `npm test`; expect PASS.
 - [ ] Commit `feat(graph): add the code lookup (#185)` and push. **End of increment 4: CI green, handoff, stop.**
 
-## Increment 5 — Agents record the links (B8–B16, B23)
+## Increment 5 — Agents record the links (B8–B16, with B23 in USER acceptance)
 
 ### Task 12: Protocol paragraph and installer
 
@@ -267,3 +267,7 @@ Planning decisions that follow from the architecture without re-deciding it:
 - [ ] Add the "Design documents" subsection to the installed runbook and one paragraph to `docs/how-it-works.md`, with the exact copy in the detailed plan.
 - [ ] Run `npm test`; expect PASS.
 - [ ] Commit `test(graph): installed end-to-end run for design links (#185)` and push. **End of increment 5: CI green, handoff to the user phase.**
+
+### B23 acceptance dependency
+
+The existing kit tasks are complete. After the plan amendment merges, integrate the reviewed design and plans into the existing pushed build branch and verify that branch before handing it back to USER. Follow the [build integration and B23 checks](../../../detailed-implementations/graph-feature-document-links/05-agents-record-links.md#integrate-the-amended-design-and-plan). The kit build can be verified independently. B23 acceptance requires a verified compatible importer and a catalog-pinned source graph.
