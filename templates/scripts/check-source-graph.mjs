@@ -286,11 +286,11 @@ export function retiredDesignLinks(graph) {
     if (relationship === "kit:replaced-by" || relationship === "kit:superseded-by") continue;
     const end = inactive.has(object) ? object : inactive.has(subject) ? subject : null;
     if (end === null) continue;
-    reports.push({ assertion: a.iri, subject: end === object ? subject : object, relationship, object: end, status: inactive.get(end), replacement: replacement.get(end) ?? null });
+    reports.push({ assertion: a.iri, subject, relationship, object, inactive: end, status: inactive.get(end), replacement: replacement.get(end) ?? null });
   }
   return reports.sort((a, b) => (a.assertion < b.assertion ? -1 : a.assertion > b.assertion ? 1 : 0));
 }
-const reportLine = (r) => `${r.subject} ${r.relationship} ${r.object} (${r.status.replace(/^kit:/, "")}${r.replacement ? `, replaced by ${r.replacement}` : ""})`;
+const reportLine = (r, quote = "") => `${quote}${r.subject}${quote} ${r.relationship} ${quote}${r.object}${quote} (${r.status.replace(/^kit:/, "")}${r.replacement ? `, replaced by ${quote}${r.replacement}${quote}` : ""})`;
 export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stderr = process.stderr } = {}) {
   try {
     let rev, base, head, summary, staged = false, json = false;
@@ -315,7 +315,7 @@ export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stder
       for (const f of findings) stderr.write(`${f.file}: ${f.subject ? f.subject + ": " : ""}${f.rule}: ${f.message}\n`);
       if (reports.length) stdout.write(`retired design links: ${reports.length}\n${reports.map((r) => `${r.assertion}: ${reportLine(r)}\n`).join("")}`);
     }
-    if (summary) appendFileSync(summary, `### Retired design links\n\n${reports.length ? reports.map((r) => `- \`${r.assertion}\`: \`${r.subject}\` ${r.relationship} \`${r.object}\` (${r.status.replace(/^kit:/, "")}${r.replacement ? `, replaced by \`${r.replacement}\`` : ""})\n`).join("") : "None.\n"}`);
+    if (summary) appendFileSync(summary, `### Retired design links\n\n${reports.length ? reports.map((r) => `- \`${r.assertion}\`: ${reportLine(r, "`")}\n`).join("") : "None.\n"}`);
     return findings.length ? 1 : 0;
   } catch (error) { stderr.write(`${error.message}\n`); return 2; }
 }

@@ -590,9 +590,26 @@ test("B20: a link to a retired behaviour or superseded decision is reported and 
     const tree = treeFromRevision(repo.dir, "HEAD"), config = loadCheckConfig(tree);
     assert.deepEqual(checkTree({ tree, config }), []);
     assert.deepEqual(retiredDesignLinks(loadGraph(tree, config)), [
-      { assertion: ":assertion-d4", subject: ":node-ledger", relationship: "kit:implements", object: ":behaviour-payments-B3", status: "kit:retired", replacement: ":behaviour-payments-B2" },
-      { assertion: ":assertion-d7", subject: ":node-ledger", relationship: "kit:documented-by", object: ":decision-0002", status: "kit:superseded", replacement: ":decision-0001" },
+      { assertion: ":assertion-d4", subject: ":node-ledger", relationship: "kit:implements", object: ":behaviour-payments-B3", inactive: ":behaviour-payments-B3", status: "kit:retired", replacement: ":behaviour-payments-B2" },
+      { assertion: ":assertion-d7", subject: ":node-ledger", relationship: "kit:documented-by", object: ":decision-0002", inactive: ":decision-0002", status: "kit:superseded", replacement: ":decision-0001" },
     ]);
+  });
+});
+
+test("B20: a retired behaviour as the subject keeps the assertion's direction", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    spec.assertions.push(block(":assertion-d8", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-d5"],
+      ["kit:evidence", ":evidence-e5"], ["kit:object", ":node-test"], ["kit:relationship", "kit:tested-by"], ["kit:subject", ":behaviour-payments-B3"]]));
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const tree = treeFromRevision(repo.dir, "HEAD");
+    const report = retiredDesignLinks(loadGraph(tree, loadCheckConfig(tree))).find((r) => r.assertion === ":assertion-d8");
+    assert.deepEqual(report, { assertion: ":assertion-d8", subject: ":behaviour-payments-B3", relationship: "kit:tested-by", object: ":node-test",
+      inactive: ":behaviour-payments-B3", status: "kit:retired", replacement: ":behaviour-payments-B2" });
+    const text = cli(repo, ["--rev", "HEAD"]);
+    assert.match(text.out, /^:assertion-d8: :behaviour-payments-B3 kit:tested-by :node-test \(retired, replaced by :behaviour-payments-B2\)$/m);
   });
 });
 

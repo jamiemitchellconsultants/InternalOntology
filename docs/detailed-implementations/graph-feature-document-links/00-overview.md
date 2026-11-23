@@ -30,7 +30,7 @@ These are JavaScript shapes, not ontology terms.
 // Finding (unchanged shape)
 { file, subject, rule, message }
 // Report, one RetiredDesignLink
-{ assertion, subject, relationship, object, status /* "kit:retired" | "kit:superseded" | "kit:deprecated" */, replacement /* node IRI */ | null }
+{ assertion, subject, relationship, object, inactive /* IRI of the retired, superseded or deprecated end */, status /* "kit:retired" | "kit:superseded" | "kit:deprecated" */, replacement /* node IRI */ | null }
 ```
 
 The fixed fixture (Task 4) is a lite feature `payments` in `docs/features/payments/feature.md` (or `02-behaviours.md` in full mode) and two ADRs. Its line numbers are part of the contract: B1 on line 11, B2 on line 12, the Retired behaviours heading on line 14, B3 (retired, replaced by B2) on line 16, the traceability row for B1 on line 22; each ADR's title is line 1 and its Status line is line 3.
