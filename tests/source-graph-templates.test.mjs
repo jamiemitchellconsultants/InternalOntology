@@ -131,7 +131,7 @@ test("B8–B15, B20, B21: the graph protocol links design documents in the same 
   const start = protocol.indexOf("### Linking design documents");
   assert.ok(start > 0, "section missing");
   const section = protocol.slice(start, protocol.indexOf("\n### ", start + 1) === -1 ? undefined : protocol.indexOf("\n### ", start + 1));
-  for (const needle of ["same change", ":behaviour-<slug>-B<n>", ":decision-<NNNN>", "`kit:designStatus`", "Keep the IRI", "`kit:replaced-by`",
+  for (const needle of ["same change", "`kit:contains` from the component", ":behaviour-<slug>-B<n>", ":decision-<NNNN>", "`kit:designStatus`", "Keep the IRI", "`kit:replaced-by`",
     "`kit:superseded-by`", "traceability table", "citing the table row and the code", "`kit:documented-by`",
     "only when that one symbol carries out the behaviour", "`kit:tested-by`", "Record nothing for code that does not exist yet",
     "never all of `docs/features/**`", "`kit:schemaVersion` to 2", "pull request body", "retired design links",

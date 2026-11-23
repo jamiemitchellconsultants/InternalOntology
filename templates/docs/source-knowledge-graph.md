@@ -168,6 +168,8 @@ The check reads a replacement from `replaced by B<n>` in the retired entry (`rep
 
 Upgrading the kit replaces `graph-schema.ttl` with schema version 2, so the generated Markdown is stale until you regenerate it: run `node scripts/render-source-graph.mjs` after the upgrade and commit the result in the same pull request. A version 1 manifest stays valid; raise it to 2 only when you record the first behaviour or decision.
 
+When a component's code is first added, assert `kit:contains` from the component to the node of each file and symbol it contains, so that `code <node>` shows the component's behaviour and decision links through it.
+
 To see what a behaviour touches, run `node scripts/query-source-graph.mjs behaviour <slug>#B<n>`. To see why code exists, run `node scripts/query-source-graph.mjs code <node>`; it also shows the links of the component that contains the node.
 
 ## Recover a source snapshot
