@@ -12,6 +12,7 @@ const PHRASES = {
   "kit:contains": "contains", "kit:implements": "implements", "kit:tested-by": "is tested by",
   "kit:depends-on": "depends on", "kit:documented-by": "is documented by", "kit:calls": "calls",
   "kit:communicates-with": "communicates with", "kit:deployed-by": "is deployed by",
+  "kit:replaced-by": "is replaced by", "kit:superseded-by": "is superseded by",
 };
 const ROLES = {
   "kit:role-implementation": "Implementation", "kit:role-test": "Test",
@@ -47,7 +48,9 @@ export function renderMarkdown(input) {
     const outgoing = assertions.some((a) => value(a, "kit:subject") === node.iri);
     const connected = outgoing || assertions.some((a) => value(a, "kit:object") === node.iri);
     const suffix = outgoing ? ` — [View claims](#${anchor(input, "node", node.iri)})` : connected ? "" : " — no recorded assertions";
-    lines.push(`- ${text(value(node, "rdfs:label"))} (${text(localName(value(node, "kit:kind")).replaceAll("-", " "))})${suffix}`);
+    const status = value(node, "kit:designStatus");
+    const kind = `${text(localName(value(node, "kit:kind")).replaceAll("-", " "))}${status ? `, ${text(localName(status))}` : ""}`;
+    lines.push(`- ${text(value(node, "rdfs:label"))} (${kind})${suffix}`);
   }
   if (!nodes.length) lines.push("No recorded nodes.");
   lines.push("", "## Current claims", "");

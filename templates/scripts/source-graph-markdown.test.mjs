@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { withScratchRepo, seedRenderRepo } from './source-graph-render-test-helpers.mjs';
-import { block, S, find, setPair, ttl } from './source-graph-test-helpers.mjs';
+import { block, S, find, setPair, ttl, addDesignDocs } from './source-graph-test-helpers.mjs';
 import { parseGraphTurtle } from './source-graph-turtle.mjs';
 import { treeFromRevision } from './source-graph-git.mjs';
 import { readRenderInput } from './source-graph-render-input.mjs';
@@ -126,5 +126,18 @@ test('B4/B6/B7: source destinations remain immutable after branch advancement an
     assert.equal(r.git('show', `${f.source}:${pinned.join('/')}`), before);
     assert.notEqual(r.git('show', `HEAD:${f.spec.paths.impl}`), before);
     assert.equal(sourceLink(input, f.spec.paths.impl, 1, 3), link);
+  });
+});
+
+test('B17, B18, B22: design nodes show their status and the new links read as phrases', async () => {
+  await withScratchRepo(async r => {
+    const f = seedRenderRepo(r, { mutate(spec, repo) { addDesignDocs(repo, spec); } });
+    const md = renderMarkdown(readRenderInput(treeFromRevision(r.dir, f.source)));
+    assert.match(md, /^- payments\\#B1 Pay an invoice \(behaviour, current\)/m);
+    assert.match(md, /^- payments\\#B3 Pay by cheque \(behaviour, retired\)/m);
+    assert.match(md, /^- ADR 0002 Keep cheques \(decision, superseded\)/m);
+    assert.match(md, /^- Ledger \(component\)/m);
+    assert.match(md, /is replaced by/);
+    assert.match(md, /is superseded by/);
   });
 });
