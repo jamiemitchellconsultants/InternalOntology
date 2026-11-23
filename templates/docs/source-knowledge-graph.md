@@ -160,6 +160,12 @@ A refresh record's IRI is `:refresh-` followed by the first 12 hexadecimal chara
 
 If the new selector also covers existing files, review each and add its refresh record. List the widened selector, the number of files it newly covers and why in the pull request's "Graph changes" section. Finish with the write, check and render order above.
 
+## Link design documents
+
+Behaviours and ADRs are graph nodes from schema version 2. A behaviour node is `:behaviour-<slug>-B<n>`, labelled `<slug>#B<n>` and its title, with `kit:designStatus` `kit:current` or `kit:retired` and one evidence item on its declaration in `02-behaviours.md`, or in the Analyst section of `feature.md` for a lite feature. A decision node is `:decision-<NNNN>`, labelled `ADR <NNNN>` and its title, with the first word of its Status line as its `kit:designStatus` and one evidence item from its title line to its Status line. The check fails a node whose id, label, status or evidence no longer matches its document, an id that is both current and retired, and a feature with both behaviours files. It reports, without failing, every link to a retired behaviour or to a superseded or deprecated decision; CI writes that list to the job summary.
+
+To see what a behaviour touches, run `node scripts/query-source-graph.mjs behaviour <slug>#B<n>`. To see why code exists, run `node scripts/query-source-graph.mjs code <node>`; it also shows the links of the component that contains the node.
+
 ## Recover a source snapshot
 
 The renderer is offline. After squash or rebase, a fresh checkout may lack the recorded source commit even though the Git host retains it. The workflow reads only the bounded, validated SHA from `node scripts/render-source-graph.mjs --print-source-rev --rev HEAD`, then fetches a missing commit from fixed remote `origin` before the real check. Metadata is data and cannot supply Git options, a remote or executable commands.
