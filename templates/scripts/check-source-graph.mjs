@@ -2,7 +2,7 @@ import { validateConfig, normaliseRepoRelativePath } from "./ontology-config.mjs
 import { parseTurtle } from "./owl-ontology.mjs";
 import { lineCount, changedPaths, treeFromIndex, treeFromRevision } from "./source-graph-git.mjs";
 import { parseGraphTurtle } from "./source-graph-turtle.mjs";
-import { BEHAVIOUR_IRI, behavioursFile, readBehaviours } from "./source-graph-design-docs.mjs";
+import { BEHAVIOUR_IRI, DECISION_IRI, behavioursFile, readBehaviours, readDecision } from "./source-graph-design-docs.mjs";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CORE, DESIGN_STATUSES, NODE_PREDICATE_VERSIONS, ROLE_KEYS, introducedIn, loadGraph, matchSelector, resolveCoverage, refreshIdFor } from "./source-graph-model.mjs";
@@ -122,9 +122,15 @@ export function checkTree({ tree, config }) {
 
 export function designFindings(graph, tree) {
   const findings = [], conflicts = new Set();
-  const add = (r, rule, message) => findings.push({ file: r.file || graph.root, subject: r.iri || "", rule, message });
+  const add = (r, rule, message) => findings.push({ file: r.file || graph.root, subject: r.iri || "", rule, message, line: 0 });
+  const singleEvidence = (node) => {
+    const items = node.values("kit:evidence");
+    return items.length === 1 ? graph.resources.get(items[0].object) : undefined;
+  };
   for (const node of graph.byType("kit:GraphNode")) {
-    if (node.first("kit:kind")?.object !== "kit:behaviour") continue;
+    const kind = node.first("kit:kind")?.object;
+    if (kind === "kit:decision") { decisionFinding(node); continue; }
+    if (kind !== "kit:behaviour") continue;
     const match = BEHAVIOUR_IRI.exec(node.iri);
     if (!match) { add(node, "design-iri", `${node.iri} is not :behaviour-<slug>-B<n>`); continue; }
     const [, slug, id] = match, located = behavioursFile(tree, slug);
@@ -133,9 +139,7 @@ export function designFindings(graph, tree) {
       if (!conflicts.has(slug)) { conflicts.add(slug); add({ file: located.conflict[0] }, "design-file-conflict", `${located.conflict[0]} and ${located.conflict[1]} both declare behaviours`); }
       continue;
     }
-    const items = node.values("kit:evidence");
-    if (items.length !== 1) continue;
-    const evidence = graph.resources.get(items[0].object);
+    const evidence = singleEvidence(node);
     if (!evidence) continue;
     if (evidence.first("kit:role")?.object !== "kit:role-selected-document" || evidence.first("kit:path")?.object !== located.path) {
       add(node, "design-evidence", `evidence must be a selected-document item for ${located.path}`); continue;
@@ -150,6 +154,26 @@ export function designFindings(graph, tree) {
     if (node.first("kit:designStatus")?.object !== status) add(node, "design-status", `${node.iri} must be ${status}`);
   }
   return findings;
+
+  function decisionFinding(node) {
+    const match = DECISION_IRI.exec(node.iri);
+    if (!match) { add(node, "design-iri", `${node.iri} is not :decision-<NNNN>`); return; }
+    const number = match[1], decision = readDecision(tree, number);
+    if (!decision) { add(node, "design-undeclared", `no ADR ${number} in docs/adr`); return; }
+    const evidence = singleEvidence(node);
+    if (!evidence) return;
+    if (evidence.first("kit:role")?.object !== "kit:role-selected-document" || evidence.first("kit:path")?.object !== decision.path) {
+      add(node, "design-evidence", `evidence must be a selected-document item for ${decision.path}`); return;
+    }
+    const start = Number(evidence.first("kit:startLine")?.object), end = Number(evidence.first("kit:endLine")?.object);
+    if (decision.titleLine === null || decision.statusLine === null || start !== decision.titleLine || end !== decision.statusLine) {
+      add(node, "design-undeclared", `${decision.path} does not declare ADR ${number} on lines ${start}-${end}`); return;
+    }
+    const label = `ADR ${number} ${decision.title}`;
+    if (node.first("rdfs:label")?.object !== label) { add(node, "design-label", `label must be ${JSON.stringify(label)}`); return; }
+    const status = `kit:${decision.status}`;
+    if (node.first("kit:designStatus")?.object !== status) add(node, "design-status", `${node.iri} must be ${status}`);
+  }
 }
 
 function configForTree(tree) {

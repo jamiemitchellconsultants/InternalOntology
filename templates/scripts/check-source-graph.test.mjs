@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkTree, loadCheckConfig, CheckSetupError } from "./check-source-graph.mjs";
 import { treeFromRevision } from "./source-graph-git.mjs";
-import { withScratchRepo, widgets, writeGraph, find, setPair, dropPair, block, S, ttl, blobId, ROOT, addDesignDocs, rewriteDoc, DESIGN_FEATURE } from "./source-graph-test-helpers.mjs";
+import { withScratchRepo, widgets, writeGraph, find, setPair, dropPair, block, S, ttl, blobId, ROOT, addDesignDocs, rewriteDoc, DESIGN_FEATURE, DESIGN_ADRS } from "./source-graph-test-helpers.mjs";
 
 async function run(mutate, language = "csharp") {
   let findings;
@@ -519,4 +519,31 @@ test("B21: rewording a title keeps the IRI; the check passes once the label foll
     rewriteDoc(r, s, LITE, reworded);
     setPair(find(s.nodes, ":behaviour-payments-B1"), "rdfs:label", S("payments#B1 Pay an open invoice"));
   }), []);
+});
+
+const ADR1 = "docs/adr/0001-use-a-ledger.md";
+
+const decisionMutations = [
+  ["design-iri", ":decision-1", (s) => { find(s.nodes, ":decision-0001").subject = ":decision-1"; }],
+  ["design-undeclared", ":decision-0001", (s) => { setPair(find(s.evidence, ":evidence-d4"), "kit:startLine", 2); }],
+  ["design-undeclared", ":decision-0001", (s, r) => { rewriteDoc(r, s, ADR1, "# 0001 — Use a ledger\n\nNo status yet.\n"); }],
+  ["design-undeclared", ":decision-0003", (s) => { s.nodes.push(block(":decision-0003", "kit:GraphNode", [["kit:designStatus", "kit:accepted"],
+    ["kit:evidence", ":evidence-d4"], ["kit:kind", "kit:decision"], ["rdfs:label", S("ADR 0003 Missing")]])); }],
+  ["design-label", ":decision-0001", (s) => { setPair(find(s.nodes, ":decision-0001"), "rdfs:label", S("ADR 0001 Use the ledger")); }],
+  ["design-status", ":decision-0001", (s) => { setPair(find(s.nodes, ":decision-0001"), "kit:designStatus", "kit:superseded"); }],
+  ["design-evidence", ":decision-0001", (s) => { setPair(find(s.nodes, ":decision-0001"), "kit:evidence", ":evidence-e4"); }],
+];
+
+for (const [rule, subject, mutate] of decisionMutations) {
+  test(`B5: a decision node that drifts from its ADR reports ${rule} on ${subject}`, async () => {
+    const findings = await design(mutate);
+    assert.ok(has(findings, rule, subject), `expected ${rule} on ${subject}, got ${JSON.stringify(findings)}`);
+  });
+}
+
+test("B5: a capitalised or annotated Status word still reads as its status", async () => {
+  for (const status of ["Accepted", "accepted; amended by ADR 0002 (planning)"]) {
+    const text = DESIGN_ADRS[ADR1].replace("- **Status:** accepted", `- **Status:** ${status}`);
+    assert.deepEqual(await design((s, r) => { rewriteDoc(r, s, ADR1, text); }), [], status);
+  }
 });
