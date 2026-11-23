@@ -1,8 +1,10 @@
 export const BEHAVIOUR_IRI = /^:behaviour-([a-z0-9]+(?:-[a-z0-9]+)*)-B([1-9][0-9]*)$/;
 export const DECISION_IRI = /^:decision-([0-9]{4})$/;
 const REFERENCE = /^([a-z0-9]+(?:-[a-z0-9]+)*)#B([1-9][0-9]*)$/;
-const DECLARATION = /^\s*(?:[-*]\s+)?\*\*B([1-9][0-9]*)(?: — |\. | )(.+?)\.?\*\*/;
+const DECLARATION = /^\s*(?:[-*]\s+)?\*\*B([1-9][0-9]*)(?: — |\. | )/;
 const RETIRED_HEADING = /^(#{2,6})\s+Retired behaviours\s*$/i;
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+const QUIET_HEADING = /^#{1,6}\s+(?:Uncertainties|Terms)\s*$/i;
 const REPLACED_BY = /replaced by (?:([a-z0-9-]+)#)?B([1-9][0-9]*)/i;
 
 export const behaviourIri = (slug, id) => `:behaviour-${slug}-B${id}`;
@@ -13,33 +15,58 @@ export function parseBehaviourReference(text) {
   return m ? { slug: m[1], id: Number(m[2]) } : null;
 }
 
+function declaration(line) {
+  const m = DECLARATION.exec(line);
+  if (!m) return null;
+  const rest = line.slice(m[0].length);
+  let depth = 1;
+  for (let j = rest.indexOf("**"); j !== -1; j = rest.indexOf("**", j + 2)) {
+    const opens = (j === 0 || /\s/.test(rest[j - 1])) && j + 2 < rest.length && !/\s/.test(rest[j + 2]);
+    depth += opens ? 1 : -1;
+    if (depth === 0) {
+      const raw = rest.slice(0, j), title = raw.length > 1 && raw.endsWith(".") ? raw.slice(0, -1) : raw;
+      return title ? { id: Number(m[1]), title } : null;
+    }
+  }
+  return null;
+}
+
 export function readBehaviours(text, { lite = false } = {}) {
   const lines = text.split(/\r?\n/);
-  const marks = [];
-  let fenced = false, analyst = !lite, retiredDepth = 0;
+  const marks = [], fencedLines = new Set();
+  let fence = null, analyst = !lite, retiredDepth = 0, quietDepth = 0;
   lines.forEach((line, i) => {
-    if (line.startsWith("```")) { fenced = !fenced; return; }
-    if (fenced) return;
-    if (lite) {
-      if (line === "## Analyst: behaviours") { analyst = true; return; }
-      if (line.startsWith("## ")) analyst = false;
+    const f = FENCE.exec(line);
+    if (fence) {
+      fencedLines.add(i);
+      if (f && f[1][0] === fence.char && f[1].length >= fence.length) fence = null;
+      return;
     }
+    if (f) { fence = { char: f[1][0], length: f[1].length }; fencedLines.add(i); return; }
     const heading = /^(#{1,6})\s/.exec(line);
+    if (lite) {
+      if (line === "## Analyst: behaviours") analyst = true;
+      else if (line.startsWith("## ") && !(analyst && RETIRED_HEADING.test(line))) analyst = false;
+    }
     if (heading) {
-      if (retiredDepth && heading[1].length <= retiredDepth) retiredDepth = 0;
+      const depth = heading[1].length;
+      if (retiredDepth && depth <= retiredDepth) retiredDepth = 0;
+      if (quietDepth && depth <= quietDepth) quietDepth = 0;
       const retired = RETIRED_HEADING.exec(line);
-      if (retired) retiredDepth = retired[1].length;
+      if (retired && (!lite || analyst)) retiredDepth = depth;
+      if (QUIET_HEADING.test(line)) quietDepth = depth;
       marks.push({ i, heading: true });
       return;
     }
-    const m = analyst && DECLARATION.exec(line);
-    if (m) marks.push({ i, id: Number(m[1]), title: m[2], retired: retiredDepth > 0 });
+    const d = analyst && !quietDepth && declaration(line);
+    if (d) marks.push({ i, id: d.id, title: d.title, retired: retiredDepth > 0 });
   });
   const found = [];
   marks.forEach((mark, k) => {
     if (mark.heading) return;
     const end = k + 1 < marks.length ? marks[k + 1].i : lines.length;
-    const replacement = mark.retired ? REPLACED_BY.exec(lines.slice(mark.i, end).join("\n")) : null;
+    const entry = mark.retired ? lines.slice(mark.i, end).filter((_, n) => !fencedLines.has(mark.i + n)).join("\n") : "";
+    const replacement = mark.retired ? REPLACED_BY.exec(entry) : null;
     found.push({ id: mark.id, title: mark.title, line: mark.i + 1, retired: mark.retired, replacement: replacement ? Number(replacement[2]) : null, replacementSlug: replacement?.[1] ?? null });
   });
   return found;
@@ -56,7 +83,8 @@ export function behavioursFile(tree, slug) {
 }
 
 export function readDecision(tree, number) {
-  const path = tree.paths().filter((p) => p.startsWith(`docs/adr/${number}-`) && p.endsWith(".md")).sort()[0];
+  const matches = tree.paths().filter((p) => p.startsWith(`docs/adr/${number}-`) && p.endsWith(".md") && !p.slice(`docs/adr/${number}-`.length).includes("/")).sort();
+  const [path, ...duplicates] = matches;
   if (!path) return null;
   const lines = tree.text(path).split(/\r?\n/);
   let title = null, titleLine = null, status = null, statusLine = null, successor = null;
@@ -70,9 +98,9 @@ export function readDecision(tree, number) {
       if (m) {
         status = m[1].split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, "") || null;
         statusLine = i + 1;
-        successor = /superseded by (?:\[)?ADR ([0-9]{4})/i.exec(m[1])?.[1] ?? null;
+        successor = /superseded by \[?ADR ([0-9]{4})(?![0-9])/i.exec(m[1])?.[1] ?? null;
       }
     }
   });
-  return { path, number, title, titleLine, status, statusLine, successor };
+  return { path, number, title, titleLine, status, statusLine, successor, duplicates };
 }

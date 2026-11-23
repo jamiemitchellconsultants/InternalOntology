@@ -26,7 +26,7 @@ These are JavaScript shapes, not ontology terms.
 // BehavioursFile
 { path: string, lite: boolean, conflict: null } | { path: null, lite: null, conflict: [fullPath, litePath] } | null
 // Decision
-{ path, number: "NNNN", title: string | null, titleLine: number | null, status: string | null /* lower-case first word */, statusLine: number | null, successor: "NNNN" | null }
+{ path, number: "NNNN", title: string | null, titleLine: number | null, status: string | null /* lower-case first word */, statusLine: number | null, successor: "NNNN" | null, duplicates: string[] /* other matching ADR paths, sorted; [] when one */ }
 // Finding (unchanged shape)
 { file, subject, rule, message }
 // Report, one RetiredDesignLink

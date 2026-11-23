@@ -101,12 +101,78 @@ test("B5: a decision's title, status and successor come from its ADR", () => {
     "docs/adr/0032-none.md": "# 0032 — No status\n\nText.\n",
     "docs/adr/README.md": "# ADRs\n",
   });
-  assert.deepEqual(readDecision(t, "0041"), { path: "docs/adr/0041-add-kinds.md", number: "0041", title: "Add kinds", titleLine: 1, status: "accepted", statusLine: 3, successor: null });
-  assert.deepEqual(readDecision(t, "0030"), { path: "docs/adr/0030-old.md", number: "0030", title: "Old way", titleLine: 1, status: "superseded", statusLine: 3, successor: "0041" });
+  assert.deepEqual(readDecision(t, "0041"), { path: "docs/adr/0041-add-kinds.md", number: "0041", title: "Add kinds", titleLine: 1, status: "accepted", statusLine: 3, successor: null, duplicates: [] });
+  assert.deepEqual(readDecision(t, "0030"), { path: "docs/adr/0030-old.md", number: "0030", title: "Old way", titleLine: 1, status: "superseded", statusLine: 3, successor: "0041", duplicates: [] });
   assert.equal(readDecision(t, "0031").status, "accepted");
   assert.deepEqual([readDecision(t, "0032").status, readDecision(t, "0032").statusLine], [null, null]);
   assert.equal(readDecision(t, "0099"), null);
   const odd = tree({ "docs/adr/0050-dash.md": "# 0050 — Dash\n\n- **Status:** —\n", "docs/adr/0051-rejected.md": "# 0051 — Rejected\n\n- **Status:** Rejected\n" });
   assert.deepEqual([readDecision(odd, "0050").status, readDecision(odd, "0050").statusLine], [null, 3]);
   assert.equal(readDecision(odd, "0051").status, "rejected");
+});
+
+const ids = (text, opts) => readBehaviours(text, opts).map((d) => d.id);
+
+test("A1: a declaration after a closed fence is read; tilde and indented fences hide declarations", () => {
+  assert.deepEqual(ids(["```", "**B1 — In.**", "```", "**B2 — Out.**"].join("\n")), [2]);
+  assert.deepEqual(ids(["~~~", "**B1 — In.**", "~~~", "**B2 — Out.**"].join("\n")), [2]);
+  assert.deepEqual(ids(["   ```", "**B1 — In.**", "   ```", "**B2 — Out.**"].join("\n")), [2]);
+  assert.deepEqual(ids(["````", "```", "**B1 — In.**", "```", "````", "**B2 — Out.**"].join("\n")), [2]);
+  assert.deepEqual(ids(["~~~", "```", "**B1 — In.**", "~~~", "**B2 — Out.**"].join("\n")), [2]);
+  assert.deepEqual(ids(["    ```", "**B1 — Indented code, not a fence.**"].join("\n")), [1]);
+});
+
+test("A1: a heading inside a fence is not a heading", () => {
+  assert.deepEqual(readBehaviours(["### Retired behaviours", "~~~", "## Next", "~~~", "**B1 — Still retired.**"].join("\n")).map((d) => d.retired), [true]);
+});
+
+test("A2: a decision matches only docs/adr/<number>-<name>.md with no slash in the name", () => {
+  const t = tree({ "docs/adr/00410-x.md": "# 0041 — Wrong\n", "docs/adr/0041-x/notes.md": "# 0041 — Notes\n" });
+  assert.equal(readDecision(t, "0041"), null);
+  assert.equal(readDecision(tree({ "docs/adr/0041-x/notes.md": "# 0041 — Notes\n", "docs/adr/0041-x.md": "# 0041 — Real\n" }), "0041").path, "docs/adr/0041-x.md");
+});
+
+test("A3: retired regions survive deeper headings, ignore fenced headings and work in lite mode", () => {
+  const deeper = ["### Retired behaviours", "", "#### Old payments", "", "**B1 — Old.**", "", "### Current", "", "**B2 — New.**"].join("\n");
+  assert.deepEqual(readBehaviours(deeper).map((d) => d.retired), [true, false]);
+  const fenced = ["```", "### Retired behaviours", "```", "**B1 — Live.**"].join("\n");
+  assert.deepEqual(readBehaviours(fenced).map((d) => d.retired), [false]);
+  const lite = ["## Analyst: behaviours", "", "**B1 — Live.**", "", "### Retired behaviours", "", "**B2 — Old.** Replaced by B1."].join("\n");
+  assert.deepEqual(readBehaviours(lite, { lite: true }).map((d) => [d.id, d.retired, d.replacement]), [[1, false, null], [2, true, 1]]);
+});
+
+test("A4: a replacement named only inside a fence in a retired entry is ignored", () => {
+  const text = ["### Retired behaviours", "", "**B2 — Old.** Retired.", "```", "replaced by B9", "```", "", "**B3 — Older.** Retired.", "~~~", "replaced by B8", "~~~", "Replaced by B1."].join("\n");
+  assert.deepEqual(readBehaviours(text).map((d) => d.replacement), [null, 1]);
+});
+
+test("A5: a successor ADR number must be exactly four digits", () => {
+  const t = tree({ "docs/adr/0030-old.md": "# 0030 — Old\n\n- **Status:** superseded by ADR 00410\n", "docs/adr/0031-old.md": "# 0031 — Old\n\n- **Status:** superseded by [ADR 0041](x.md)\n" });
+  assert.equal(readDecision(t, "0030").successor, null);
+  assert.equal(readDecision(t, "0031").successor, "0041");
+});
+
+test("A6: a title may contain balanced inner bold", () => {
+  const [d] = readBehaviours("**B1 — Use **bold** here.** Body.");
+  assert.equal(d.title, "Use **bold** here");
+  assert.equal(readBehaviours("**B2 — **Start** bold.** Body.")[0].title, "**Start** bold");
+  assert.equal(readBehaviours("**B3 — Plain.** and **more** text.")[0].title, "Plain");
+});
+
+test("A7: in lite mode a level-2 Retired behaviours section after the Analyst section is still analyst and retired", () => {
+  const text = ["## Analyst: behaviours", "", "**B1 — Live.**", "", "## Retired behaviours", "", "**B2 — Old.** Replaced by B1.", "", "## Architect: structure", "", "**B3 — Not a behaviour.**"].join("\n");
+  assert.deepEqual(readBehaviours(text, { lite: true }).map((d) => [d.id, d.retired, d.replacement]), [[1, false, null], [2, true, 1]]);
+});
+
+test("A8: lines under Uncertainties and Terms headings are not declarations", () => {
+  const text = ["# F", "**B1 — Live.**", "## Uncertainties", "**B2 — Question.**", "### Sub", "**B3 — Sub question.**", "## Next", "**B4 — Live.**", "#### terms", "**B5 — Term.**", "#### Other", "**B6 — Live.**"].join("\n");
+  assert.deepEqual(ids(text), [1, 4, 6]);
+  const lite = ["## Analyst: behaviours", "**B1 — Live.**", "### Uncertainties", "**B2 — Question.**", "### Behaviours", "**B3 — Live.**", "### Terms", "**B4 — Term.**"].join("\n");
+  assert.deepEqual(ids(lite, { lite: true }), [1, 3]);
+});
+
+test("A9: duplicate ADR files are listed, sorted, beside the first", () => {
+  const t = tree({ "docs/adr/0041-b.md": "# 0041 — B\n", "docs/adr/0041-a.md": "# 0041 — A\n", "docs/adr/0041-c.md": "# 0041 — C\n" });
+  const d = readDecision(t, "0041");
+  assert.deepEqual([d.path, d.duplicates], ["docs/adr/0041-a.md", ["docs/adr/0041-b.md", "docs/adr/0041-c.md"]]);
 });
