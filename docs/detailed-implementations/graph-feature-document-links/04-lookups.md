@@ -84,7 +84,7 @@ test("B4: a behaviour with no links says so and prints coverage, never that it i
   await designRepo(async (repo) => {
     const text = run(repo, ["behaviour", "payments#B2"]);
     assert.equal(text.code, 0, text.err);
-    assert.match(text.out, /^No graph assertion links payments#B2; that does not mean the behaviour is unimplemented or untested\.$/m);
+    assert.match(text.out, /^No component, symbol or test is linked to payments#B2; that does not mean the behaviour is unimplemented or untested\.$/m);
     assert.match(text.out, /^src\/\*\*: kit:covered$/m);
   });
 });
@@ -118,7 +118,7 @@ Expected: FAIL (`behaviourLinks` is not exported; `behaviour` is an invalid quer
 
 - `behaviourLinks`: resolve the node `behaviourIri(slug, id)`. Present: fill the three groups and `replacement` (the object of its `kit:replaced-by` assertion). Absent: `declared` is `{ path, declared }` from `behavioursFile(tree, slug)` and `readBehaviours`, or `{ path: null, declared: false }` when there is no file or it conflicts.
 - `main()`: `behaviour` takes exactly one value; an invalid reference throws `<value> is not a behaviour reference; use <slug>#B<n>` (exit 2). Text output after the revision lines:
-  - node present: `behaviour <iri> <label> (<status local name>)`, then `replaced by <iri> <label>` when there is a replacement, then the headings `components`, `symbols` and `tests`, each followed by its assertions printed with the existing `print`. When all three are empty, print `No graph assertion links <reference>; that does not mean the behaviour is unimplemented or untested.` and the coverage inventory, as `concept` does.
+  - node present: `behaviour <iri> <label> (<status local name>)`, then `replaced by <iri> <label>` when there is a replacement, then the headings `components`, `symbols` and `tests`, each followed by its assertions printed with the existing `print`. After those, the headings `replaces` (assertions whose `kit:replaced-by` object is this behaviour) and `other` (every remaining assertion of the behaviour, including further `kit:replaced-by` links) print only when non-empty. When all three are empty, print `No component, symbol or test is linked to <reference>; that does not mean the behaviour is unimplemented or untested.` and the coverage inventory, as `concept` does.
   - node absent: `No graph node for <reference>; <path> declares B<n>.`, `… does not declare B<n>.`, or `No graph node for <reference>; no behaviours file declares behaviours for <slug>.`
 
 - [ ] **Step 4: Run the tests to verify they pass**

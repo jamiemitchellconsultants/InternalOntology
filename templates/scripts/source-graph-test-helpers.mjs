@@ -119,6 +119,60 @@ export function refreshRecord(repo, path, outcome = "kit:no-fact-change") {
     [["kit:blobId", S(blobId(repo.dir, path))], ["kit:path", S(path)], ["kit:reviewOutcome", outcome]]);
 }
 
+export const DESIGN_FEATURE = [
+  "# Payments", "", "## Product owner: vision", "", "Pay invoices.", "", "## Analyst: behaviours", "",
+  "### Outcome 1: invoices are paid", "",
+  "- **B1 Pay an invoice.** Given an open invoice, when it is paid, then it closes.",
+  "- **B2 Refund a payment.** Given a paid invoice, when it is refunded, then it reopens.", "",
+  "### Retired behaviours", "",
+  "- **B3 Pay by cheque.** Retired because cheques are no longer accepted; replaced by B2.", "",
+  "## Architect: structure", "", "| Behaviour | Components |", "| --- | --- |", "| B1 | Ledger |", "| B2 | Ledger |", "",
+].join("\n");
+export const DESIGN_ADRS = {
+  "docs/adr/0001-use-a-ledger.md": "# 0001 — Use a ledger\n\n- **Status:** accepted\n- **Date:** 2026-11-23\n",
+  "docs/adr/0002-keep-cheques.md": "# 0002 — Keep cheques\n\n- **Status:** superseded by ADR 0001\n",
+};
+export function addDesignDocs(repo, spec, { mode = "lite" } = {}) {
+  const featurePath = `docs/features/payments/${mode === "lite" ? "feature.md" : "02-behaviours.md"}`;
+  repo.write(featurePath, DESIGN_FEATURE);
+  for (const [path, text] of Object.entries(DESIGN_ADRS)) repo.write(path, text);
+  spec.config.sourceGraph.evidence["selected-document"].push(featurePath, "docs/adr/**");
+  repo.write("ontology.config.json", JSON.stringify(spec.config, null, 2) + "\n");
+  spec.version = 2;
+  spec.coverage.push(...[featurePath, "docs/adr/**"].map((selector, i) => block(`:coverage-d${i}`, "kit:GraphCoverage",
+    [["kit:pathSelector", S(selector)], ["kit:priority", 10], ["kit:status", "kit:covered"]])));
+  spec.records.push(...[featurePath, ...Object.keys(DESIGN_ADRS)].map((path) => refreshRecord(repo, path)));
+  const ev = (id, path, start, end) => block(`:evidence-${id}`, "kit:GraphEvidence", [["kit:blobId", S(blobId(repo.dir, path))],
+    ["kit:endLine", end], ["kit:path", S(path)], ["kit:role", "kit:role-selected-document"], ["kit:startLine", start]]);
+  const [adr1, adr2] = Object.keys(DESIGN_ADRS);
+  spec.evidence.push(ev("d1", featurePath, 11, 11), ev("d2", featurePath, 12, 12), ev("d3", featurePath, 16, 16),
+    ev("d4", adr1, 1, 3), ev("d5", adr2, 1, 3), ev("d6", featurePath, 22, 22));
+  const design = (iri, kind, label, status, evidence) => block(iri, "kit:GraphNode",
+    [["kit:designStatus", status], ["kit:evidence", `:evidence-${evidence}`], ["kit:kind", kind], ["rdfs:label", S(label)]]);
+  spec.nodes.push(
+    design(":behaviour-payments-B1", "kit:behaviour", "payments#B1 Pay an invoice", "kit:current", "d1"),
+    design(":behaviour-payments-B2", "kit:behaviour", "payments#B2 Refund a payment", "kit:current", "d2"),
+    design(":behaviour-payments-B3", "kit:behaviour", "payments#B3 Pay by cheque", "kit:retired", "d3"),
+    design(":decision-0001", "kit:decision", "ADR 0001 Use a ledger", "kit:accepted", "d4"),
+    design(":decision-0002", "kit:decision", "ADR 0002 Keep cheques", "kit:superseded", "d5"));
+  const link = (id, subject, relationship, object, evidence) => block(`:assertion-${id}`, "kit:GraphAssertion", [["kit:basis", "kit:direct"],
+    ...evidence.map((e) => ["kit:evidence", `:evidence-${e}`]), ["kit:object", object], ["kit:relationship", relationship], ["kit:subject", subject]]);
+  spec.assertions.push(
+    link("d1", ":behaviour-payments-B3", "kit:replaced-by", ":behaviour-payments-B2", ["d3"]),
+    link("d2", ":decision-0002", "kit:superseded-by", ":decision-0001", ["d5"]),
+    link("d3", ":node-ledger", "kit:implements", ":behaviour-payments-B1", ["d6", "e5"]),
+    link("d4", ":node-ledger", "kit:implements", ":behaviour-payments-B3", ["d3", "e5"]),
+    link("d5", ":behaviour-payments-B1", "kit:tested-by", ":node-test", ["d1", "e2"]),
+    link("d6", ":node-ledger", "kit:documented-by", ":decision-0001", ["d4", "e5"]));
+  return { featurePath };
+}
+export function rewriteDoc(repo, spec, path, text) {
+  repo.write(path, text);
+  const id = S(blobId(repo.dir, path));
+  for (const e of spec.evidence) if (e.pairs.some((p) => p.predicate === "kit:path" && p.object === path)) setPair(e, "kit:blobId", id);
+  spec.records = spec.records.map((r) => (r.pairs.some((p) => p.predicate === "kit:path" && p.object === path) ? refreshRecord(repo, path) : r));
+}
+
 export function writeGraph(repo, spec) {
   const iris = (blocks) => blocks.map((b) => b.subject).filter((s) => !spec.omitFromManifest.includes(s));
   const graph = block(":graph", "kit:SourceKnowledgeGraph", [

@@ -875,3 +875,12 @@ test("the projection module is planned with the semantic reviewer only", () => {
     assert.equal(buildPlan(options).some((entry) => entry.dest.includes("ontology-projection")), false, JSON.stringify(options));
   }
 });
+
+test("B16: --with-source-graph installs the design document reader and its test as kit files", () => {
+  const entries = buildPlan({ withSourceGraph: true });
+  for (const dest of ["scripts/source-graph-design-docs.mjs", "scripts/source-graph-design-docs.test.mjs"]) {
+    const entry = entries.find((e) => e.dest === dest);
+    assert.ok(entry, dest);
+    assert.equal(entry.ownedBy, "kit");
+  }
+});

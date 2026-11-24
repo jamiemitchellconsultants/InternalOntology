@@ -24,15 +24,15 @@ These are JavaScript shapes, not ontology terms.
 
 ```js
 // Declaration (source-graph-design-docs.mjs)
-{ id: number, title: string, line: number /* 1-based */, retired: boolean, replacement: number | null }
+{ id: number, title: string, line: number /* 1-based */, retired: boolean, replacement: number | null, replacementSlug: string | null /* from replaced by <slug>#B<n> */ }
 // BehavioursFile
 { path: string, lite: boolean, conflict: null } | { path: null, lite: null, conflict: [fullPath, litePath] } | null
 // Decision
-{ path, number: "NNNN", title: string | null, titleLine: number | null, status: string | null /* lower-case first word */, statusLine: number | null, successor: "NNNN" | null }
+{ path, number: "NNNN", title: string | null, titleLine: number | null, status: string | null /* lower-case first word */, statusLine: number | null, successor: "NNNN" | null, duplicates: string[] /* other matching ADR paths, sorted; [] when one */ }
 // Finding (unchanged shape)
 { file, subject, rule, message }
 // Report, one RetiredDesignLink
-{ assertion, subject, relationship, object, status /* "kit:retired" | "kit:superseded" | "kit:deprecated" */, replacement /* node IRI */ | null }
+{ assertion, subject, relationship, object, inactive /* IRI of the retired, superseded or deprecated end */, status /* "kit:retired" | "kit:superseded" | "kit:deprecated" */, replacement /* node IRI */ | null }
 ```
 
 The fixed fixture (Task 4) is a lite feature `payments` in `docs/features/payments/feature.md` (or `02-behaviours.md` in full mode) and two ADRs. Its line numbers are part of the contract: B1 on line 11, B2 on line 12, the Retired behaviours heading on line 14, B3 (retired, replaced by B2) on line 16, the traceability row for B1 on line 22; each ADR's title is line 1 and its Status line is line 3.

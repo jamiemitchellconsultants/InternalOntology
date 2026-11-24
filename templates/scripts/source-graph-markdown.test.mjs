@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { withScratchRepo, seedRenderRepo } from './source-graph-render-test-helpers.mjs';
-import { block, S, find, setPair, ttl } from './source-graph-test-helpers.mjs';
+import { block, S, find, setPair, ttl, addDesignDocs } from './source-graph-test-helpers.mjs';
 import { parseGraphTurtle } from './source-graph-turtle.mjs';
 import { treeFromRevision } from './source-graph-git.mjs';
 import { readRenderInput } from './source-graph-render-input.mjs';
@@ -126,5 +126,36 @@ test('B4/B6/B7: source destinations remain immutable after branch advancement an
     assert.equal(r.git('show', `${f.source}:${pinned.join('/')}`), before);
     assert.notEqual(r.git('show', `HEAD:${f.spec.paths.impl}`), before);
     assert.equal(sourceLink(input, f.spec.paths.impl, 1, 3), link);
+  });
+});
+
+test('B17, B18, B22: design nodes show their status and the new links read as phrases', async () => {
+  await withScratchRepo(async r => {
+    const f = seedRenderRepo(r, { mutate(spec, repo) { addDesignDocs(repo, spec); } });
+    const md = renderMarkdown(readRenderInput(treeFromRevision(r.dir, f.source)));
+    assert.match(md, /^- payments\\#B1 Pay an invoice \(behaviour, current\)/m);
+    assert.match(md, /^- payments\\#B3 Pay by cheque \(behaviour, retired\)/m);
+    assert.match(md, /^- ADR 0002 Keep cheques \(decision, superseded\)/m);
+    assert.match(md, /^- Ledger \(component\)/m);
+    const claim = (phrase) => md.split("\n").filter(line => line.includes(phrase));
+    const replaced = claim("is replaced by"), superseded = claim("is superseded by");
+    assert.equal(replaced.length, 1);
+    assert.equal(superseded.length, 1);
+    assert.ok(replaced[0].includes("payments\\#B3") && replaced[0].includes("payments\\#B2"), replaced[0]);
+    assert.ok(superseded[0].includes("ADR 0002") && superseded[0].includes("ADR 0001"), superseded[0]);
+  });
+});
+
+test("B17: a design status with Markdown metacharacters is escaped and stays on one line", async () => {
+  await withScratchRepo(async r => {
+    const f = seedRenderRepo(r, { mutate(spec, repo) { addDesignDocs(repo, spec); } });
+    const input = readRenderInput(treeFromRevision(r.dir, f.source));
+    const node = input.graph.resources.get(":behaviour-payments-B3");
+    node.first("kit:designStatus").object = "kit:re*ti_red";
+    const md = renderMarkdown(input);
+    const line = md.split("\n").find(l => l.startsWith("- payments\\#B3 "));
+    assert.ok(line, "node line missing");
+    assert.ok(line.includes("(behaviour, re\\*ti\\_red)"), line);
+    assert.ok(!md.includes("re*ti_red"));
   });
 });

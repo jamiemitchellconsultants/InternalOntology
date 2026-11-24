@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CORE, matchSelector, refreshIdFor, renderSchema, loadGraph, resolveCoverage } from "./source-graph-model.mjs";
+import { CORE, DESIGN_STATUSES, NODE_PREDICATE_VERSIONS, introducedIn, matchSelector, refreshIdFor, renderSchema, loadGraph, resolveCoverage } from "./source-graph-model.mjs";
 import { treeFromRevision } from "./source-graph-git.mjs";
 import { withScratchRepo, NS, ttl, block, S } from "./source-graph-test-helpers.mjs";
 
@@ -27,7 +27,35 @@ test("the generated schema names every core iri and its version", () => {
   for (const iri of Object.values(CORE).flat().filter((v) => typeof v === "string")) {
     assert.match(schema, new RegExp(`^${iri} a `, "m"), iri);
   }
-  assert.match(schema, /^\s*kit:schemaVersion 1 ;$/m);
+  assert.match(schema, /^\s*kit:schemaVersion 2 ;$/m);
+});
+
+test("B22: schema version 2 adds the design kinds, statuses and links", () => {
+  assert.equal(CORE.schemaVersion, 2);
+  for (const kind of ["kit:behaviour", "kit:decision"]) assert.ok(CORE.kinds.includes(kind), kind);
+  for (const rel of ["kit:replaced-by", "kit:superseded-by"]) assert.ok(CORE.relationships.includes(rel), rel);
+  assert.deepEqual(CORE.designStatuses, ["kit:current", "kit:retired", "kit:proposed", "kit:accepted", "kit:superseded", "kit:deprecated"]);
+  assert.deepEqual(DESIGN_STATUSES, {
+    "kit:behaviour": ["kit:current", "kit:retired"],
+    "kit:decision": ["kit:proposed", "kit:accepted", "kit:superseded", "kit:deprecated"],
+  });
+  assert.deepEqual(NODE_PREDICATE_VERSIONS, { "kit:designStatus": 2, "kit:evidence": 2 });
+});
+
+test("B22: every value added in version 2 says so, and version 1 values stay at 1", () => {
+  for (const iri of ["kit:behaviour", "kit:decision", "kit:replaced-by", "kit:superseded-by", ...CORE.designStatuses]) {
+    assert.equal(introducedIn(iri), 2, iri);
+  }
+  for (const iri of ["kit:concept", "kit:component", "kit:implements", "kit:tested-by", "kit:documented-by", "kit:role-selected-document", "kit:direct", "kit:covered"]) {
+    assert.equal(introducedIn(iri), 1, iri);
+  }
+});
+
+test("B22: the schema defines each new value in words", () => {
+  const schema = renderSchema();
+  assert.match(schema, /^kit:behaviour a kit:GraphKind ;\n    rdfs:comment "A behaviour an analyst declares in a feature document, identified by its feature slug and id\." \.$/m);
+  assert.match(schema, /^kit:superseded-by a kit:GraphRelationship ;\n    rdfs:comment "A superseded decision is superseded by the named decision\." \.$/m);
+  assert.match(schema, /^kit:retired a kit:GraphDesignStatus ;\n    rdfs:comment "The behaviour is listed under Retired behaviours\." \.$/m);
 });
 
 const config = { sourceGraph: { enabled: true, root: "g", evidence: {} } };

@@ -2,7 +2,7 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
 kit:GraphVocabulary a rdfs:Class ;
-    kit:schemaVersion 1 ;
+    kit:schemaVersion 2 ;
     rdfs:comment "Core source graph vocabulary." .
 
 kit:concept a kit:GraphKind ;
@@ -32,6 +32,12 @@ kit:system a kit:GraphKind ;
 kit:component a kit:GraphKind ;
     rdfs:comment "A logical part of a system named by reviewed source or selected documents." .
 
+kit:behaviour a kit:GraphKind ;
+    rdfs:comment "A behaviour an analyst declares in a feature document, identified by its feature slug and id." .
+
+kit:decision a kit:GraphKind ;
+    rdfs:comment "An architecture decision record under docs/adr, identified by its number." .
+
 kit:contains a kit:GraphRelationship ;
     rdfs:comment "The subject contains the object." .
 
@@ -55,6 +61,30 @@ kit:communicates-with a kit:GraphRelationship ;
 
 kit:deployed-by a kit:GraphRelationship ;
     rdfs:comment "A system or component is deployed through the named resource." .
+
+kit:replaced-by a kit:GraphRelationship ;
+    rdfs:comment "A retired behaviour is replaced by the named behaviour." .
+
+kit:superseded-by a kit:GraphRelationship ;
+    rdfs:comment "A superseded decision is superseded by the named decision." .
+
+kit:current a kit:GraphDesignStatus ;
+    rdfs:comment "The behaviour is declared in its feature's behaviours." .
+
+kit:retired a kit:GraphDesignStatus ;
+    rdfs:comment "The behaviour is listed under Retired behaviours." .
+
+kit:proposed a kit:GraphDesignStatus ;
+    rdfs:comment "The decision is proposed." .
+
+kit:accepted a kit:GraphDesignStatus ;
+    rdfs:comment "The decision is accepted." .
+
+kit:superseded a kit:GraphDesignStatus ;
+    rdfs:comment "A later decision supersedes this one." .
+
+kit:deprecated a kit:GraphDesignStatus ;
+    rdfs:comment "The decision no longer applies." .
 
 kit:role-implementation a kit:GraphRole ;
     rdfs:comment "role implementation" .

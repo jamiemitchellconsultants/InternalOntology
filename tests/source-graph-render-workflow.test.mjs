@@ -17,7 +17,7 @@ function git(cwd, ...args) { return execFileSync('git', args, { cwd, encoding: '
 async function transportTrial(body) {
   await withScratchRepo(async r => {
     for (const name of ['ontology-config', 'owl-ontology', 'source-graph-git', 'source-graph-turtle',
-      'source-graph-model', 'check-source-graph', 'source-graph-render-input', 'source-graph-markdown', 'render-source-graph']) {
+      'source-graph-model', 'source-graph-design-docs', 'check-source-graph', 'source-graph-render-input', 'source-graph-markdown', 'render-source-graph']) {
       r.write(`scripts/${name}.mjs`, readFileSync(new URL(`../templates/scripts/${name}.mjs`, import.meta.url), 'utf8'));
     }
     const f = seedRenderRepo(r);

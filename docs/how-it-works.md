@@ -61,6 +61,8 @@ turns its job red, which is deliberately distinguishable from "reviewed, found n
 
 The optional graph naming review applies the same idea to the source knowledge graph. A model compares the names of graph nodes a pull request adds or changes with the ontology, after a deterministic filter has dropped every name that already contains its canonical term. Its results are settled by people: they hold the merge until someone with write access accepts, rejects or defers them, and an accepted result holds it until the correction is committed. It runs in its own workflows; the source-graph check makes no model call and proves only structural validity, as before.
 
+Feature documents join the source knowledge graph too. From schema version 2, a feature's behaviours and its ADRs can be graph nodes, linked to the components, symbols and tests that realise them, so a reader can ask what a behaviour touches or why a piece of code exists. The source-graph check holds those nodes to their documents and reports links to retired behaviours and superseded decisions without failing; whether a link is true remains a reviewer's judgement.
+
 ## What it does not catch
 
 - Drift in code, unless the enum lock tests are installed — and then only in enums.

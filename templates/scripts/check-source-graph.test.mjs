@@ -1,8 +1,10 @@
 import { test } from "node:test";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { checkTree, loadCheckConfig, CheckSetupError } from "./check-source-graph.mjs";
 import { treeFromRevision } from "./source-graph-git.mjs";
-import { withScratchRepo, widgets, writeGraph, find, setPair, dropPair, block, S, ttl, blobId, ROOT } from "./source-graph-test-helpers.mjs";
+import { withScratchRepo, widgets, writeGraph, find, setPair, dropPair, block, S, ttl, blobId, ROOT, addDesignDocs, rewriteDoc, DESIGN_FEATURE, DESIGN_ADRS } from "./source-graph-test-helpers.mjs";
 
 async function run(mutate, language = "csharp") {
   let findings;
@@ -16,6 +18,70 @@ async function run(mutate, language = "csharp") {
   });
   return findings;
 }
+
+const rulesOf = (findings) => new Set(findings.map((f) => f.rule));
+
+test("E6: a missing line bound gives a range message without NaN", async () => {
+  for (const key of ["kit:startLine", "kit:endLine"]) {
+    const findings = await run((s) => dropPair(find(s.evidence, ":evidence-e1"), key));
+    const f = findings.find((x) => x.rule === "evidence-range" && x.subject === ":evidence-e1");
+    assert.ok(f, key);
+    assert.match(f.message, /^src\/\S+ has no valid line range$/, f.message);
+  }
+});
+
+test("B22: a version 1 manifest that uses no version 2 value passes against the version 2 schema", async () => {
+  assert.deepEqual(await run((s) => { assert.equal(s.version, 1); }), []);
+});
+
+test("B2: the version 2 design fixture has no schema-version or schema-version-too-old findings", async () => {
+  const findings = await design((s) => { assert.equal(s.version, 2); });
+  for (const rule of ["schema-version", "schema-version-too-old"]) assert.ok(!has(findings, rule), rule);
+});
+
+test("B1: the too-old scan uses the lowest valid manifest version, whichever manifest comes first", async () => {
+  for (const iri of [":aaa-graph", ":zzz-graph"]) {
+    const findings = await run((s) => {
+      s.version = 2;
+      s.coverage.push(block(iri, "kit:SourceKnowledgeGraph", [["kit:schemaVersion", 1]]));
+      setPair(find(s.assertions, ":assertion-a5"), "kit:relationship", "kit:replaced-by");
+    });
+    assert.ok(has(findings, "schema-version-too-old", ":assertion-a5"), `${iri}: ${JSON.stringify(findings)}`);
+  }
+});
+
+test("B3: a version 1 node carrying the same version 2 value twice gets one message per value", async () => {
+  const findings = await run((s) => {
+    s.nodes.push(block(":behaviour-widgets-B1", "kit:GraphNode", [["kit:designStatus", "kit:current"], ["kit:designStatus", "kit:current"],
+      ["kit:kind", "kit:behaviour"], ["kit:kind", "kit:behaviour"], ["rdfs:label", S("widgets#B1 Post an invoice")]]));
+  });
+  const messages = findings.filter((f) => f.rule === "schema-version-too-old" && f.subject === ":behaviour-widgets-B1").map((f) => f.message).sort();
+  assert.deepEqual(messages, ["kit:behaviour needs kit:schemaVersion 2", "kit:current needs kit:schemaVersion 2", "kit:designStatus needs kit:schemaVersion 2"]);
+});
+
+test("B22: a manifest below 1 or above the core version fails", async () => {
+  for (const version of [0, 3]) {
+    assert.ok(rulesOf(await run((s) => { s.version = version; })).has("schema-version"), String(version));
+  }
+});
+
+test("B22: a version 2 value in a version 1 graph fails and names the version it needs", async () => {
+  const findings = await run((s) => { setPair(find(s.assertions, ":assertion-a5"), "kit:relationship", "kit:replaced-by"); });
+  const hit = findings.find((f) => f.rule === "schema-version-too-old");
+  assert.ok(hit, JSON.stringify(findings));
+  assert.equal(hit.subject, ":assertion-a5");
+  assert.match(hit.message, /kit:replaced-by needs kit:schemaVersion 2/);
+  assert.ok(!(await run((s) => { s.version = 2; setPair(find(s.assertions, ":assertion-a5"), "kit:relationship", "kit:replaced-by"); }))
+    .some((f) => f.rule === "schema-version-too-old"), "allowed at version 2");
+});
+
+test("B22: version 2 node kinds, statuses and predicates in a version 1 graph each fail once with the version they need", async () => {
+  const findings = await run((s) => {
+    s.nodes.push(block(":behaviour-widgets-B1", "kit:GraphNode", [["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"], ["kit:kind", "kit:behaviour"], ["rdfs:label", S("widgets#B1 Post an invoice")]]));
+  });
+  const messages = findings.filter((f) => f.rule === "schema-version-too-old" && f.subject === ":behaviour-widgets-B1").map((f) => f.message).sort();
+  assert.deepEqual(messages, ["kit:behaviour needs kit:schemaVersion 2", "kit:current needs kit:schemaVersion 2", "kit:designStatus needs kit:schemaVersion 2", "kit:evidence needs kit:schemaVersion 2"]);
+});
 
 test("a complete widgets graph is clean in every language", async () => {
   for (const language of ["csharp", "typescript", "java", "python"]) {
@@ -56,7 +122,7 @@ const mutations = [
   ["coverage-conflict", (s) => s.coverage.push(block(":coverage-dup", "kit:GraphCoverage", [
     ["kit:pathSelector", S("src/**")], ["kit:priority", 10], ["kit:reason", S("later")], ["kit:status", "kit:unknown"]]))],
   ["root-not-excluded", (s) => { s.coverage = s.coverage.filter((c) => c.subject !== ":coverage-graph-root"); }],
-  ["schema-version", (s) => { s.version = 2; }],
+  ["schema-version", (s) => { s.version = 3; }],
   ["coverage-unreferenced", (s) => { s.omitFromManifest = [":coverage-c0"]; }],
 ];
 
@@ -142,8 +208,8 @@ test("a missing schema is reported", async () => {
   });
 });
 
-import { checkPullRequest, checkRevision, main } from "./check-source-graph.mjs";
-import { refreshIdFor } from "./source-graph-model.mjs";
+import { checkPullRequest, checkRevision, main, retiredDesignLinks } from "./check-source-graph.mjs";
+import { loadGraph, refreshIdFor } from "./source-graph-model.mjs";
 import { refreshRecord } from "./source-graph-test-helpers.mjs";
 
 function refresh(repo, spec, outcome = "kit:no-fact-change") {
@@ -410,4 +476,395 @@ test("a changed file leaving coverage requires its review record in the manifest
 test("a changed file leaving coverage rejects the wrong review record IRI", async () => {
   const findings = await excludedChangedSource((record) => { record.subject = ":not-a-refresh-id"; });
   assert.ok(findings.some((f) => f.rule === "refresh-malformed" && f.message.includes("src/Invoice.cs")));
+});
+
+const designNode = (pairs) => block(":behaviour-widgets-B1", "kit:GraphNode",
+  [["kit:kind", "kit:behaviour"], ["rdfs:label", S("widgets#B1 Post an invoice")], ...pairs]);
+
+test("B22: a design node needs one status from its kind's list and one evidence item, in a version 2 graph", async () => {
+  const shaped = async (pairs, version = 2) => rulesOf(await run((s) => { s.version = version; s.nodes.push(designNode(pairs)); }));
+  const ok = await shaped([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"]]);
+  for (const rule of ["design-status", "design-evidence", "schema-version-too-old", "dangling-reference", "bad-value", "unknown-kind"]) assert.ok(!ok.has(rule), rule);
+  const decision = (pairs) => run((s) => { s.version = 2; s.nodes.push(block(":decision-widgets", "kit:GraphNode", [["kit:kind", "kit:decision"], ["rdfs:label", S("ADR 0001 X")], ...pairs])); });
+  assert.ok(!rulesOf(await decision([["kit:designStatus", "kit:accepted"], ["kit:evidence", ":evidence-e4"]])).has("design-status"), "decision accepts kit:accepted");
+  assert.ok(rulesOf(await decision([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"]])).has("design-status"), "decision rejects kit:current");
+  assert.ok((await shaped([["kit:designStatus", "kit:current"], ["kit:designStatus", "kit:retired"], ["kit:evidence", ":evidence-e4"]])).has("design-status"), "two statuses");
+  assert.ok((await shaped([["kit:evidence", ":evidence-e4"]])).has("design-status"), "missing status");
+  assert.ok((await shaped([["kit:designStatus", "kit:accepted"], ["kit:evidence", ":evidence-e4"]])).has("design-status"), "decision status on a behaviour");
+  assert.ok((await shaped([["kit:designStatus", "kit:current"]])).has("design-evidence"), "missing evidence");
+  assert.ok((await shaped([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"], ["kit:evidence", ":evidence-e1"]])).has("design-evidence"), "two evidence items");
+  assert.ok((await shaped([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-missing"]])).has("dangling-reference"), "dangling evidence");
+  assert.ok((await shaped([["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"]], 1)).has("schema-version-too-old"), "version 1");
+});
+
+test("B22: kit:designStatus and node kit:evidence are rejected on other kinds", async () => {
+  const findings = await run((s) => {
+    s.version = 2;
+    find(s.nodes, ":node-ledger").pairs.push(...block("", "", [["kit:designStatus", "kit:current"], ["kit:evidence", ":evidence-e4"]]).pairs);
+  });
+  const rules = findings.filter((f) => f.subject === ":node-ledger").map((f) => f.rule);
+  assert.ok(rules.includes("design-status"), JSON.stringify(findings));
+  assert.ok(rules.includes("design-evidence"), JSON.stringify(findings));
+});
+
+test("the design fixture is structurally valid in both modes", async () => {
+  for (const mode of ["lite", "full"]) assert.deepEqual(await run((s, r) => { addDesignDocs(r, s, { mode }); }), [], mode);
+});
+
+const LITE = "docs/features/payments/feature.md";
+const design = (mutate, mode = "lite") => run(async (s, r) => { addDesignDocs(r, s, { mode }); await mutate?.(s, r); });
+const has = (findings, rule, subject) => findings.some((f) => f.rule === rule && (subject === undefined || f.subject === subject));
+
+const behaviourMutations = [
+  ["design-iri", ":behaviour-payments-1", (s) => { find(s.nodes, ":behaviour-payments-B1").subject = ":behaviour-payments-1"; }],
+  ["design-undeclared", ":behaviour-payments-B1", (s) => { setPair(find(s.evidence, ":evidence-d1"), "kit:startLine", 12); setPair(find(s.evidence, ":evidence-d1"), "kit:endLine", 12); }],
+  ["design-undeclared", ":behaviour-payments-B9", (s) => { s.nodes.push(block(":behaviour-payments-B9", "kit:GraphNode", [["kit:designStatus", "kit:current"],
+    ["kit:evidence", ":evidence-d2"], ["kit:kind", "kit:behaviour"], ["rdfs:label", S("payments#B9 Pay twice")]])); }],
+  ["design-label", ":behaviour-payments-B1", (s) => { setPair(find(s.nodes, ":behaviour-payments-B1"), "rdfs:label", S("payments#B1 Pay invoice")); }],
+  ["design-label", ":behaviour-payments-B2", (s) => { setPair(find(s.nodes, ":behaviour-payments-B2"), "rdfs:label", S("payments#B2")); }],
+  ["design-status", ":behaviour-payments-B3", (s) => { setPair(find(s.nodes, ":behaviour-payments-B3"), "kit:designStatus", "kit:current"); }],
+  ["design-status", ":behaviour-payments-B1", (s) => { setPair(find(s.nodes, ":behaviour-payments-B1"), "kit:designStatus", "kit:retired"); }],
+  ["design-evidence", ":behaviour-payments-B1", (s) => { setPair(find(s.nodes, ":behaviour-payments-B1"), "kit:evidence", ":evidence-e4"); }],
+  ["design-evidence", ":behaviour-payments-B1", (s) => { setPair(find(s.evidence, ":evidence-d1"), "kit:role", "kit:role-implementation"); }],
+  ["design-id-reused", ":behaviour-payments-B2", (s, r) => { rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("- **B3 Pay by cheque.**", "- **B2 Pay by cheque.**")); }],
+];
+
+for (const [rule, subject, mutate] of behaviourMutations) {
+  test(`B1, B19: a behaviour node that drifts from its document reports ${rule} on ${subject}`, async () => {
+    const findings = await design(mutate);
+    assert.ok(has(findings, rule, subject), `expected ${rule} on ${subject}, got ${JSON.stringify(findings)}`);
+  });
+}
+
+test("B1: behaviour nodes that match their declarations pass in lite and full mode with the same IRIs", async () => {
+  for (const mode of ["lite", "full"]) assert.deepEqual(await design(null, mode), [], mode);
+});
+
+test("B2: a feature with both behaviours files fails once, naming both", async () => {
+  const findings = await design((s, r) => { r.write("docs/features/payments/02-behaviours.md", DESIGN_FEATURE); });
+  const hits = findings.filter((f) => f.rule === "design-file-conflict");
+  assert.equal(hits.length, 1, JSON.stringify(findings));
+  assert.match(hits[0].message, /docs\/features\/payments\/02-behaviours\.md and docs\/features\/payments\/feature\.md both declare behaviours/);
+  assert.equal(hits[0].subject, "");
+  assert.equal(hits[0].file, "docs/features/payments/02-behaviours.md");
+});
+
+test("B19: a behaviour whose feature has no behaviours file is undeclared", async () => {
+  const findings = await design((s, r) => { r.remove(LITE); });
+  assert.ok(has(findings, "design-undeclared", ":behaviour-payments-B1"), JSON.stringify(findings));
+});
+
+test("B21: rewording a title keeps the IRI; the check passes once the label follows the new title", async () => {
+  const reworded = DESIGN_FEATURE.replace("**B1 Pay an invoice.**", "**B1 Pay an open invoice.**");
+  assert.ok(has(await design((s, r) => { rewriteDoc(r, s, LITE, reworded); }), "design-label", ":behaviour-payments-B1"));
+  assert.deepEqual(await design((s, r) => {
+    rewriteDoc(r, s, LITE, reworded);
+    setPair(find(s.nodes, ":behaviour-payments-B1"), "rdfs:label", S("payments#B1 Pay an open invoice"));
+  }), []);
+});
+
+const ADR1 = "docs/adr/0001-use-a-ledger.md";
+
+const decisionMutations = [
+  ["design-iri", ":decision-1", (s) => { find(s.nodes, ":decision-0001").subject = ":decision-1"; }],
+  ["design-undeclared", ":decision-0001", (s) => { setPair(find(s.evidence, ":evidence-d4"), "kit:startLine", 2); }],
+  ["design-undeclared", ":decision-0001", (s, r) => { rewriteDoc(r, s, ADR1, "# 0001 — Use a ledger\n\nNo status yet.\n"); }],
+  ["design-undeclared", ":decision-0003", (s) => { s.nodes.push(block(":decision-0003", "kit:GraphNode", [["kit:designStatus", "kit:accepted"],
+    ["kit:evidence", ":evidence-d4"], ["kit:kind", "kit:decision"], ["rdfs:label", S("ADR 0003 Missing")]])); }],
+  ["design-label", ":decision-0001", (s) => { setPair(find(s.nodes, ":decision-0001"), "rdfs:label", S("ADR 0001 Use the ledger")); }],
+  ["design-status", ":decision-0001", (s) => { setPair(find(s.nodes, ":decision-0001"), "kit:designStatus", "kit:superseded"); }],
+  ["design-evidence", ":decision-0001", (s) => { setPair(find(s.nodes, ":decision-0001"), "kit:evidence", ":evidence-e4"); }],
+];
+
+for (const [rule, subject, mutate] of decisionMutations) {
+  test(`B5: a decision node that drifts from its ADR reports ${rule} on ${subject}`, async () => {
+    const findings = await design(mutate);
+    assert.ok(has(findings, rule, subject), `expected ${rule} on ${subject}, got ${JSON.stringify(findings)}`);
+  });
+}
+
+test("B6: an evidence item without a start line gives a message with no NaN", async () => {
+  const behaviour = (await design((s) => { dropPair(find(s.evidence, ":evidence-d1"), "kit:startLine"); })).find((f) => f.rule === "design-undeclared" && f.subject === ":behaviour-payments-B1");
+  assert.equal(behaviour?.message, `${LITE} does not declare B1`);
+  for (const pair of ["kit:startLine", "kit:endLine"]) {
+    const findings = await design((s) => { dropPair(find(s.evidence, ":evidence-d4"), pair); });
+    const decision = findings.find((f) => f.rule === "design-undeclared" && f.subject === ":decision-0001");
+    assert.equal(decision?.message, `${ADR1} does not declare ADR 0001 on its title and Status lines`, pair);
+    assert.ok(!findings.some((f) => f.rule.startsWith("design-") && f.message.includes("NaN")), pair);
+  }
+});
+
+test("B19: a decision number with more than one ADR file is undeclared and names every file", async () => {
+  const findings = await design((s, r) => { r.write("docs/adr/0001-zzz-duplicate.md", "# 0001 — Duplicate\n\n- **Status:** accepted\n"); });
+  const hit = findings.find((f) => f.rule === "design-undeclared" && f.subject === ":decision-0001");
+  assert.equal(hit?.message, `ADR 0001 has more than one file: ${ADR1}, docs/adr/0001-zzz-duplicate.md`);
+});
+
+test("B5: a capitalised or annotated Status word still reads as its status", async () => {
+  for (const status of ["Accepted", "accepted; amended by ADR 0002 (planning)"]) {
+    const text = DESIGN_ADRS[ADR1].replace("- **Status:** accepted", `- **Status:** ${status}`);
+    assert.deepEqual(await design((s, r) => { rewriteDoc(r, s, ADR1, text); }), [], status);
+  }
+});
+
+test("B5: a Status word outside the four values gives exactly one design-status finding", async () => {
+  for (const [status, word] of [["rejected", "rejected"], ["—", ""]]) {
+    const text = DESIGN_ADRS[ADR1].replace("- **Status:** accepted", `- **Status:** ${status}`);
+    const findings = (await design((s, r) => { rewriteDoc(r, s, ADR1, text); })).filter((f) => f.subject === ":decision-0001");
+    assert.deepEqual(findings.map((f) => [f.rule, f.message]), [["design-status",
+      `ADR 0001 has status "${word}", which is not proposed, accepted, superseded or deprecated; do not record it as a decision node`]], status);
+  }
+});
+
+const ADR2 = "docs/adr/0002-keep-cheques.md";
+const linkOf = (id, subject, relationship, object) => block(`:assertion-${id}`, "kit:GraphAssertion", [["kit:basis", "kit:direct"],
+  ["kit:evidence", ":evidence-e5"], ["kit:object", object], ["kit:relationship", relationship], ["kit:subject", subject]]);
+
+const replacementMutations = [
+  ["design-replacement", ":behaviour-payments-B3", (s) => { s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d1"); }],
+  ["design-replacement", ":behaviour-payments-B3", (s) => { setPair(find(s.assertions, ":assertion-d1"), "kit:object", ":behaviour-payments-B1"); }],
+  ["design-replacement", ":behaviour-payments-B3", (s, r) => { rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("; replaced by B2.", ".")); }],
+  ["design-replacement", ":behaviour-payments-B1", (s) => { s.assertions.push(linkOf("x0", ":behaviour-payments-B1", "kit:replaced-by", ":behaviour-payments-B2")); }],
+  ["design-replacement", ":decision-0002", (s) => { s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d2"); }],
+  ["design-replacement", ":decision-0002", (s, r) => { rewriteDoc(r, s, ADR2, DESIGN_ADRS[ADR2].replace("superseded by ADR 0001", "superseded")); }],
+  ["design-link-kinds", ":assertion-x1", (s) => { s.assertions.push(linkOf("x1", ":node-ledger", "kit:replaced-by", ":behaviour-payments-B2")); }],
+  ["design-link-kinds", ":assertion-x2", (s) => { s.assertions.push(linkOf("x2", ":behaviour-payments-B1", "kit:superseded-by", ":behaviour-payments-B2")); }],
+];
+
+for (const [rule, subject, mutate] of replacementMutations) {
+  test(`B17, B18: a missing, extra or misdirected replacement link reports ${rule} on ${subject}`, async () => {
+    const findings = await design(mutate);
+    assert.ok(has(findings, rule, subject), `expected ${rule} on ${subject}, got ${JSON.stringify(findings)}`);
+  });
+}
+
+test("B17: a replacement in another feature expects that feature's behaviour", async () => {
+  const findings = await design((s, r) => { rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("; replaced by B2.", "; replaced by refunds#B2.")); });
+  const f = findings.find((x) => x.rule === "design-replacement" && x.subject === ":behaviour-payments-B3");
+  assert.ok(f, JSON.stringify(findings));
+  assert.match(f.message, /kit:replaced-by :behaviour-refunds-B2$/);
+});
+
+test("B17: a retired entry that names no replacement needs no link", async () => {
+  assert.deepEqual(await design((s, r) => {
+    rewriteDoc(r, s, LITE, DESIGN_FEATURE.replace("; replaced by B2.", "."));
+    s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d1");
+  }), []);
+});
+
+test("B10: replacement link messages state the expectation and the count", async () => {
+  const message = async (subject, mutate) => (await design(mutate)).find((f) => f.rule === "design-replacement" && f.subject === subject)?.message;
+  assert.equal(await message(":behaviour-payments-B3", (s) => { s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d1"); }),
+    ":behaviour-payments-B3 expects kit:replaced-by :behaviour-payments-B2");
+  assert.equal(await message(":behaviour-payments-B1", (s) => { s.assertions.push(linkOf("x0", ":behaviour-payments-B1", "kit:replaced-by", ":behaviour-payments-B2")); }),
+    ":behaviour-payments-B1 has kit:replaced-by :behaviour-payments-B2 that its document does not name");
+  assert.equal(await message(":behaviour-payments-B3", (s) => { s.assertions.push(linkOf("x3", ":behaviour-payments-B3", "kit:replaced-by", ":behaviour-payments-B2")); }),
+    ":behaviour-payments-B3 has 2 kit:replaced-by links; expects exactly one to :behaviour-payments-B2");
+  assert.equal(await message(":behaviour-payments-B1", (s) => {
+    s.assertions.push(linkOf("x4", ":behaviour-payments-B1", "kit:replaced-by", ":behaviour-payments-B2"), linkOf("x5", ":behaviour-payments-B1", "kit:replaced-by", ":behaviour-payments-B3")); }),
+    ":behaviour-payments-B1 has 2 kit:replaced-by links; expects none");
+});
+
+test("B10: a superseded decision that names no successor needs no link and a stray link on an earlier failure is silent", async () => {
+  assert.deepEqual(await design((s, r) => {
+    rewriteDoc(r, s, ADR2, DESIGN_ADRS[ADR2].replace("superseded by ADR 0001", "superseded"));
+    s.assertions = s.assertions.filter((a) => a.subject !== ":assertion-d2");
+  }), []);
+  const findings = await design((s) => {
+    setPair(find(s.nodes, ":behaviour-payments-B1"), "rdfs:label", S("payments#B1 Pay invoice"));
+    s.assertions.push(linkOf("x6", ":behaviour-payments-B1", "kit:replaced-by", ":behaviour-payments-B2"));
+  });
+  assert.ok(has(findings, "design-label", ":behaviour-payments-B1"));
+  assert.ok(!has(findings, "design-replacement", ":behaviour-payments-B1"), JSON.stringify(findings));
+});
+
+test("B10: kit:superseded-by to a non-decision object gives design-link-kinds", async () => {
+  const findings = await design((s) => { s.assertions.push(linkOf("x7", ":decision-0001", "kit:superseded-by", ":node-ledger")); });
+  assert.ok(has(findings, "design-link-kinds", ":assertion-x7"), JSON.stringify(findings));
+});
+
+test("B20: a link to a retired behaviour or superseded decision is reported and the check passes", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    spec.assertions.push(block(":assertion-d7", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-d5"],
+      ["kit:evidence", ":evidence-e5"], ["kit:object", ":decision-0002"], ["kit:relationship", "kit:documented-by"], ["kit:subject", ":node-ledger"]]));
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const tree = treeFromRevision(repo.dir, "HEAD"), config = loadCheckConfig(tree);
+    assert.deepEqual(checkTree({ tree, config }), []);
+    assert.deepEqual(retiredDesignLinks(loadGraph(tree, config)), [
+      { assertion: ":assertion-d4", subject: ":node-ledger", relationship: "kit:implements", object: ":behaviour-payments-B3", inactive: ":behaviour-payments-B3", status: "kit:retired", replacement: ":behaviour-payments-B2" },
+      { assertion: ":assertion-d7", subject: ":node-ledger", relationship: "kit:documented-by", object: ":decision-0002", inactive: ":decision-0002", status: "kit:superseded", replacement: ":decision-0001" },
+    ]);
+  });
+});
+
+test("B20: a retired behaviour as the subject keeps the assertion's direction", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    spec.assertions.push(block(":assertion-d8", "kit:GraphAssertion", [["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-d5"],
+      ["kit:evidence", ":evidence-e5"], ["kit:object", ":node-test"], ["kit:relationship", "kit:tested-by"], ["kit:subject", ":behaviour-payments-B3"]]));
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const tree = treeFromRevision(repo.dir, "HEAD");
+    const report = retiredDesignLinks(loadGraph(tree, loadCheckConfig(tree))).find((r) => r.assertion === ":assertion-d8");
+    assert.deepEqual(report, { assertion: ":assertion-d8", subject: ":behaviour-payments-B3", relationship: "kit:tested-by", object: ":node-test",
+      inactive: ":behaviour-payments-B3", status: "kit:retired", replacement: ":behaviour-payments-B2" });
+    const text = cli(repo, ["--rev", "HEAD"]);
+    assert.match(text.out, /^:assertion-d8: :behaviour-payments-B3 kit:tested-by :node-test \(retired, replaced by :behaviour-payments-B2\)$/m);
+  });
+});
+
+test("B20: text, JSON and summary output carry the report without changing the result", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const text = cli(repo, ["--rev", "HEAD"]);
+    assert.equal(text.code, 0, text.err);
+    assert.match(text.out, /^source graph ok: /m);
+    assert.match(text.out, /^retired design links: 1$/m);
+    assert.match(text.out, /^:assertion-d4: :node-ledger kit:implements :behaviour-payments-B3 \(retired, replaced by :behaviour-payments-B2\)$/m);
+    const json = JSON.parse(cli(repo, ["--rev", "HEAD", "--json"]).out);
+    assert.equal(json.ok, true);
+    assert.deepEqual(json.findings, []);
+    assert.equal(json.reports.length, 1);
+    const summary = join(repo.dir, "summary.md");
+    writeFileSync(summary, "existing\n");
+    assert.equal(cli(repo, ["--rev", "HEAD", "--summary", summary]).code, 0);
+    assert.equal(readFileSync(summary, "utf8"), "existing\n### Retired design links\n\n" +
+      "- `:assertion-d4`: `:node-ledger` kit:implements `:behaviour-payments-B3` (retired, replaced by `:behaviour-payments-B2`)\n");
+  });
+});
+
+test("B15: a graph with no design nodes and no reports writes no summary", async () => {
+  await withScratchRepo(async (repo) => {
+    writeGraph(repo, widgets(repo));
+    repo.commit("graph");
+    const summary = join(repo.dir, "summary.md");
+    writeFileSync(summary, "untouched\n");
+    const text = cli(repo, ["--rev", "HEAD", "--summary", summary]);
+    assert.equal(text.code, 0, text.err);
+    assert.doesNotMatch(text.out, /retired design links/);
+    assert.equal(readFileSync(summary, "utf8"), "untouched\n");
+  });
+});
+
+test("B15: a design graph with no reports writes None to the summary", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    spec.assertions = spec.assertions.filter((a) => a.subject !== ":assertion-d4");
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const summary = join(repo.dir, "summary.md");
+    const run1 = cli(repo, ["--rev", "HEAD", "--summary", summary]);
+    assert.equal(run1.code, 0, run1.err);
+    assert.equal(readFileSync(summary, "utf8"), "### Retired design links\n\nNone.\n");
+  });
+});
+
+test("B13: a summary that cannot be written is reported and the exit code follows the findings alone", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const result = cli(repo, ["--rev", "HEAD", "--summary", join(repo.dir, "missing-dir", "summary.md")]);
+    assert.equal(result.code, 0);
+    assert.match(result.err, /^could not write summary: .+$/m);
+  });
+});
+
+test("B14: an empty --summary value writes nothing and is not an error; a missing value is exit 2", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const empty = cli(repo, ["--rev", "HEAD", "--summary", ""]);
+    assert.equal(empty.code, 0, empty.err);
+    assert.equal(empty.err, "");
+    assert.equal(cli(repo, ["--rev", "HEAD", "--summary"]).code, 2);
+  });
+});
+
+test("B16: a deprecated decision is reported with status kit:deprecated", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    rewriteDoc(repo, spec, ADR1, DESIGN_ADRS[ADR1].replace("- **Status:** accepted", "- **Status:** deprecated"));
+    setPair(find(spec.nodes, ":decision-0001"), "kit:designStatus", "kit:deprecated");
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const tree = treeFromRevision(repo.dir, "HEAD");
+    const report = retiredDesignLinks(loadGraph(tree, loadCheckConfig(tree))).find((r) => r.assertion === ":assertion-d6");
+    assert.equal(report?.status, "kit:deprecated");
+    assert.equal(report?.inactive, ":decision-0001");
+    assert.equal(report?.replacement, null);
+  });
+});
+
+test("B16: failing findings plus reports exit 1 and still print the reports", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    setPair(find(spec.nodes, ":behaviour-payments-B1"), "rdfs:label", S("payments#B1 Pay invoice"));
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const result = cli(repo, ["--rev", "HEAD"]);
+    assert.equal(result.code, 1);
+    assert.match(result.err, /design-label/);
+    assert.match(result.out, /^retired design links: 1$/m);
+    assert.match(result.out, /^:assertion-d4: /m);
+  });
+});
+
+test("B17: a node with several replacement links reports the first by assertion IRI", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    spec.assertions.push(linkOf("c9", ":behaviour-payments-B3", "kit:replaced-by", ":behaviour-payments-B1"));
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const tree = treeFromRevision(repo.dir, "HEAD");
+    const report = retiredDesignLinks(loadGraph(tree, loadCheckConfig(tree))).find((r) => r.assertion === ":assertion-d4");
+    assert.equal(report?.replacement, ":behaviour-payments-B1");
+  });
+});
+
+test("B12: --json findings and reports equal checkRevision and retiredDesignLinks", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    writeGraph(repo, spec);
+    repo.commit("graph");
+    const tree = treeFromRevision(repo.dir, "HEAD"), config = loadCheckConfig(tree);
+    const json = JSON.parse(cli(repo, ["--rev", "HEAD", "--json"]).out);
+    assert.deepEqual(json.findings, checkRevision(tree));
+    assert.deepEqual(json.reports, retiredDesignLinks(loadGraph(tree, config)));
+  });
+});
+
+test("B20: rewriteDoc gives every evidence item citing the file, and its refresh record, the new blob ID", async () => {
+  await withScratchRepo(async (repo) => {
+    const spec = widgets(repo);
+    addDesignDocs(repo, spec);
+    const cites = (b, path) => b.pairs.some((p) => p.predicate === "kit:path" && p.object === path);
+    const before = spec.evidence.filter((e) => cites(e, LITE)).map((e) => e.subject);
+    assert.ok(before.length > 1, "the lite feature file is cited more than once");
+    rewriteDoc(repo, spec, LITE, DESIGN_FEATURE + "\nAn extra line.\n");
+    const expected = blobId(repo.dir, LITE);
+    const blobOf = (b) => b.pairs.find((p) => p.predicate === "kit:blobId")?.object;
+    const cited = spec.evidence.filter((e) => cites(e, LITE));
+    assert.deepEqual(cited.map((e) => e.subject), before);
+    for (const e of cited) assert.equal(blobOf(e), expected, e.subject);
+    const record = spec.records.filter((r) => cites(r, LITE));
+    assert.equal(record.length, 1);
+    assert.equal(blobOf(record[0]), expected);
+    for (const e of spec.evidence.filter((x) => !cites(x, LITE))) assert.notEqual(blobOf(e), expected, e.subject);
+  });
 });

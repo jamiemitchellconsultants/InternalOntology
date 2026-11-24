@@ -123,7 +123,7 @@ export function buildPlan(options) {
 
   if (options.withSourceGraph) {
     const root = options.sourceGraphRoot ?? "docs/source-knowledge-graph";
-    for (const name of ["source-graph-turtle", "source-graph-git", "source-graph-model", "check-source-graph", "query-source-graph",
+    for (const name of ["source-graph-turtle", "source-graph-git", "source-graph-model", "source-graph-design-docs", "check-source-graph", "query-source-graph",
       "source-graph-render-input", "source-graph-markdown", "render-source-graph"]) {
       for (const suffix of [".mjs", ".test.mjs"]) {
         const path = `scripts/${name}${suffix}`;

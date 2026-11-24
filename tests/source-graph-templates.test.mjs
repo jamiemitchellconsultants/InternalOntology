@@ -119,3 +119,24 @@ test("B45: the authoring order is Turtle, check, then render, and both examples 
   assert.ok(order.includes("render-source-graph.mjs --check --staged"));
   for (const example of authoring.split("### Example:").slice(1)) assert.match(example, /write, check and render order/);
 });
+
+test("B20: the check workflow writes reports to the step summary in both steps and stays read-only", () => {
+  const workflow = template("github/workflows/source-graph-check.yml");
+  assert.equal(workflow.match(/--summary "\$GITHUB_STEP_SUMMARY"/g)?.length, 2);
+  assert.match(workflow, /^permissions:\n  contents: read\n/m);
+});
+
+test("B8–B15, B20, B21: the graph protocol links design documents in the same change", () => {
+  const protocol = template("protocol/source-graph-protocol.md");
+  const start = protocol.indexOf("### Linking design documents");
+  assert.ok(start > 0, "section missing");
+  const end = protocol.indexOf("\n### ", start + 1);
+  const section = protocol.slice(start, end === -1 ? undefined : end);
+  for (const needle of ["same change", "`kit:contains` from the component", ":behaviour-<slug>-B<n>", ":decision-<NNNN>", "`kit:designStatus`", "Keep the IRI", "`kit:replaced-by`",
+    "`kit:superseded-by`", "traceability table", "citing the table row and the code", "`kit:documented-by`",
+    "only when that one symbol carries out the behaviour", "`kit:tested-by`", "Record nothing for code that does not exist yet",
+    "never all of `docs/features/**`", "`kit:schemaVersion` to 2", "pull request body", "retired design links",
+    "query-source-graph.mjs behaviour <slug>#B<n>", "and `code <node>` to see why code exists"]) {
+    assert.ok(section.includes(needle), needle);
+  }
+});
