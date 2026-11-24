@@ -84,6 +84,7 @@ by rewriting the original.
 | [68](#entry-amend-the-b23-implementation-plan-for-division-imports-185) | 2026-11-23 | Amend the B23 implementation plan for division imports (#185) | product | Preserve the five kit increments and their completed tasks. After this plan merges, integrate the reviewed design and plan into the existing build branch with a normal merge. |
 | [69](#entry-ship-source-graph-links-to-feature-documents-185) | 2026-11-24 | Ship source graph links to feature documents (#185) | product | Ship behaviour and decision nodes as schema 2 core vocabulary, with stable identities, statuses and evidence. Add offline queries in both directions and deterministic document checks. |
 | [70](#entry-restore-source-graph-markdown-regeneration-after-kit-upgrades-185) | 2026-11-24 | Restore source graph Markdown regeneration after kit upgrades (#185) | product | Validate the previously recorded source revision with support for its earlier schema. Require the current schema when validating canonical inputs, and retain the provenance and input matching checks. |
+| [71](#entry-record-jepa-speech-trial-acceptance-for-feature-185) | 2026-11-24 | Record JEPA-Speech trial acceptance for feature #185 | product | Record the completed user acceptance and its exact revisions. Retain the compatible division importer as the prerequisite for B23 and verify that behaviour against the real C4 loader when it is available. |
 
 ---
 
@@ -1694,3 +1695,23 @@ Validate the previously recorded source revision with support for its earlier sc
 ## Consequences
 
 Existing adopters can regenerate their view immediately after upgrading while keeping the version 1 manifest. The refreshed Markdown pins the upgrade revision and passes the staged check. A direct graph check still rejects an outdated schema. The installed upgrade needs a fresh USER walkthrough in the JEPA-Speech trial.
+
+---
+
+<a id="entry-record-jepa-speech-trial-acceptance-for-feature-185"></a>
+
+## Entry 71 — 2026-11-24 — Record JEPA-Speech trial acceptance for feature #185
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The merged kit amendment made the existing JEPA-Speech view regenerable. The owner could then follow the trial graph in both directions, review the recorded claims and perform a retirement without breaking the check. The trial creates the source pin needed by the division acceptance test.
+
+## Decision
+
+Record the completed user acceptance and its exact revisions. Retain the compatible division importer as the prerequisite for B23 and verify that behaviour against the real C4 loader when it is available.
+
+## Consequences
+
+The graph upgrade and the first four trial outcomes now have recorded owner results. The trial graph is available at the recorded pin for a future division catalog. The feature remains in USER until the synthetic and deployed B23 walkthroughs and executable tests pass and their results are merged.
