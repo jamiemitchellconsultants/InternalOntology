@@ -47,8 +47,9 @@ export function resolveIndexContext(cwd, env) {
     if (!regularBlob(configurationTree, CONFIG_FILENAME)) throw new Error("Missing committed configuration");
     const raw = JSON.parse(configurationTree.readBounded(CONFIG_FILENAME, MAX_BLOB_BYTES).toString("utf8"));
     policy = validateConfig(raw, { ontologyExists: (path) => configurationTree.has(path) }).semanticIndex;
-  } catch {
-    throw problem("config", "Read valid semantic index settings from a trusted committed ref. Fetch the default branch or set ONTOLOGY_INDEX_CONFIG_REF.");
+  } catch (error) {
+    const capProblem = String(error?.message).startsWith(`${CONFIG_FILENAME}: semanticIndex.responseCap`) ? ` ${error.message}` : "";
+    throw problem("config", `Read valid semantic index settings from a trusted committed ref. Fetch the default branch or set ONTOLOGY_INDEX_CONFIG_REF.${capProblem}`);
   }
   if (!policy?.enabled) throw problem("disabled", "Semantic indexing is disabled in the trusted configuration.");
   let sourceTree;
@@ -103,15 +104,32 @@ function* pieces(text) {
   }
 }
 
-export function readIndexPassages(tree, entry) {
-  const data = tree.readBounded(entry.path, MAX_BLOB_BYTES);
-  if (data.includes(0)) return [];
-  let text;
+function decodeIndexText(tree, path) {
+  const data = tree.readBounded(path, MAX_BLOB_BYTES);
+  if (data.includes(0)) return null;
   try {
-    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data);
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data);
   } catch {
-    return [];
+    return null;
   }
+}
+
+export function readIndexedLines(tree, scope, { path, startLine, endLine }) {
+  if (!isIndexPath(path) || !isInScope(path, scope) || !regularBlob(tree, path)) {
+    throw problem("refused", "The path is outside the approved index scope.");
+  }
+  const text = decodeIndexText(tree, path);
+  if (text === null) throw problem("refused", "The path has no indexed text.");
+  const lines = text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+  if (endLine > lines.length) {
+    throw problem("refused", `Lines ${startLine}-${endLine} are outside ${path}, which has ${lines.length} lines.`);
+  }
+  return lines.slice(startLine - 1, endLine);
+}
+
+export function readIndexPassages(tree, entry) {
+  const text = decodeIndexText(tree, entry.path);
+  if (text === null) return [];
   const passages = [];
   let window = [];
   let size = 0;

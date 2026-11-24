@@ -8,7 +8,7 @@ import { buildPlan, install, parseCliArgs } from "../bin/install-ontology.mjs";
 import { withTempRepo } from "./helpers/temp-repo.mjs";
 
 test("B13 opt-in installs byte-identical scripts and an ignored checkout store", async () => {
-  const scripts = ["semantic-index.mjs", "semantic-index-source.mjs", "semantic-index-embed.mjs", "semantic-index-store.mjs", "semantic-index-release.mjs", "source-graph-git.mjs"];
+  const scripts = ["semantic-index.mjs", "semantic-index-source.mjs", "semantic-index-embed.mjs", "semantic-index-store.mjs", "semantic-index-release.mjs", "semantic-index-tokens.mjs", "semantic-index-token-log.mjs", "source-graph-git.mjs"];
   const combined = buildPlan({ withSemanticIndex: true, withSourceGraph: true });
   assert.equal(combined.filter(({ dest }) => dest === "scripts/source-graph-git.mjs").length, 1);
   assert.equal(buildPlan({}).some(({ dest }) => dest === "scripts/semantic-index.mjs"), false);
@@ -113,6 +113,9 @@ test("opt-in splices the agent protocol once and leaves it out without the flag"
     for (const _ of [0, 1]) install({ target: dir, withSemanticIndex: true });
     const text = readFileSync(join(dir, "AGENTS.md"), "utf8");
     assert.equal(text.split(start).length, 2);
+    const end = "<!-- semantic-index-protocol:end -->";
+    const spliced = text.slice(text.indexOf(start) + start.length, text.indexOf(end)).trim();
+    assert.equal(spliced, readFileSync(new URL("../templates/protocol/semantic-index-protocol.md", import.meta.url), "utf8").trim());
     assert.match(text, /git show <commit>:<path>/);
     assert.ok(text.indexOf("<!-- ontology-protocol:end -->") < text.indexOf(start));
   });

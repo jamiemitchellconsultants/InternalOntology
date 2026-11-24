@@ -1,9 +1,12 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createEmbeddingAdapter } from "./semantic-index-embed.mjs";
 import { createReleaseTransport, downloadIndex, uploadIndex } from "./semantic-index-release.mjs";
-import { hasIndexEdits, listIndexEntries, readIndexPassages, resolveIndexContext } from "./semantic-index-source.mjs";
+import { hasIndexEdits, listIndexEntries, readIndexedLines, readIndexPassages, resolveIndexContext } from "./semantic-index-source.mjs";
+import { appendTokenRecord, readTokenRecords, summariseTokenUse } from "./semantic-index-token-log.mjs";
+import { estimateTokens, fitToCap } from "./semantic-index-tokens.mjs";
 import { indexReadiness, openIndex, withIndexWriter } from "./semantic-index-store.mjs";
 
 const recovery = {
@@ -19,15 +22,15 @@ function problem(code, message) {
 
 function parseCommand(argv) {
   const [command, ...args] = argv;
-  const optionsFor = { status: [], refresh: [], search: ["query", "limit"], download: ["release", "allow-ancestor"], upload: ["release"] };
-  if (!Object.hasOwn(optionsFor, command)) throw problem("usage", "Use status, refresh, search, download, or upload.");
+  const optionsFor = { status: [], refresh: [], search: ["query", "limit"], show: ["path", "lines", "commit"], download: ["release", "allow-ancestor"], upload: ["release"], usage: ["since"] };
+  if (!Object.hasOwn(optionsFor, command)) throw problem("usage", "Use status, refresh, search, show, usage, download, or upload.");
   const options = {};
   for (let i = 0; i < args.length; i += 1) {
     const match = /^--([a-z-]+)(?:=(.*))?$/s.exec(args[i]);
     if (!match) throw problem("usage", "Expected a named command option.");
     const [, key, inline] = match;
     if (Object.hasOwn(options, key)) throw problem("usage", "Option given more than once: --" + key);
-    if ((key === "json" || (command === "download" && key === "allow-ancestor")) && inline === undefined) {
+    if ((key === "json" || (command === "search" && key === "compact") || (command === "download" && key === "allow-ancestor")) && inline === undefined) {
       options[key] = true;
       continue;
     }
@@ -40,6 +43,22 @@ function parseCommand(argv) {
   if ((command === "download" || command === "upload") && (!options.release || /[\x00-\x20]/.test(options.release))) {
     throw problem("usage", "Provide an explicit GitHub Release tag with --release.");
   }
+  if (command === "show") {
+    if (!options.path) throw problem("usage", "Provide --path for show.");
+    const range = /^(\d+)-(\d+)$/.exec(options.lines ?? "");
+    if (!range || Number(range[1]) < 1 || Number(range[1]) > Number(range[2])) {
+      throw problem("usage", "--lines must be <start>-<end> with 1 <= start <= end.");
+    }
+    options.startLine = Number(range[1]);
+    options.endLine = Number(range[2]);
+    if (options.commit !== undefined && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(options.commit)) {
+      throw problem("usage", "--commit must be a full commit ID.");
+    }
+  }
+  if (command === "usage" && options.since !== undefined && (!ISO_TIME.test(options.since) || Number.isNaN(Date.parse(options.since)))) {
+    throw problem("usage", "--since must be an ISO 8601 time.");
+  }
+  if (options.compact && !options.json) throw problem("usage", "--compact needs --json.");
   const limit = options.limit === undefined ? 5 : Number(options.limit);
   if (options.limit !== undefined && (!/^\d+$/.test(options.limit) || limit < 1 || limit > 100)) {
     throw problem("usage", "--limit must be an integer from 1 to 100.");
@@ -56,6 +75,8 @@ async function inspect(context) {
   }
   return { reader, state: indexReadiness(reader.header, context) };
 }
+
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
 
 function describe(context, state, indexCommit) {
   const value = {
@@ -158,9 +179,28 @@ async function search(reader, query, limit, adapter) {
   return best.map(({ position, ...result }) => ({ commit: reader.header.sourceCommit, ...result }));
 }
 
-export async function runIndexCommand(argv, { cwd = process.cwd(), env = process.env, fetchImpl = fetch, releaseTransport } = {}) {
+async function measureAndLog({ total, build, mark, render, cap, root, command, now }) {
+  const kept = fitToCap(total, (n) => render(build(n)), cap);
+  const payload = build(kept);
+  if (kept < total) payload.truncated = mark(kept);
+  const estimate = estimateTokens(render(payload));
+  const response = { ...payload, tokens: { estimate, estimated: true } };
+  const logged = await appendTokenRecord(root, { time: now().toISOString(), command, count: kept, tokens: estimate, truncated: kept < total });
+  if (!logged.recorded) response.tokenLog = logged.message;
+  return response;
+}
+
+export async function runIndexCommand(argv, { cwd = process.cwd(), env = process.env, fetchImpl = fetch, releaseTransport, now = () => new Date() } = {}) {
   try {
     const { command, options, limit } = parseCommand(argv);
+    if (command === "usage") {
+      const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+      const { records, skipped } = await readTokenRecords(root);
+      const summary = summariseTokenUse(records, { since: options.since ?? null });
+      const value = { ok: true, ...summary, skipped, estimated: true };
+      if (summary.commands === 0) value.message = "No token log records yet, so no baseline exists.";
+      return { exitCode: 0, value };
+    }
     const resolveCurrent = () => resolveIndexContext(cwd, env);
     const context = resolveCurrent();
     const adapter = () => createEmbeddingAdapter(context.policy.embedding, { fetchImpl, token: env.ONTOLOGY_INDEX_EMBEDDING_TOKEN });
@@ -181,14 +221,40 @@ export async function runIndexCommand(argv, { cwd = process.cwd(), env = process
     } else {
       const { reader, state } = await inspect(context);
       try {
-        value = describe(context, state, reader?.header.sourceCommit);
+        if (command === "status") value = describe(context, state, reader?.header.sourceCommit);
         if (command === "search") {
           if (state !== "current") throw problem(state, recovery[state]);
           const results = await search(reader, options.query, limit, adapter());
           const current = resolveCurrent();
           const latest = indexReadiness(reader.header, current);
           if (latest !== "current") throw problem(latest, recovery[latest]);
-          value = { ...describe(current, latest, reader.header.sourceCommit), results };
+          const commit = reader.header.sourceCommit;
+          const rows = options.compact ? results.map(({ commit: _commit, ...location }) => location) : results;
+          const render = options.json ? JSON.stringify : formatIndexResponse;
+          const described = describe(current, latest, commit);
+          return { exitCode: 0, value: await measureAndLog({
+            total: rows.length,
+            build: (n) => ({ ok: true, ...described, results: rows.slice(0, n) }),
+            mark: (kept) => ({ returned: kept, omitted: rows.length - kept }),
+            render, cap: context.policy.responseCap, root: context.root, command: "search", now,
+          }) };
+        }
+        if (command === "show") {
+          if (state !== "current") throw problem(state, recovery[state]);
+          const commit = reader.header.sourceCommit;
+          if (options.commit !== undefined && options.commit !== commit) {
+            throw problem("refused", "Show reads only the indexed commit " + commit + ".");
+          }
+          const { path, startLine, endLine } = options;
+          const described = describe(context, "current", commit);
+          const lines = readIndexedLines(context.sourceTree, context.policy.scope, { path, startLine, endLine });
+          return { exitCode: 0, value: await measureAndLog({
+            total: lines.length,
+            build: (n) => ({ ok: true, ...described, commit, path, startLine, endLine, text: lines.slice(0, n).join("") }),
+            mark: (kept) => ({ lastLine: kept ? startLine + kept - 1 : null, nextLine: startLine + kept }),
+            render: options.json ? JSON.stringify : formatIndexResponse,
+            cap: context.policy.responseCap, root: context.root, command: "show", now,
+          }) };
         }
       } finally {
         await reader?.close();
@@ -196,29 +262,53 @@ export async function runIndexCommand(argv, { cwd = process.cwd(), env = process
     }
     return { exitCode: 0, value: { ok: true, ...value } };
   } catch (error) {
-    const argument = ["config", "disabled", "unborn", "usage"].includes(error.code);
+    const argument = ["config", "disabled", "unborn", "usage", "refused"].includes(error.code);
     const code = argument || error.code === "release" || Object.hasOwn(recovery, error.code) ? error.code : "operation";
     return { exitCode: argument ? 2 : 1, value: { ok: false, code, message: error.message } };
   }
 }
 
-function format(value) {
+export function formatIndexResponse(value) {
   if (!value.ok) return value.message;
+  if (value.byCommand) {
+    if (value.commands === 0) return value.message;
+    const usage = ["Commands: " + value.commands, "Estimated tokens: " + value.totalTokens + " total, " + value.meanTokens + " mean per command"];
+    if (value.largest) usage.push("Largest: " + value.largest.tokens + " (" + value.largest.command + " at " + value.largest.time + ")");
+    for (const [name, group] of Object.entries(value.byCommand)) {
+      usage.push(name + ": " + group.commands + " commands, " + group.totalTokens + " total, " + group.meanTokens + " mean");
+    }
+    if (value.skipped !== 0) usage.push("Skipped " + value.skipped + " unreadable records.");
+    return usage.join("\n");
+  }
   const lines = [value.state + (value.indexCommit ? " at " + value.indexCommit : "")];
   if (value.message) lines.push(value.message);
   if (value.dirty) lines.push("Search uses committed content. Approved files have uncommitted edits.");
+  if (value.text !== undefined) {
+    lines.push(JSON.stringify(value.path) + ":" + value.startLine + "-" + value.endLine + " at " + value.commit);
+    if (value.text !== "") lines.push(value.text.replace(/\n$/, ""));
+  }
   for (const result of value.results ?? []) lines.push(
     JSON.stringify(result.path) + ":" + result.startLine + "-" + result.endLine + " " + result.score.toFixed(4),
   );
   if (value.metrics) lines.push("Source embeddings: " + value.metrics.sourceEmbeddings);
   if (value.asset) lines.push(value.repository + " " + value.release + " " + value.asset + " (" + value.bytes + " bytes)");
+  if (value.truncated && value.text !== undefined) lines.push(
+    value.truncated.lastLine === null
+      ? `Truncated at the response cap: line ${value.truncated.nextLine} alone exceeds the cap; read it with git show ${value.commit}:${value.path}.`
+      : "Truncated at the response cap: lines " + value.startLine + "-" + value.truncated.lastLine + " returned; request again from line " + value.truncated.nextLine + ".",
+  );
+  else if (value.truncated) lines.push(
+    "Truncated at the response cap: " + value.truncated.returned + " results returned, " + value.truncated.omitted + " omitted.",
+  );
+  if (value.tokens) lines.push("Estimated tokens: " + value.tokens.estimate);
+  if (value.tokenLog) lines.push(value.tokenLog);
   return lines.join("\n");
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2);
   const { value, exitCode } = await runIndexCommand(argv);
-  const output = argv.includes("--json") ? JSON.stringify(value) : format(value);
+  const output = argv.includes("--json") ? JSON.stringify(value) : formatIndexResponse(value);
   console.log(output);
   process.exitCode = exitCode;
 }

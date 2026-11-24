@@ -191,3 +191,73 @@ The estimator and limiter sit between every output path and the response, so eac
 - [ADR 0040 · Shorten the protocol and consult the graph first](../../adr/0040-shorten-the-protocol-and-consult-the-graph-first.md)
 
 Deferred U7 and U9 are decided here: the default cap is 4000 estimated tokens, to be revisited once the baseline exists, and the log rotates once at 1 MiB keeping one previous file.
+
+## [User] Runbook, guide and acceptance
+
+### Runbook
+
+**Deployed environment used by acceptance:** an adopting repository with the Kit installed with `--with-semantic-index`, after the build pull request for this feature has merged and the adopter has upgraded. This repository ships the scripts in `templates/scripts/` but does not install the index for itself, so the deployed layer below cannot run in this checkout. "Local" below is a scratch adopting repository installed by the acceptance fixture; "deployed" is that upgraded adopter.
+
+#### Deploy
+
+1. Upgrade the Kit scripts: `node bin/install-ontology.mjs --target <repo> --force --with-semantic-index`. Commit the result. The Kit's config validator must be upgraded before `responseCap` is set, or the setting is rejected.
+2. In `ontology.config.json` on the trusted branch, keep `semanticIndex.enabled` true and optionally set `semanticIndex.responseCap` to a positive integer in estimated tokens. Omit it to use the default of 4000. The value is read from the trusted committed configuration only; no environment value can raise it.
+3. Health check: run `node scripts/semantic-index.mjs status --json`, then `refresh --json` if the state is `missing` or `stale`, then one `search`, one `show` and one `usage`. Each of `search` and `show` states its estimated tokens, and `usage` reports at least one command.
+
+#### Operate
+
+- Run `node scripts/semantic-index.mjs usage --json` (optionally `--since <ISO time>`) to read the baseline: number of commands, total and mean estimated tokens, and the largest response. An empty log reports that no baseline exists yet; run searches before drawing conclusions.
+- The counts-only log is `.ontology-index/token-log.jsonl` in each checkout. It holds time, command, count, estimated tokens and truncation only — never query text, source text or paths — and rotates once at 1 MiB, keeping one previous file. It is Git-ignored and is never committed.
+- A response over the cap is cut, marked as truncated and states what remains. That is a successful response, not an error: for `show`, request the next line named in the marker; for `search`, raise the cap or narrow the query only if the omitted results are needed.
+- `show` refuses a commit that is not the indexed commit, a path outside the approved scope and a range outside the file, and returns no text. Fix the citation; do not widen `semanticIndex.scope` to make it pass — only a maintainer changes settings.
+- A `Token log not recorded` line means the response still succeeded but its estimate was not logged. Check that `.ontology-index/` is writable and that `token-log.jsonl` is a regular file, not a directory or symbolic link.
+
+#### Recover and roll back
+
+- Remove `semanticIndex.responseCap` from the trusted configuration to return to the default of 4000; set it to a positive integer to change it. An invalid value fails every index command with a configuration error naming the setting and makes no model request, so fixing the value is the recovery.
+- To roll back the feature, revert the adopter's upgrade commit. Responses lose the trailing estimate, `show` and `usage` are gone, and the previous protocol text returns on the next install. The token log file is inert and can be left or deleted with the rest of `.ontology-index/`.
+- An unreadable index is rebuilt with `refresh` or replaced by a validated `download`, as in `templates/docs/semantic-index.md`. Do not remove `.ontology-index/writer.lock` without checking its recorded PID and hostname.
+
+### User guide
+
+For coding agents, developers carrying the usage cost, and repository owners setting the limits, as named in the vision.
+
+- **See what a search costs (B1 to B3).** Every `search` and `show` response states its `TokenEstimate` and that the figure is an estimate. Run `usage` to summarise the local `SearchTokenLog`; run it before tuning anything, because it is the baseline every comparison uses.
+- **Read less to find the same leads (B5 to B7).** Search results carry only the commit, path, line range and score. Add `--compact` to JSON search to state the commit once instead of on every result, then run `show --path <path> --lines <start>-<end>` to read only the cited lines, taken from the indexed commit rather than the working tree.
+- **Bound the worst case (B8 to B10).** Owners set `semanticIndex.responseCap` in `OntologyConfig`; the default is 4000 estimated tokens. A cut response says what was returned and what remains, and still succeeds.
+- **Spend fewer tokens before the first edit (B11 and B12).** The pilot harness in `scripts/measure-semantic-index.mjs --tokens` records, per task, the input tokens, files opened, search calls and index commands up to the first edit from the agent session's own transcript, and compares them with the baseline and with running without the index. No target is set before the baseline exists.
+- **Load less before any search (B13 and B14).** The installed protocol is shorter than before (544 estimated tokens, down from 588) and keeps every rule. Its token change and rule fidelity are measured by the same pilot harness.
+- **Use the graph when it already answers (B15 and B16).** When `sourceGraph` is enabled and the graph reader is installed, ask the `GraphReader` first and search only when it reports the area as unknown, excluded or empty; otherwise search directly. The pilot records the searches and tokens saved on graph-covered questions.
+
+### Acceptance
+
+Executable tests: `tests/semantic-index-token-efficiency-acceptance.test.mjs` (`node --test tests/semantic-index-token-efficiency-acceptance.test.mjs`), which installs the Kit into two scratch repositories and drives the installed `search`, `show` and `usage` commands against a local model stand-in. The measurement behaviours are automated in `tests/semantic-index-pilot.test.mjs`, the protocol in `tests/semantic-index-protocol.test.mjs`, and text output, cap fitting and the log in `tests/semantic-index-cli.test.mjs`, `tests/semantic-index-tokens.test.mjs` and `tests/semantic-index-token-log.test.mjs`.
+
+| Behaviour | Scripted walkthrough (each step with its expected result) | Executable test |
+| --- | --- | --- |
+| B1 | 1. In an installed adopter with a current index, run one `search`. Expect one new log record holding only time, command, count, estimated tokens and truncation. 2. Read the log file. Expect no query text, source text or path. | acceptance: B1, B2, B6 and B7; CLI: B1, B2 and B6 |
+| B2 | 1. Run `search` and `show` in JSON and text. Expect each to state its estimate and that it is an estimate. 2. Make the log path a directory and search again. Expect success with a `Token log not recorded` report. | acceptance: B1 to B7 and B2 log failure; CLI: B2 text and log failure |
+| B3 | 1. Run `usage` before any search. Expect a report that no baseline exists yet. 2. Search twice, `show` once, run `usage` again. Expect command count, total, mean and largest, and fewer with `--since` after the first. | acceptance: B3 and B1 to B7; CLI: B3 |
+| B4 | 1. Run the pilot `--tokens` comparison on a reviewed set of responses. Expect the mean and largest difference from the independent count to be recorded; a systematic difference is reported, not blocking. | pilot: B4 and the `--tokens` CLI |
+| B5 | 1. `show` a cited range. Expect only those lines, read from the indexed commit even with working-tree edits. 2. Ask for another commit, an unapproved path and a range past the end. Expect a refusal with the reason and no text each time. | acceptance: B5; CLI: B5 |
+| B6 | 1. Search in JSON. Expect each result to carry commit, path, line range and score and no text, with the existing fields unchanged. 2. Search with `--compact`. Expect the commit stated once and the same locations. | acceptance: B1, B2, B6 and B7; CLI: B6 compact and text |
+| B7 | 1. Run the reviewed questions with compact output and `show`. Expect the share with a relevant location in the first five to equal the baseline for the same index. | acceptance: compact equals full; pilot: B7 |
+| B8 | 1. Set a small `responseCap` on the trusted branch and search. Expect a successful truncated response stating results returned and omitted. 2. `show` a long range. Expect whole leading lines, the last line returned and the first line not returned. | acceptance: B8, B9 and B10; CLI: B8 search and passage |
+| B9 | 1. Omit `responseCap`. Expect the default of 4000 to apply. 2. Set it to `0`. Expect a configuration error naming `semanticIndex.responseCap` and no model request. | acceptance: B8, B9 and B10; CLI: B9 and config tests |
+| B10 | 1. Run the reviewed set under a cap and measure every response. Expect the largest estimate to exceed the cap by no more than the truncation notice. | pilot: B10 `checkCap`; CLI: B8, B9 and B10 |
+| B11 | 1. Give the pilot a task transcript. Expect input tokens, files opened, search calls and index commands counted only up to the first edit. | pilot: B11 transcript and `--tokens` tasks |
+| B12 | 1. Run the pilot comparison with baseline, with-index and without-index figures. Expect the change against each to be stated, and no target set before the baseline exists. | pilot: B12 |
+| B13 | 1. Read the installed protocol. Expect every prior rule present: when to use the index, the status and refresh check, one focused query, results as leads, cited lines at the cited commit, the empty-result rule and the prohibitions. 2. Diff the installed text across adopters. Expect byte-identical text. | protocol: B13; acceptance: B13 and B15 installed protocol |
+| B14 | 1. Estimate the previous and shortened protocols. Expect fewer starting-context tokens (544 against 588). 2. Compare reviewed runs. Expect no previously followed rule dropped. | protocol: B13 and B14; pilot: B14 |
+| B15 | 1. With `sourceGraph` enabled and the reader installed, ask a repository question. Expect the protocol to direct the graph reader first and a search only on unknown, excluded or empty. 2. Without it, expect a direct search. | protocol: B15; acceptance: B13 and B15 |
+| B16 | 1. Run graph-covered questions under the old and new protocols. Expect searches and tokens recorded for each, and every answer still citing evidence at the reported commit. | pilot: B16 |
+
+#### Results
+
+| Environment | Layer | Result | Date | By |
+| --- | --- | --- | --- | --- |
+| Local build | Executable tests (acceptance, pilot, protocol, CLI, token log and tokens files, then the full suite) | pass: acceptance 7/7; the other five files 44/44; full `npm test` 848/848 with Git's default line-ending setting (see note below) | 2026-11-24 | run by the agent at the direction of jamiemitchellconsultants, acting as user |
+| Local build | Scripted walkthroughs | pass: each walkthrough above was followed against the installed CLI in the acceptance fixture and the pilot and protocol harnesses; the steps are the executable tests named beside them | 2026-11-24 | agent, at the direction of jamiemitchellconsultants |
+| Deployed | Everything | not run: the build pull request has not merged yet, so no adopter has upgraded. Run after merge by upgrading one adopter as in Deploy, following each walkthrough there, then tick the deployed criterion on the parent issue. | - | - |
+
+Note on the local full suite: on this machine's Git configuration (`core.autocrlf=input`), one pre-existing build test (`B5 reads only the cited lines from the commit, not the working tree` in `tests/semantic-index-source.test.mjs`) fails because the host setting rewrites the CRLF fixture on commit; with Git's default setting the full suite passes 848/848, as it did at the build handoff. This is recorded here rather than fixed in this phase; making that test independent of the host's Git defaults belongs to the build.

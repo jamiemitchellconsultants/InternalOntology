@@ -12,6 +12,7 @@ Add this example section to `ontology.config.json` on the repository's trusted b
 {
   "semanticIndex": {
     "enabled": true,
+    "responseCap": 4000,
     "scope": {
       "include": ["src/", "tests/", "docs/ontology.md"],
       "exclude": ["src/generated/"]
@@ -32,6 +33,8 @@ Add this example section to `ontology.config.json` on the repository's trusted b
 }
 ```
 
+The `responseCap` field is optional, is measured in estimated tokens, and defaults to 4000.
+
 The CLI reads committed settings at `refs/remotes/origin/HEAD` by default. Fetch the owner-approved default branch or set `ONTOLOGY_INDEX_CONFIG_REF` to a trusted full ref or full commit ID. The configured embedding endpoint must accept the OpenAI-compatible embeddings request. Use HTTPS for remote services or loopback HTTP for a local endpoint. Set `ONTOLOGY_INDEX_EMBEDDING_TOKEN` outside Git if the endpoint requires a bearer token. Advance the model revision when the underlying embedding space changes. Omit the release object for local-only use. Omit its publishers field for download-only use.
 
 Scope selectors match exact repository-relative paths or directory prefixes ending in `/`. Exclusions take precedence. Builds read regular UTF-8 text at the current Git commit, including local commits. Search results cite committed lines and report staged or unstaged changes to approved paths.
@@ -43,9 +46,16 @@ node scripts/semantic-index.mjs status
 node scripts/semantic-index.mjs refresh
 node scripts/semantic-index.mjs search --query "where is a booking cancelled?" --limit 5
 node scripts/semantic-index.mjs search --query "where is a booking cancelled?" --json
+node scripts/semantic-index.mjs search --query "where is a booking cancelled?" --json --compact
+node scripts/semantic-index.mjs show --path src/booking.ts --lines 10-30
+node scripts/semantic-index.mjs usage --since 2026-11-01T00:00:00Z
 ```
 
 Run `refresh` for a missing or stale index. It reuses compatible vectors for unchanged files. A changed model requires a matching download or a rebuild. An unreadable store can be rebuilt or replaced by a validated download. The active file is `.ontology-index/index-v1.jsonl`. A failed refresh or import preserves the last complete file. If an interrupted process leaves `.ontology-index/writer.lock`, check the recorded PID and hostname before removing the lock. Quit or wait for any live writer first. A subsequent explicit refresh or download can resume work.
+
+Every search and show states an estimate of the tokens in its response, and `usage` summarises those estimates. The file `.ontology-index/token-log.jsonl` keeps counts only, with no query text, source text or path, and rotates at 1 MiB. A response over the cap is cut, says what remains, and is not an error.
+
+`show` accepts an optional `--commit` that must equal the indexed commit, and a truncated `show` reports the last line returned and the next line to request.
 
 ## Share a release snapshot
 
