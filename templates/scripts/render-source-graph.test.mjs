@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -6,7 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { withScratchRepo, seedRenderRepo } from './source-graph-render-test-helpers.mjs';
 import { writeGraph } from './source-graph-test-helpers.mjs';
-import { parseProvenance } from './source-graph-render-input.mjs';
+import { parseProvenance, readRenderInput } from './source-graph-render-input.mjs';
+import { treeFromRevision } from './source-graph-git.mjs';
+import { renderMarkdown } from './source-graph-markdown.mjs';
 import { main, publishMarkdown } from './render-source-graph.mjs';
 
 function run(r, args = [], extra = {}) {
@@ -52,6 +55,45 @@ test('B12: a changed valid graph replaces current state and an old-source check 
     assert.equal(parseProvenance(md).sourceRevision, newer);
     assert.doesNotMatch(md, /assertion-a1/);
     assert.doesNotMatch(md, /^## (Added|Changed|Removed)/m);
+  });
+});
+
+test('B22: an upgraded renderer refreshes Markdown pinned to a version 1 schema', async () => {
+  await withScratchRepo(async r => {
+    const f = seedRenderRepo(r);
+    const schemaPath = `${f.root}/graph-schema.ttl`;
+    const currentSchema = read(r, schemaPath);
+    const input = readRenderInput(treeFromRevision(r.dir, f.source));
+    r.write(schemaPath, `@prefix kit: <https://ontology-kit.dev/schema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+kit:GraphVocabulary a rdfs:Class ;
+    kit:schemaVersion 1 ;
+    rdfs:comment "Core source graph vocabulary." .
+`);
+    const oldSource = r.commit('version 1 schema and manifest');
+    const oldTree = treeFromRevision(r.dir, oldSource);
+    const oldInventory = input.inventory.map(([path, blob]) =>
+      [path, path === schemaPath ? oldTree.blobId(path) : blob]);
+    const oldFingerprint = createHash('sha256').update(JSON.stringify([1, oldInventory])).digest('hex');
+    const oldMarkdown = renderMarkdown({ ...input, tree: oldTree, fingerprint: oldFingerprint });
+    r.write(f.markdownPath, oldMarkdown);
+    r.commit('version 1 generated Markdown');
+    r.write(schemaPath, currentSchema);
+    const upgrade = r.commit('upgrade the kit schema, keeping the version 1 manifest');
+
+    const stale = run(r, ['--check']);
+    assert.equal(stale.code, 1, stale.stderr);
+    assert.match(stale.stderr, /stale source graph Markdown/);
+    assert.equal(read(r, f.markdownPath), oldMarkdown);
+
+    const regenerated = run(r);
+    assert.equal(regenerated.code, 0, regenerated.stderr);
+    const markdown = read(r, f.markdownPath);
+    assert.equal(parseProvenance(markdown).sourceRevision, upgrade);
+    assert.ok(markdown.includes(`/blob/${upgrade}/`));
+    r.git('add', f.markdownPath);
+    assert.equal(run(r, ['--check', '--staged']).code, 0);
   });
 });
 

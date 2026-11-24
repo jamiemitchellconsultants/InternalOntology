@@ -13,11 +13,11 @@ export class RenderError extends Error {
   constructor(message, code = 2) { super(message); this.name = "RenderError"; this.code = code; }
 }
 
-export function readRenderInput(tree) {
+export function readRenderInput(tree, { allowOlderSchema = false } = {}) {
   try {
     const config = loadCheckConfig(tree);
     if (!config.sourceGraph.repositoryUrl) throw new RenderError("sourceGraph.repositoryUrl is required to render source permalinks");
-    const findings = checkRevision(tree);
+    const findings = checkRevision(tree, { allowOlderSchema });
     if (findings.length) throw new RenderError(findings.map((f) => `${f.file}: ${f.subject || ""}: ${f.rule}: ${f.message}`).join("\n"));
     const graph = loadGraph(tree, config);
     const { markdownPath, repositoryUrl } = config.sourceGraph;
@@ -68,11 +68,11 @@ export function parseProvenance(markdown) {
   return result;
 }
 
-function sourceInput(cwd, revision) {
+function sourceInput(cwd, revision, options) {
   let tree;
   try { tree = treeFromRevision(cwd, revision); }
   catch { throw new RenderError(`source snapshot ${revision} is unavailable; retrieve it during preparation or use --source-rev HEAD`); }
-  return readRenderInput(tree);
+  return readRenderInput(tree, options);
 }
 
 const sameInventory = (a, b) => JSON.stringify(a.inventory) === JSON.stringify(b.inventory);
@@ -86,7 +86,7 @@ export function chooseSource({ cwd, candidate, explicitSourceRev }) {
   }
   if (!candidate.tree.has(candidate.markdownPath)) return candidate;
   const recorded = parseProvenance(candidate.tree.text(candidate.markdownPath));
-  const source = sourceInput(cwd, recorded.sourceRevision);
+  const source = sourceInput(cwd, recorded.sourceRevision, { allowOlderSchema: true });
   if (source.fingerprint !== recorded.fingerprint) throw new RenderError("source graph provenance fingerprint does not match its source snapshot");
   return sameInventory(source, candidate) ? source : candidate;
 }

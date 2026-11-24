@@ -33,7 +33,7 @@ const REFS = {
   "kit:SourceKnowledgeGraph": { "kit:coverage": "kit:GraphCoverage", "kit:refreshRecord": "kit:GraphRefreshRecord", "kit:declaresKind": "kit:GraphKindDefinition", "kit:declaresRelationship": "kit:GraphRelationshipDefinition" },
   "kit:GraphNode": { "kit:evidence": "kit:GraphEvidence" },
 };
-export function checkTree({ tree, config, graph = loadGraph(tree, config) }) {
+export function checkTree({ tree, config, graph = loadGraph(tree, config), allowOlderSchema = false }) {
   const findings = [];
   const add = (r, rule, message) => findings.push({ file: r.file || graph.root, subject: r.iri || "", line: r.line || 0, rule, message });
   const value = (r, p) => r.first(p)?.object;
@@ -47,7 +47,13 @@ export function checkTree({ tree, config, graph = loadGraph(tree, config) }) {
   const manifests = graph.byType("kit:SourceKnowledgeGraph");
   if (manifests.length !== 1) add({ file: graph.root }, "graph-resource-count", `expected one graph resource, got ${manifests.length}`);
   const validVersion = (n) => Number.isInteger(n) && n >= 1 && n <= CORE.schemaVersion;
-  for (const m of manifests) if (!validVersion(Number(value(m, "kit:schemaVersion"))) || version !== CORE.schemaVersion) add(m, "schema-version", "schema version does not match core version");
+  const supportedSchema = version === CORE.schemaVersion || (allowOlderSchema && validVersion(version));
+  for (const m of manifests) {
+    const manifestVersion = Number(value(m, "kit:schemaVersion"));
+    if (!supportedSchema || !validVersion(manifestVersion) || manifestVersion > version) {
+      add(m, "schema-version", "schema version does not match core version");
+    }
+  }
   const validVersions = manifests.map((m) => Number(value(m, "kit:schemaVersion"))).filter(validVersion);
   const manifestVersion = validVersions.length ? Math.min(...validVersions) : NaN;
   const ontology = new Set(parseTurtle(tree.text(config.ontologyPath.replace(/\.md$/, ".ttl"))).map((t) => t.subject));
@@ -297,12 +303,12 @@ function freshness(tree, config, graph, requiredPaths = new Set()) {
   }
   return findings;
 }
-function revisionFindings(tree, config, graph) {
-  return [...checkTree({ tree, config, graph }), ...freshness(tree, config, graph)];
+function revisionFindings(tree, config, graph, allowOlderSchema = false) {
+  return [...checkTree({ tree, config, graph, allowOlderSchema }), ...freshness(tree, config, graph)];
 }
-export function checkRevision(tree) {
+export function checkRevision(tree, { allowOlderSchema = false } = {}) {
   const config = loadCheckConfig(tree);
-  return revisionFindings(tree, config, loadGraph(tree, config));
+  return revisionFindings(tree, config, loadGraph(tree, config), allowOlderSchema);
 }
 export function checkPullRequest({ baseTree, headTree }) {
   return pullRequestFindings({ baseTree, headTree });

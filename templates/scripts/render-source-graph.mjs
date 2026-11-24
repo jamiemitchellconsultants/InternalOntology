@@ -79,7 +79,7 @@ function openSource(cwd, revision) {
   let tree;
   try { tree = treeFromRevision(cwd, revision); }
   catch { throw new RenderError(`source snapshot ${revision} is unavailable; retrieve it during checkout/preparation or regenerate with --source-rev HEAD`); }
-  return readRenderInput(tree);
+  return readRenderInput(tree, { allowOlderSchema: true });
 }
 
 export function main(argv, { cwd = process.cwd(), stdout = process.stdout, stderr = process.stderr, beforePublish = () => {} } = {}) {
