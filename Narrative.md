@@ -82,6 +82,7 @@ by rewriting the original.
 | [66](#entry-plan-source-graph-links-to-feature-documents-185) | 2026-11-23 | Plan: source graph links to feature documents (#185) | product | Slice the build into five increments, each delivering a set of behaviour ids end to end and leaving the kit releasable, with schema version 2 and older-manifest acceptance first as the walking skeleton. |
 | [67](#entry-amend-the-division-import-design-for-b23-185) | 2026-11-23 | Amend the division import design for B23 (#185) | product | Keep the schema 2 source graph and exercise the division's C4 snapshot loader. Division-ontology delivers compatibility as a separate prerequisite. |
 | [68](#entry-amend-the-b23-implementation-plan-for-division-imports-185) | 2026-11-23 | Amend the B23 implementation plan for division imports (#185) | product | Preserve the five kit increments and their completed tasks. After this plan merges, integrate the reviewed design and plan into the existing build branch with a normal merge. |
+| [69](#entry-ship-source-graph-links-to-feature-documents-185) | 2026-11-24 | Ship source graph links to feature documents (#185) | product | Ship behaviour and decision nodes as schema 2 core vocabulary, with stable identities, statuses and evidence. Add offline queries in both directions and deterministic document checks. |
 
 ---
 
@@ -1652,3 +1653,23 @@ Preserve the five kit increments and their completed tasks. After this plan merg
 ## Consequences
 
 The build branch can be integrated and verified while importer delivery is pending. B23 stays pending until acceptance verifies the importer, catalog and trial graph revisions together. The installed kit's end-to-end test establishes the producer behaviour.
+
+---
+
+<a id="entry-ship-source-graph-links-to-feature-documents-185"></a>
+
+## Entry 69 — 2026-11-24 — Ship source graph links to feature documents (#185)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+Feature behaviours and architecture decisions lacked stable links to the source and tests that implement them. When a behaviour changed or retired, reviewers had to work out which code and tests were affected.
+
+## Decision
+
+Ship behaviour and decision nodes as schema 2 core vocabulary, with stable identities, statuses and evidence. Add offline queries in both directions and deterministic document checks. Fail missing or reused behaviour ids and report inactive links without failing the graph check. Continue to accept version 1 manifests while their graphs use version 1 values. [Design and ADRs](https://github.com/jamiemitchellconsultants/InternalOntology/blob/630ae29017577fa53cd0b70762c169ad89f5c554/docs/features/graph-feature-document-links/feature.md#architect-structure)
+
+## Consequences
+
+Maintainers can trace code, tests and design decisions at a named revision and judge the evidence. Repositories regenerate their graph Markdown after upgrading. B23 acceptance uses a separate compatible importer and a disposable catalog that pins the source graph. [ADR 0045](https://github.com/jamiemitchellconsultants/InternalOntology/blob/630ae29017577fa53cd0b70762c169ad89f5c554/docs/adr/0045-require-a-compatible-division-importer.md)
