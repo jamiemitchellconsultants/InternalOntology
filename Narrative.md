@@ -86,6 +86,7 @@ by rewriting the original.
 | [70](#entry-restore-source-graph-markdown-regeneration-after-kit-upgrades-185) | 2026-11-24 | Restore source graph Markdown regeneration after kit upgrades (#185) | product | Validate the previously recorded source revision with support for its earlier schema. Require the current schema when validating canonical inputs, and retain the provenance and input matching checks. |
 | [71](#entry-record-jepa-speech-trial-acceptance-for-feature-185) | 2026-11-24 | Record JEPA-Speech trial acceptance for feature #185 | product | Record the completed user acceptance and its exact revisions. Retain the compatible division importer as the prerequisite for B23 and verify that behaviour against the real C4 loader when it is available. |
 | [72](#entry-record-pinned-b23-acceptance-for-feature-185) | 2026-11-24 | Record pinned B23 acceptance for feature #185 | product | Accept both B23 runs at the importer delivered by division-ontology build PR #185. The owner reviewed and approved the synthetic and deployed comparisons in one session. |
+| [73](#entry-feat-semantic-index-token-efficiency-estimate-cap-log-show-and-usage-178) | 2026-11-24 | feat: semantic index token efficiency — estimate, cap, log, show and usage (#178) | product | Ship the build with the user phase completed locally in the same pull request, as lite mode prescribes. |
 
 ---
 
@@ -1736,3 +1737,25 @@ Accept both B23 runs at the importer delivered by division-ontology build PR #18
 ## Consequences
 
 The division can inspect the imported design records and follow JEPA-Speech B18 directly to Submit and through MotorBlockRunner to its source file. The acceptance record ties that result to the specific catalog and source commits. The remaining feature checklist can be completed once this record is merged.
+
+---
+
+<a id="entry-feat-semantic-index-token-efficiency-estimate-cap-log-show-and-usage-178"></a>
+
+## Entry 73 — 2026-11-24 — feat: semantic index token efficiency — estimate, cap, log, show and usage (#178)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The design (PR #181, ADRs 0037 to 0040) and plan (PR #183) for #178 set out to make the cost of an index search visible, then reduce it: per-search token telemetry as the baseline, less text per query, an owner-set response cap, fewer tokens before the first edit, a shorter agent protocol, and graph-first guidance. The build implemented all ten tasks test-first. The remaining question for this pull request is whether the behaviours hold from outside, in an installed adopter, and what operators and owners need to run it.
+
+## Decision
+
+Ship the build with the user phase completed locally in the same pull request, as lite mode prescribes. Responses stay append-only: existing fields and lines are unchanged and only trailing `truncated`, `tokens` and `tokenLog` items are added. Acceptance is two-layered per behaviour — a scripted walkthrough plus an executable test — with the installed CLI exercised end to end in scratch adopters and the measurement behaviours (B4, B7, B10 to B12, B14, B16) automated by the pilot harness tests. The deployed layer is deliberately deferred until after merge, and the host-dependent CRLF test failure is recorded as a finding instead of being fixed in the user phase.
+
+## Consequences
+
+Adopters get `show`, `usage`, `--compact`, a documented 4000-token default cap and a counts-only local token log on upgrade; the shortened graph-first protocol reaches them through the existing install splice. Callers parsing default search output see only trailing additions. Two things remain open: deployed acceptance in a real upgraded adopter, and making the CRLF source test independent of the host's Git line-ending defaults, which belongs to the build.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
