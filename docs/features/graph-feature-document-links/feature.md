@@ -744,33 +744,43 @@ Executable acceptance uses Installed “the installed reader answers both questi
 
 On 2026-11-24, Jamie Mitchell followed and passed every applicable numbered local walkthrough step for B1–B22 and B24 on his Mac and approved their mapped executable tests. The evidence directory was `/private/tmp/internalontology-185-owner-local.Pa8pUU`. The kit base was `630ae29017577fa53cd0b70762c169ad89f5c554` with the staged USER artefacts, and the main fixture pin was `0e0a3d78fa6928cc7acbe571a407b2110e8e99ae`. The runner's `pins.txt` records the other fixture revisions. All 39 command statuses matched, including the expected negative checks, and the network-disabled Docker output matched the credentials-free host output. After approval, all 210 cases in the seven mapped local executable suites passed. The local Pass / pass entries below share this operator, date and evidence. B23 was outside the approval and remains pending.
 
-On 2026-11-24, the initial JEPA-Speech deployment stopped at B22 when the renderer exited 2 on its version 1 source snapshot. The developer amendment at [911a981](https://github.com/jamiemitchellconsultants/InternalOntology/commit/911a981a950ea007871a96a07e59b8c96ca1053e) passed the new synthetic regression and regenerated the actual view in a disposable copy of the trial upgrade at `ac8c0777a3a841dffa23f18b54b15c1c04713088`. These were build verification runs. Jamie Mitchell's recorded local approval covers the original suite. The added B22 regression and the amended deployment walkthrough await owner review. [Upgrade pushback](https://github.com/jamiemitchellconsultants/InternalOntology/issues/185#issuecomment-7122698051)
+On 2026-11-24, the initial JEPA-Speech deployment stopped at B22 when the renderer exited 2 on its version 1 source snapshot. The developer amendment at [911a981](https://github.com/jamiemitchellconsultants/InternalOntology/commit/911a981a950ea007871a96a07e59b8c96ca1053e) passed the new synthetic regression and regenerated the actual view in a disposable copy of the trial upgrade at `ac8c0777a3a841dffa23f18b54b15c1c04713088`. These were build verification runs. Jamie Mitchell subsequently approved the added B22 executable regression as part of the trial review, and it passed locally against the merged kit. [Upgrade pushback](https://github.com/jamiemitchellconsultants/InternalOntology/issues/185#issuecomment-7122698051)
 
 The owner walkthrough and the executable approval and result are recorded per behaviour below. Record a pass or fail per numbered step when the owner follows it, and the exact revision and test result when it runs. Diagnostic runs do not count as owner results. The [three-source fixture](https://github.com/jamiemitchellconsultants/division-ontology/blob/be3973226d7c930e84975a7ab21485d776875606/test/fixtures/representative/README.md) imported all three dummy graphs on 2026-11-23 with the published importer at `be39732`. The schema 1 control catalog was `d75a4993724bcb504b7c5788d064cd2c0dfd5b2f`. The disposable catalog `28a3ac184dfcfd5448d2c96453c17295e35f4867` pinned the valid schema 2 Widgets graph at `d4661d10d97c34e9fcd5b4be4ed0c486bb6aed2d` and produced `invalid graph schema version` in the real snapshot loader. B23 remains pending under ADR 0045. The consolidated local paste reproduced all 39 expected exit statuses, and the deployed paste was rehearsed against a disposable synthetic checkout. These rehearsals did not use JEPA-Speech or record owner acceptance. The installed checker and lookups also succeeded in a network-disabled Docker container using the synthetic graph at `3d12413f731c25793475e7eb05f6279fdc440d98`.
 
+On 2026-11-24, Jamie Mitchell followed the deployed walkthrough on his Mac, reviewed the evidence index and trial PR, and confirmed that the B1–B22 and B24 walkthroughs passed and that he approved the mapped executable tests, including the added B22 regression. The owner capture is `/private/tmp/internalontology-185-trial-owner.j3nPyL`, and the pinned queries and network-disabled Docker comparison are in `/private/tmp/internalontology-185-owner-deployed.EnjEcI`. The Terminal's starting-directory warnings preceded successful checks. [Trial PR #226](https://github.com/jamiemitchellconsultants/JEPA-Speech/pull/226)
+
+The trial installed the kit at `733449939c06ddb5a6f681a4dcecb13a71f58cd2` and refreshed the skills at `b38cdcc9ae057373495c2b2a7c232a6d8fcc836d`. The JEPA-Speech baseline was `bd669d29012ccdd6c06861a1791f59c6e0f98804`. The owner verified the existing version 1 view became stale at upgrade source `35629088d65dff04b5c91b0ee425b63ef29d2a07` and that the default renderer and staged check succeeded. The version 2 canonical graph is `a5060be2d065113674edafb2f332add95dd9e665` and the published view and owner query pin are `3bcf7e7f5926e42231ae5dbfd9275f8166cc952c`. The rollback rehearsal restored the exact baseline tree in a disposable checkout and passed the ontology, graph and Markdown checks. [Pinned trial view](https://github.com/jamiemitchellconsultants/JEPA-Speech/blob/3bcf7e7f5926e42231ae5dbfd9275f8166cc952c/docs/source-knowledge-graph/README.md)
+
+The owner reviewed the two directions of lookup, the trial PR with 56 behaviour and six decision nodes, and the retirement of JEPA-Speech B18 in a disposable checkout. Its staged patch kept the IRI and produced three retired-link entries for the runner, the Submit symbol and the retry test while the check passed. The disposable cases for a replacement, supersession and rewording passed. The missing, reused and conflicting declarations each produced the expected finding. The credentials-free host and network-disabled Docker outputs matched for the pinned graph check and both query directions.
+
+After approval, all 196 installed executable cases passed on the Mac and in each of the network-disabled Node 20, 22 and 24 runs. All 21 kit integration and protocol cases passed. The initial trial application CI run timed out in the existing store-lock concurrency case. Its retry passed at the same pin, including the cited trace-only ingest test and its supporting application cases. The trial graph and Markdown checks and the graph naming review passed. [Application CI retry](https://github.com/jamiemitchellconsultants/JEPA-Speech/actions/runs/45334695179/job/138245013172) [Graph naming review](https://github.com/jamiemitchellconsultants/JEPA-Speech/pull/226#issuecomment-7123125435)
+
+B23 remains pending in both environments. The published division importer at `be3973226d7c930e84975a7ab21485d776875606` still requires schema version 1. At a compatible importer revision, run the synthetic control and the real C4 import of the trial graph at `3bcf7e7f5926e42231ae5dbfd9275f8166cc952c`. Verify that the required design records and evidence survive, and trace JEPA-Speech B18 to its linked code. Record and approve B23 in both environments before ticking the remaining USER criteria. [ADR 0045](../../adr/0045-require-a-compatible-division-importer.md)
+
 | Behaviour | Local walkthrough and executable result | Deployed walkthrough and executable result |
 | --- | --- | --- |
-| B1 | Pass / pass | Pending |
-| B2 | Pass / pass | Pending |
-| B3 | Pass / pass | Pending |
-| B4 | Pass / pass | Pending |
-| B5 | Pass / pass | Pending |
-| B6 | Pass / pass | Pending |
-| B7 | Pass / pass | Pending |
-| B8 | Pass / pass | Pending |
-| B9 | Pass / pass | Pending |
-| B10 | Pass / pass | Pending |
-| B11 | Pass / pass | Pending |
-| B12 | Pass / pass | Pending |
-| B13 | Pass / pass | Pending |
-| B14 | Pass / pass | Pending |
-| B15 | Pass / pass | Pending |
-| B16 | Pass / pass | Pending |
-| B17 | Pass / pass | Pending |
-| B18 | Pass / pass | Pending |
-| B19 | Pass / pass | Pending |
-| B20 | Pass / pass | Pending |
-| B21 | Pass / pass | Pending |
-| B22 | Original local suite passed. Added upgrade regression passed build verification and awaits owner approval. | Pending amended trial |
-| B23 | Pending compatible importer | Pending compatible importer and pinned JEPA-Speech graph |
-| B24 | Pass / pass | Pending |
+| B1 | Pass / pass | Pass / pass |
+| B2 | Pass / pass | Pass / pass |
+| B3 | Pass / pass | Pass / pass |
+| B4 | Pass / pass | Pass / pass |
+| B5 | Pass / pass | Pass / pass |
+| B6 | Pass / pass | Pass / pass |
+| B7 | Pass / pass | Pass / pass |
+| B8 | Pass / pass | Pass / pass |
+| B9 | Pass / pass | Pass / pass |
+| B10 | Pass / pass | Pass / pass |
+| B11 | Pass / pass | Pass / pass |
+| B12 | Pass / pass | Pass / pass |
+| B13 | Pass / pass | Pass / pass |
+| B14 | Pass / pass | Pass / pass |
+| B15 | Pass / pass | Pass / pass |
+| B16 | Pass / pass | Pass / pass |
+| B17 | Pass / pass | Pass / pass |
+| B18 | Pass / pass | Pass / pass |
+| B19 | Pass / pass | Pass / pass |
+| B20 | Pass / pass | Pass / pass |
+| B21 | Pass / pass | Pass / pass |
+| B22 | Pass / pass, including the approved upgrade regression | Pass / pass |
+| B23 | Pending compatible importer | Trial graph pinned. Pending compatible importer. |
+| B24 | Pass / pass | Pass / pass |
