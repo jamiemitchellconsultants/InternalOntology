@@ -85,6 +85,7 @@ by rewriting the original.
 | [69](#entry-ship-source-graph-links-to-feature-documents-185) | 2026-11-24 | Ship source graph links to feature documents (#185) | product | Ship behaviour and decision nodes as schema 2 core vocabulary, with stable identities, statuses and evidence. Add offline queries in both directions and deterministic document checks. |
 | [70](#entry-restore-source-graph-markdown-regeneration-after-kit-upgrades-185) | 2026-11-24 | Restore source graph Markdown regeneration after kit upgrades (#185) | product | Validate the previously recorded source revision with support for its earlier schema. Require the current schema when validating canonical inputs, and retain the provenance and input matching checks. |
 | [71](#entry-record-jepa-speech-trial-acceptance-for-feature-185) | 2026-11-24 | Record JEPA-Speech trial acceptance for feature #185 | product | Record the completed user acceptance and its exact revisions. Retain the compatible division importer as the prerequisite for B23 and verify that behaviour against the real C4 loader when it is available. |
+| [72](#entry-record-pinned-b23-acceptance-for-feature-185) | 2026-11-24 | Record pinned B23 acceptance for feature #185 | product | Accept both B23 runs at the importer delivered by division-ontology build PR #185. The owner reviewed and approved the synthetic and deployed comparisons in one session. |
 
 ---
 
@@ -1715,3 +1716,23 @@ Record the completed user acceptance and its exact revisions. Retain the compati
 ## Consequences
 
 The graph upgrade and the first four trial outcomes now have recorded owner results. The trial graph is available at the recorded pin for a future division catalog. The feature remains in USER until the synthetic and deployed B23 walkthroughs and executable tests pass and their results are merged.
+
+---
+
+<a id="entry-record-pinned-b23-acceptance-for-feature-185"></a>
+
+## Entry 72 — 2026-11-24 — Record pinned B23 acceptance for feature #185
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+The kit's graph and lookup behaviours had passed acceptance. B23 remained open because the old C4 importer rejected schema 2 and a standard schema 1 evidence role. ADR 0045 required the real loader to preserve the pinned design records and their evidence before closing the feature. [Compatibility decision](https://github.com/jamiemitchellconsultants/InternalOntology/blob/main/docs/adr/0045-require-a-compatible-division-importer.md)
+
+## Decision
+
+Accept both B23 runs at the importer delivered by division-ontology build PR #185. The owner reviewed and approved the synthetic and deployed comparisons in one session. The approved executable ran against the original pinned Turtle and evidence in both catalogs. [Compatible importer](https://github.com/jamiemitchellconsultants/division-ontology/commit/52238ecfaa39e0c90ab2d68bf63b2ede5f9010f6)
+
+## Consequences
+
+The division can inspect the imported design records and follow JEPA-Speech B18 directly to Submit and through MotorBlockRunner to its source file. The acceptance record ties that result to the specific catalog and source commits. The remaining feature checklist can be completed once this record is merged.
