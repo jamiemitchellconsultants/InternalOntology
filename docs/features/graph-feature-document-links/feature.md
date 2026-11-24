@@ -444,7 +444,7 @@ The executable test references below use these files. Run the mapped files with 
 | Checker | [check-source-graph.test.mjs](../../../templates/scripts/check-source-graph.test.mjs) checks source and graph combinations, findings, version compatibility and non-failing reports. |
 | Reader | [query-source-graph.test.mjs](../../../templates/scripts/query-source-graph.test.mjs) checks CLI and structured output, evidence, directions, gaps, tentative links and staleness. |
 | Schema | [source-graph-model.test.mjs](../../../templates/scripts/source-graph-model.test.mjs) tests the generated core values and version tags. |
-| Renderer | [source-graph-markdown.test.mjs](../../../templates/scripts/source-graph-markdown.test.mjs) checks rendered statuses and link phrases. |
+| Renderer | [source-graph-markdown.test.mjs](../../../templates/scripts/source-graph-markdown.test.mjs) checks rendered statuses and link phrases. [render-source-graph.test.mjs](../../../templates/scripts/render-source-graph.test.mjs) also checks the upgrade from generated Markdown pinned to a version 1 graph schema. |
 | Division | [tests/design-links-division-acceptance.test.mjs](../../../tests/design-links-division-acceptance.test.mjs) loads the real C4 snapshot at supplied pins and compares preserved graph records and paths. It is skipped when those inputs are absent. |
 
 #### Executable checks on the deployed installation
@@ -458,7 +458,8 @@ cd "$JEPA_SPEECH"
 test "$(git rev-parse HEAD)" = "$GRAPH_COMMIT"
 mkdir -p "$TRIAL_RESULTS"
 node --test scripts/source-graph-design-docs.test.mjs scripts/check-source-graph.test.mjs \
-  scripts/query-source-graph.test.mjs scripts/source-graph-model.test.mjs scripts/source-graph-markdown.test.mjs
+  scripts/query-source-graph.test.mjs scripts/source-graph-model.test.mjs scripts/source-graph-markdown.test.mjs \
+  scripts/render-source-graph.test.mjs
 node scripts/check-ontology-terms.mjs
 node scripts/check-source-graph.mjs --rev "$GRAPH_COMMIT" --json --summary "$TRIAL_RESULTS/retired-links.md" \
   > "$TRIAL_RESULTS/graph-check.json"
@@ -625,9 +626,10 @@ Executable acceptance uses Checker “rewording a title keeps the IRI” and Pro
 #### B22 — Version the core vocabulary and upgrade
 
 1. Inspect the installed `graph-schema.ttl` and check `schema-1` and `linked`. Expect the schema 2 kinds, statuses and relationships, and a passing check for the version 1 manifest before the first design node.
-2. After the trial upgrade, run the renderer and its staged check. Expect the generated view to be current and to show the design statuses and the replacement and successor phrases.
+2. During the trial upgrade, retain the version 1 manifest and the existing Markdown that pins a version 1 schema. After committing the upgraded kit, run `node scripts/render-source-graph.mjs --check`. Expect exit 1 for stale Markdown and no change to the document. Run `node scripts/render-source-graph.mjs` without arguments, stage the generated view and run `node scripts/render-source-graph.mjs --check --staged`. Expect generation and the staged check to pass, with the view pinned to the upgraded source revision.
+3. After recording the trial design nodes and links, regenerate and check the view again. Expect current Markdown and design statuses. Use the disposable amendment from B17 and a superseded ADR from B18 to see the replacement and successor phrases.
 
-Executable acceptance uses Schema “schema version 2 adds the design kinds” and “every value added in version 2”, Installed both upgrade tests, and Renderer “design nodes show their status”.
+Executable acceptance uses Schema “schema version 2 adds the design kinds” and “every value added in version 2”, Installed both upgrade tests, and Renderer “design nodes show their status”. The Renderer case “an upgraded renderer refreshes Markdown pinned to a version 1 schema” sets up a disposable repository with version 1 provenance and commits the version 2 schema while retaining the version 1 manifest. It verifies the stale result, preservation of the old document, successful default generation, the new revision and permalinks, and a passing staged check. The case uses synthetic graph data. The trial walkthrough verifies the existing JEPA-Speech view.
 
 #### B23 — Import through a division snapshot
 
@@ -742,6 +744,8 @@ Executable acceptance uses Installed “the installed reader answers both questi
 
 On 2026-11-24, Jamie Mitchell followed and passed every applicable numbered local walkthrough step for B1–B22 and B24 on his Mac and approved their mapped executable tests. The evidence directory was `/private/tmp/internalontology-185-owner-local.Pa8pUU`. The kit base was `630ae29017577fa53cd0b70762c169ad89f5c554` with the staged USER artefacts, and the main fixture pin was `0e0a3d78fa6928cc7acbe571a407b2110e8e99ae`. The runner's `pins.txt` records the other fixture revisions. All 39 command statuses matched, including the expected negative checks, and the network-disabled Docker output matched the credentials-free host output. After approval, all 210 cases in the seven mapped local executable suites passed. The local Pass / pass entries below share this operator, date and evidence. B23 was outside the approval and remains pending.
 
+On 2026-11-24, the initial JEPA-Speech deployment stopped at B22 when the renderer exited 2 on its version 1 source snapshot. The developer amendment at [911a981](https://github.com/jamiemitchellconsultants/InternalOntology/commit/911a981a950ea007871a96a07e59b8c96ca1053e) passed the new synthetic regression and regenerated the actual view in a disposable copy of the trial upgrade at `ac8c0777a3a841dffa23f18b54b15c1c04713088`. These were build verification runs. Jamie Mitchell's recorded local approval covers the original suite. The added B22 regression and the amended deployment walkthrough await owner review. [Upgrade pushback](https://github.com/jamiemitchellconsultants/InternalOntology/issues/185#issuecomment-7122698051)
+
 The owner walkthrough and the executable approval and result are recorded per behaviour below. Record a pass or fail per numbered step when the owner follows it, and the exact revision and test result when it runs. Diagnostic runs do not count as owner results. The [three-source fixture](https://github.com/jamiemitchellconsultants/division-ontology/blob/be3973226d7c930e84975a7ab21485d776875606/test/fixtures/representative/README.md) imported all three dummy graphs on 2026-11-23 with the published importer at `be39732`. The schema 1 control catalog was `d75a4993724bcb504b7c5788d064cd2c0dfd5b2f`. The disposable catalog `28a3ac184dfcfd5448d2c96453c17295e35f4867` pinned the valid schema 2 Widgets graph at `d4661d10d97c34e9fcd5b4be4ed0c486bb6aed2d` and produced `invalid graph schema version` in the real snapshot loader. B23 remains pending under ADR 0045. The consolidated local paste reproduced all 39 expected exit statuses, and the deployed paste was rehearsed against a disposable synthetic checkout. These rehearsals did not use JEPA-Speech or record owner acceptance. The installed checker and lookups also succeeded in a network-disabled Docker container using the synthetic graph at `3d12413f731c25793475e7eb05f6279fdc440d98`.
 
 | Behaviour | Local walkthrough and executable result | Deployed walkthrough and executable result |
@@ -767,6 +771,6 @@ The owner walkthrough and the executable approval and result are recorded per be
 | B19 | Pass / pass | Pending |
 | B20 | Pass / pass | Pending |
 | B21 | Pass / pass | Pending |
-| B22 | Pass / pass | Pending |
+| B22 | Original local suite passed. Added upgrade regression passed build verification and awaits owner approval. | Pending amended trial |
 | B23 | Pending compatible importer | Pending compatible importer and pinned JEPA-Speech graph |
 | B24 | Pass / pass | Pending |
