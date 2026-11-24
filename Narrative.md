@@ -83,6 +83,7 @@ by rewriting the original.
 | [67](#entry-amend-the-division-import-design-for-b23-185) | 2026-11-23 | Amend the division import design for B23 (#185) | product | Keep the schema 2 source graph and exercise the division's C4 snapshot loader. Division-ontology delivers compatibility as a separate prerequisite. |
 | [68](#entry-amend-the-b23-implementation-plan-for-division-imports-185) | 2026-11-23 | Amend the B23 implementation plan for division imports (#185) | product | Preserve the five kit increments and their completed tasks. After this plan merges, integrate the reviewed design and plan into the existing build branch with a normal merge. |
 | [69](#entry-ship-source-graph-links-to-feature-documents-185) | 2026-11-24 | Ship source graph links to feature documents (#185) | product | Ship behaviour and decision nodes as schema 2 core vocabulary, with stable identities, statuses and evidence. Add offline queries in both directions and deterministic document checks. |
+| [70](#entry-restore-source-graph-markdown-regeneration-after-kit-upgrades-185) | 2026-11-24 | Restore source graph Markdown regeneration after kit upgrades (#185) | product | Validate the previously recorded source revision with support for its earlier schema. Require the current schema when validating canonical inputs, and retain the provenance and input matching checks. |
 
 ---
 
@@ -1673,3 +1674,23 @@ Ship behaviour and decision nodes as schema 2 core vocabulary, with stable ident
 ## Consequences
 
 Maintainers can trace code, tests and design decisions at a named revision and judge the evidence. Repositories regenerate their graph Markdown after upgrading. B23 acceptance uses a separate compatible importer and a disposable catalog that pins the source graph. [ADR 0045](https://github.com/jamiemitchellconsultants/InternalOntology/blob/630ae29017577fa53cd0b70762c169ad89f5c554/docs/adr/0045-require-a-compatible-division-importer.md)
+
+---
+
+<a id="entry-restore-source-graph-markdown-regeneration-after-kit-upgrades-185"></a>
+
+## Entry 70 — 2026-11-24 — Restore source graph Markdown regeneration after kit upgrades (#185)
+
+*Kind: product. Status: accepted.*
+
+## Context
+
+During JEPA-Speech acceptance, the version 2 kit accepted an existing version 1 manifest but stopped before regenerating its Markdown. The generated document pointed to a source revision with the version 1 schema. The failure reopened Dev Build for #185.
+
+## Decision
+
+Validate the previously recorded source revision with support for its earlier schema. Require the current schema when validating canonical inputs, and retain the provenance and input matching checks. The documented default generation can now replace a stale view after a schema upgrade.
+
+## Consequences
+
+Existing adopters can regenerate their view immediately after upgrading while keeping the version 1 manifest. The refreshed Markdown pins the upgrade revision and passes the staged check. A direct graph check still rejects an outdated schema. The installed upgrade needs a fresh USER walkthrough in the JEPA-Speech trial.
