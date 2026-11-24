@@ -120,3 +120,60 @@ test("B22: after a schema upgrade, regenerating the Markdown makes the render ch
     assert.equal(check.code, 0, check.err);
   });
 });
+
+test("B6, B9–B12: installed lookups expose the source and document evidence on design links", async () => {
+  await installed(async (repo, h) => {
+    const spec = h.widgets(repo);
+    const { featurePath } = h.addDesignDocs(repo, spec);
+    const code = "class Ledger {\n    void PayInvoice() {}\n}\n";
+    h.rewriteDoc(repo, spec, spec.paths.impl, code);
+    spec.nodes.push(h.block(":node-pay", "kit:GraphNode", [
+      ["kit:kind", "kit:source-symbol"], ["rdfs:label", h.S("PayInvoice")],
+    ]));
+    spec.assertions.push(h.block(":assertion-symbol-behaviour", "kit:GraphAssertion", [
+      ["kit:subject", ":node-pay"], ["kit:relationship", "kit:implements"], ["kit:object", ":behaviour-payments-B1"],
+      ["kit:basis", "kit:direct"], ["kit:evidence", ":evidence-d1"], ["kit:evidence", ":evidence-e5"],
+    ]));
+    spec.assertions.push(h.block(":assertion-symbol-decision", "kit:GraphAssertion", [
+      ["kit:subject", ":node-pay"], ["kit:relationship", "kit:documented-by"], ["kit:object", ":decision-0001"],
+      ["kit:basis", "kit:inferred"], ["kit:evidence", ":evidence-d4"], ["kit:evidence", ":evidence-e5"],
+    ]));
+    h.writeGraph(repo, spec);
+    const pinned = repo.commit("graph with design link evidence");
+
+    function query(command, reference, ...options) {
+      const result = run(repo, "query-source-graph", [command, reference, "--json", ...options]);
+      assert.equal(result.code, 0, result.err);
+      return JSON.parse(result.out);
+    }
+    const evidence = (assertion) => assertion.evidence.map(({ role, path, startLine, endLine }) =>
+      [role, path, startLine, endLine]);
+    const impl = ["kit:role-implementation", spec.paths.impl, 2, 2];
+    const behaviour = ["kit:role-selected-document", featurePath, 11, 11];
+    const result = query("behaviour", "payments#B1");
+    const [component] = result.components;
+    assert.equal(component.basis, "kit:direct");
+    assert.equal(component.subject.iri, ":node-ledger");
+    assert.deepEqual(evidence(component), [["kit:role-selected-document", featurePath, 22, 22], impl]);
+    assert.equal(result.symbols[0].subject.iri, ":node-pay");
+    assert.deepEqual(evidence(result.symbols[0]), [behaviour, impl]);
+    assert.deepEqual(query("behaviour", "payments#B3").symbols, []);
+    assert.equal(result.tests[0].object.iri, ":node-test");
+    assert.deepEqual(evidence(result.tests[0]), [behaviour, ["kit:role-test", spec.paths.test, 1, 2]]);
+    const [adr] = query("code", ":node-ledger").decisions;
+    assert.equal(adr.object.iri, ":decision-0001");
+    assert.deepEqual(evidence(adr), [["kit:role-selected-document", "docs/adr/0001-use-a-ledger.md", 1, 3], impl]);
+
+    h.rewriteDoc(repo, spec, spec.paths.impl, code.replace("PayInvoice", "PayOpenInvoice"));
+    h.writeGraph(repo, spec);
+    const working = repo.commit("new evidence revision");
+    const args = ["--rev", pinned, "--working-rev", working];
+    const historical = query("code", ":node-pay", ...args);
+    assert.equal(historical.stale, true);
+    assert.equal(historical.decisions[0].tentative, true);
+    const historicalText = run(repo, "query-source-graph", ["code", ":node-pay", ...args]);
+    assert.equal(historicalText.code, 0, historicalText.err);
+    assert.match(historicalText.out, /^STALE$/m);
+    assert.match(historicalText.out, /\(tentative\)/);
+  });
+});
